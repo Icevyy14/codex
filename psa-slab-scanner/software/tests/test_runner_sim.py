@@ -49,6 +49,8 @@ def test_small_batch_every_slab_moved_and_read(tmp_path):
     assert got == {s.cert.lstrip("0") for v in stacks.values() for s in v}
     last_src = cfg.sources[-1].index
     assert not w.stacks.get(last_src)
+    assert all(v["ok"] for v in summary["count_check"].values())
+    assert (r.w.dir / "report.html").read_text().count("<tr>") == n + 1
 
 
 def test_old_labels_go_to_station_and_still_read(tmp_path):

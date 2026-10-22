@@ -1,0 +1,83 @@
+"""Render the documentation images (docs/img/*.png) from the model.
+
+Run from cad/:  python render_docs.py
+"""
+
+from __future__ import annotations
+
+import shutil
+from pathlib import Path
+
+import build
+import layout as L
+
+DOCS = Path(__file__).resolve().parents[1] / "docs" / "img"
+P = L.pockets()
+FULL = {p.index: L.STACK_MAX for p in P if p.role == "source"}
+SX = L.station_xy()[0]
+
+SHOTS = {
+    # name: (cup_x, c, held, fill, camera(eye..., center...))
+    "storyboard_1_loaded": (P[1].x, L.C_SAFE_EMPTY, False, FULL, (640, -2150, 1350, 640, 0, 230)),
+    "storyboard_2_first_transfer": ((P[0].x + P[1].x) / 2, L.C_SAFE_LOADED, True, {**FULL, 1: 29}, (640, -2150, 1350, 640, 0, 230)),
+    "storyboard_3_midway": (P[2].x, 140.0, False, {**FULL, 0: 30, 1: 18, 2: 12}, (640, -2150, 1350, 640, 0, 230)),
+    "storyboard_4_done": (P[11].x, L.C_SAFE_EMPTY, False, {**{i: 30 for i in range(0, 11)}, 11: 0, 12: 2}, (640, -2150, 1350, 640, 0, 230)),
+    "machine_iso": (P[4].x, L.C_SAFE_EMPTY, False, {**FULL, 0: 30, 1: 30, 2: 30, 3: 11, 4: 19}, (2150, -1750, 1500, 640, 30, 260)),
+    "machine_front": (P[4].x, L.C_SAFE_EMPTY, False, FULL, (640, -3000, 360, 640, 0, 320)),
+    "head_closeup": (P[5].x, 6.6 * 4, False, {**FULL, 5: 4}, (P[5].x + 430, -560, 470, P[5].x, 0, 130)),
+    "station_read": (SX, L.STATION_READ_C, True, {**FULL, 0: 30, 1: 30, 2: 30, 3: 30, 4: 30, 5: 12, 6: 18}, (SX + 520, -620, 420, SX, 0, 160)),
+}
+
+
+CAPTIONS = {
+    "storyboard_1_loaded": "1. Load: 11 stacks of up to 30, face-down, label toward you. Pocket 0 (left) and pocket 12 (right) stay empty.",
+    "storyboard_2_first_transfer": "2. The cup lifts the TOP slab of stack 1 straight up, reads it, and sets it down in empty pocket 0.",
+    "storyboard_3_midway": "3. Repeat until stack 1 is gone - then stack 2 moves into the now-empty pocket 1, and so on.",
+    "storyboard_4_done": "4. Done: every slab read, every stack one pocket to the left (order reversed). Rejects wait in pocket 12.",
+}
+
+
+def caption(png: Path, text: str) -> None:
+    from PIL import Image, ImageDraw, ImageFont
+
+    im = Image.open(png).convert("RGB")
+    bar = 70
+    out = Image.new("RGB", (im.width, im.height + bar), (250, 250, 250))
+    out.paste(im, (0, 0))
+    d = ImageDraw.Draw(out)
+    try:
+        font = ImageFont.truetype("DejaVuSans.ttf", 30)
+    except OSError:
+        font = ImageFont.load_default()
+    d.text((24, im.height + 18), text, fill=(20, 20, 20), font=font)
+    out.save(png)
+
+
+def contact_sheet(names: list[str], dest: Path) -> None:
+    from PIL import Image
+
+    ims = [Image.open(DOCS / f"{n}.png") for n in names]
+    w, h = ims[0].size
+    sheet = Image.new("RGB", (w * 2, h * 2), (255, 255, 255))
+    for i, im in enumerate(ims):
+        sheet.paste(im, ((i % 2) * w, (i // 2) * h))
+    sheet = sheet.resize((w, h))
+    sheet.save(dest)
+
+
+def main():
+    DOCS.mkdir(parents=True, exist_ok=True)
+    for name, (x, c, held, fill, cam) in SHOTS.items():
+        build.POSES[name] = (x, c, held, fill)
+        build.VIEWS[name] = cam
+        out = build.render(name, views=(name,), size=(1800, 1100))[0]
+        dest = DOCS / f"{name}.png"
+        shutil.copy(out, dest)
+        if name in CAPTIONS:
+            caption(dest, CAPTIONS[name])
+        print(dest)
+    contact_sheet(list(CAPTIONS), DOCS / "storyboard.png")
+
+
+if __name__ == "__main__":
+    main()

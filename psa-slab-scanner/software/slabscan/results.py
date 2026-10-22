@@ -76,7 +76,29 @@ class BatchWriter:
             **(extra or {}),
         }
         (self.dir / "summary.json").write_text(json.dumps(summary, indent=2))
+        (self.dir / "report.html").write_text(self.html(summary))
         # Plain list for pasting into PSA / spreadsheets: one cert per line, machine order.
         certs = [r.verdict.cert for r in self._rows if r.verdict.cert and r.verdict.status == "ok"]
         (self.dir / "certs.txt").write_text("\n".join(certs) + ("\n" if certs else ""))
         return summary
+
+    def html(self, summary: dict) -> str:
+        """One self-contained page: counts, then every slab with its label photo. Open it on any device."""
+        import html as h
+
+        css = ("body{font:14px system-ui,sans-serif;margin:16px;background:#fafafa;color:#222}"
+               "table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #ddd;padding:4px 6px;text-align:left;vertical-align:top}"
+               ".ok{color:#176b2c}.bad{color:#a8231a;font-weight:600}img{max-width:240px;border-radius:4px}")
+        rows = []
+        for r in self._rows:
+            v = r.verdict
+            cls = "ok" if v.status == "ok" else "bad"
+            imgs = "".join(f'<img loading="lazy" src="{h.escape(p)}">' for p in (r.image_back, r.image_front) if p)
+            rows.append(f"<tr><td>{r.position}</td><td>P{r.out_pocket} #{r.out_index}</td><td>{h.escape(v.cert or '')}</td><td>{h.escape(v.grader)}</td>"
+                        f"<td class={cls}>{h.escape(v.status)}</td><td>{h.escape(v.note)}</td><td>{imgs}</td></tr>")
+        counts = ", ".join(f"{k}: {n}" for k, n in summary.get("status_counts", {}).items())
+        return (f"<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>Batch {h.escape(self.batch_id)}</title>"
+                f"<style>{css}</style><h1>Batch {h.escape(self.batch_id)}</h1><p>{summary.get('slabs_visited', 0)} slabs. {h.escape(counts)}</p>"
+                "<p>Output position: P = pocket, # = position counted from the bottom of that stack.</p>"
+                "<table><tr><th>#</th><th>Where</th><th>Cert</th><th>Grader</th><th>Status</th><th>Note</th><th>Label</th></tr>"
+                + "".join(rows) + "</table>")

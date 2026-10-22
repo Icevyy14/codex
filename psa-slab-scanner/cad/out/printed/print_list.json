@@ -1,0 +1,145 @@
+[
+  {
+    "part": "station_mount",
+    "qty": 1,
+    "size_mm": [
+      80.0,
+      130.0,
+      23.0
+    ],
+    "volume_cm3": 52.3,
+    "note": "PETG black, 3 walls, 25% infill"
+  },
+  {
+    "part": "x_motor_mount",
+    "qty": 1,
+    "size_mm": [
+      52.0,
+      46.0,
+      35.0
+    ],
+    "volume_cm3": 24.2,
+    "note": "PETG, 5 walls, 40% infill"
+  },
+  {
+    "part": "x_idler_mount",
+    "qty": 1,
+    "size_mm": [
+      36.0,
+      41.0,
+      21.0
+    ],
+    "volume_cm3": 8.7,
+    "note": "PETG, 5 walls, 40% infill"
+  },
+  {
+    "part": "x_bracket",
+    "qty": 1,
+    "size_mm": [
+      60.0,
+      113.4,
+      38.0
+    ],
+    "volume_cm3": 70.8,
+    "note": "PETG, print flat on its back face, 6 walls, 50% infill"
+  },
+  {
+    "part": "z_motor_mount",
+    "qty": 1,
+    "size_mm": [
+      69.0,
+      48.0,
+      35.0
+    ],
+    "volume_cm3": 16.8,
+    "note": "PETG, 5 walls, 40% infill"
+  },
+  {
+    "part": "z_plate",
+    "qty": 1,
+    "size_mm": [
+      70.0,
+      60.0,
+      23.0
+    ],
+    "volume_cm3": 35.5,
+    "note": "PETG, print flat, 6 walls, 50% infill"
+  },
+  {
+    "part": "head_foot",
+    "qty": 1,
+    "size_mm": [
+      33.0,
+      62.0,
+      37.0
+    ],
+    "volume_cm3": 22.1,
+    "note": "PETG, 5 walls, 40% infill"
+  },
+  {
+    "part": "camera_bracket",
+    "qty": 1,
+    "size_mm": [
+      56.0,
+      75.0,
+      30.0
+    ],
+    "volume_cm3": 19.1,
+    "note": "PETG matte black, supports under the ring"
+  },
+  {
+    "part": "gate_post_L",
+    "qty": 1,
+    "size_mm": [
+      22.0,
+      226.0,
+      50.0
+    ],
+    "volume_cm3": 38.5,
+    "note": "PETG, lying on its side (as exported), 4 walls"
+  },
+  {
+    "part": "gate_post_R",
+    "qty": 1,
+    "size_mm": [
+      22.0,
+      226.0,
+      50.0
+    ],
+    "volume_cm3": 38.5,
+    "note": "PETG, lying on its side (as exported), 4 walls"
+  },
+  {
+    "part": "drill_template",
+    "qty": 1,
+    "size_mm": [
+      112.0,
+      167.0,
+      12.0
+    ],
+    "volume_cm3": 64.4,
+    "note": "PLA/PETG, 0.2 mm, 100% infill bosses (build tool)"
+  },
+  {
+    "part": "awl_adapter",
+    "qty": 1,
+    "size_mm": [
+      14.0,
+      14.0,
+      18.0
+    ],
+    "volume_cm3": 2.5,
+    "note": "PETG (build tool) + M5 heat-set insert + 3 mm steel pin"
+  },
+  {
+    "part": "fill_gauge",
+    "qty": 2,
+    "size_mm": [
+      214.0,
+      4.0,
+      30.0
+    ],
+    "volume_cm3": 10.5,
+    "note": "PLA (loading tool)"
+  }
+]

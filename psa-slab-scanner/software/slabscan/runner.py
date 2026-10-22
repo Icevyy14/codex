@@ -40,6 +40,7 @@ class State:
     picked_from: dict[int, int] = field(default_factory=dict)  # source pocket -> slabs removed
     position: int = 0
     done_sources: list[int] = field(default_factory=list)
+    survey_tops: dict[int, float] = field(default_factory=dict)
     thickness_log: list[float] = field(default_factory=list)
 
 
@@ -176,6 +177,7 @@ class Runner:
             if p.role != "source" and top > cfg.t_min / 2:
                 raise Stop(f"Pocket {p.index} ({p.role}) must start empty but is {top:.1f} mm tall.")
             self.st.tops[p.index] = max(0.0, top)
+            self.st.survey_tops[p.index] = max(0.0, top)
             self.log(f"survey pocket {p.index:2d} ({p.role}): top {top:6.1f} mm ~ {round(max(0, top) / 6.6)} slabs")
         return dict(self.st.tops)
 
@@ -220,7 +222,8 @@ class Runner:
                 self._z(cfg.c_safe_empty)
                 raise Stop(f"Pocket {src}: cup will not seal on the top slab (dirty cup, warped or face-up slab?). Fix it, then resume.")
         self.holding = True
-        self._z(hit + cfg.peel_mm, cfg.feed_peel)  # slow peel so an air-film second slab drops back
+        self._z(hit + cfg.peel_slow_mm, cfg.feed_peel_slow)  # very slow first mm: squeeze-film force ~ speed
+        self._z(hit + cfg.peel_mm, cfg.feed_peel)
         time.sleep(cfg.peel_dwell_s)
         self._check_vacuum("after peel")
         self._z(cfg.c_safe_loaded)
@@ -284,6 +287,19 @@ class Runner:
         self.log(f"#{pos:3d} P{src}->P{target.index} {verdict.status:12} {verdict.cert or '-':>10} step {step:4.1f} {verdict.note}")
         return True
 
+    def count_check(self) -> dict:
+        """Slabs counted per source vs the source's surveyed height / mean measured thickness.
+        A mismatch of more than one slab means something was not seen (e.g. an undetected double)."""
+        mean_t = sum(self.st.thickness_log) / len(self.st.thickness_log) if self.st.thickness_log else 6.6
+        mean_t = min(max(mean_t, self.cfg.t_min), self.cfg.t_std_max)
+        out = {}
+        for p in self.cfg.sources:
+            h = self.st.survey_tops.get(p.index, 0.0)
+            est = round(h / mean_t)
+            got = self.st.picked_from.get(p.index, 0)
+            out[p.index] = {"surveyed_mm": round(h, 1), "estimated": est, "counted": got, "ok": abs(est - got) <= 1}
+        return out
+
     # ------------------------------------------------------------------ whole batch
     def run(self) -> dict:
         if self.lid is not None and not self.lid.closed():
@@ -306,6 +322,7 @@ class Runner:
         p0 = self.cfg.pocket(0)
         self._go(p0.x, p0.y)  # park over the (now full) first output stack, out of the operator's way
         extra = {
+            "count_check": self.count_check(),
             "itf_mode": self.itf.mode,
             "itf_evidence": dict(self.itf.evidence),
             "mean_cycle_s": round(sum(self.timings) / len(self.timings), 2) if self.timings else None,

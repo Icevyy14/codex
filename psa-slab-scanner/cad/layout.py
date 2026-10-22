@@ -34,7 +34,7 @@ POST_H = 218.0  # guide rod height above pad top (30 x 6.9 = 207 + margin)
 MAX_LINE = 210.0  # fill line (printed fill gauge + software height check)
 GATE_Z = MAX_LINE + 4.0  # overfill light beam along the row centre line, below the rod tops
 ROD_D = 8.0
-ROD_INSET = 15.0  # rod centre distance from each cell corner along the wall (keeps slab corners free)
+ROD_INSET = 12.0  # rod centre from each cell corner: corners stay free, and the front/back gap (52 mm) fits fingertips for loading
 ROD_EMBED = 15.0
 PAD_T = 3.0  # EVA + microfiber pad thickness (pad top = Z0)
 BED_T = 18.0  # plywood bed

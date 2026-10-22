@@ -1,48 +1,40 @@
 layout checks: OK
-PASS  pick bottom slab, pocket  0: head clearance                            14.76  (limit 3.0)  z_plate <-> rod_15
-PASS  pick bottom slab, pocket  1: head clearance                            14.76  (limit 3.0)  z_plate <-> rod_29
-PASS  pick bottom slab, pocket  2: head clearance                            14.76  (limit 3.0)  z_plate <-> rod_43
-PASS  pick bottom slab, pocket  3: head clearance                            14.76  (limit 3.0)  z_plate <-> rod_57
-PASS  pick bottom slab, pocket  4: head clearance                            14.76  (limit 3.0)  z_plate <-> rod_71
-PASS  pick bottom slab, pocket  5: head clearance                            14.76  (limit 3.0)  z_plate <-> rod_73
-PASS  pick bottom slab, pocket  6: head clearance                            14.76  (limit 3.0)  z_plate <-> rod_59
-PASS  pick bottom slab, pocket  7: head clearance                            14.76  (limit 3.0)  z_plate <-> rod_45
-PASS  pick bottom slab, pocket  8: head clearance                            14.76  (limit 3.0)  z_plate <-> rod_31
-PASS  pick bottom slab, pocket  9: head clearance                            14.76  (limit 3.0)  z_plate <-> rod_17
-PASS  pick bottom slab, pocket 10: head clearance                            14.76  (limit 3.0)  z_plate <-> rod_19
-PASS  pick bottom slab, pocket 11: head clearance                            14.76  (limit 3.0)  z_plate <-> rod_33
-PASS  pick bottom slab, pocket 12: head clearance                            14.76  (limit 3.0)  z_plate <-> rod_47
-PASS  pick bottom slab, pocket 13: head clearance                            14.76  (limit 3.0)  z_plate <-> rod_61
-PASS  pick bottom slab, pocket 14: head clearance                            14.76  (limit 3.0)  z_plate <-> rod_75
-PASS  place first slab in pocket 0: slab-to-rod play (centred)                1.75  (limit 1.0)  held_slab <-> rod_06
-PASS  empty travel between 1->2: clearance over rods/stacks                   27.0  (limit 9.0)  cup <-> stack_1
-PASS  loaded travel between 1->2: clearance                                   10.4  (limit 9.0)  held_slab <-> rod_28
-PASS  empty travel between 4->5: clearance over rods/stacks                   14.5  (limit 9.0)  cup <-> rod_63
-PASS  loaded travel between 4->5: clearance                                   10.4  (limit 9.0)  held_slab <-> rod_63
-PASS  empty travel between 9->10: clearance over rods/stacks                  14.5  (limit 9.0)  cup <-> rod_08
-PASS  loaded travel between 9->10: clearance                                  10.4  (limit 9.0)  held_slab <-> rod_08
-PASS  Z machinery over rods with cup at c=0.0                                 8.29  (limit 5.0)  z_plate <-> rod_45
-PASS  Z machinery over rods with cup at c=6.6                                 8.54  (limit 5.0)  z_spine <-> rod_36
-PASS  station read: held slab clearance to station                           140.0  (limit 5.0)  held_slab <-> station_camera
-PASS  station read: lens-to-slab-front distance (mm)                         140.0  (limit 140.0)  target 140
+PASS  pick last slab, pocket  0: head/carriage clearance                      8.54  (limit 3.0)  z_spine <-> rod_03
+PASS  pick last slab, pocket  1: head/carriage clearance                      8.54  (limit 3.0)  z_spine <-> rod_09
+PASS  pick last slab, pocket  2: head/carriage clearance                      8.54  (limit 3.0)  z_spine <-> rod_15
+PASS  pick last slab, pocket  3: head/carriage clearance                      8.54  (limit 3.0)  z_spine <-> rod_21
+PASS  pick last slab, pocket  4: head/carriage clearance                      8.54  (limit 3.0)  z_spine <-> rod_27
+PASS  pick last slab, pocket  5: head/carriage clearance                      8.54  (limit 3.0)  z_spine <-> rod_33
+PASS  pick last slab, pocket  6: head/carriage clearance                      8.54  (limit 3.0)  z_spine <-> rod_39
+PASS  pick last slab, pocket  7: head/carriage clearance                      8.54  (limit 3.0)  z_spine <-> rod_47
+PASS  pick last slab, pocket  8: head/carriage clearance                      8.54  (limit 3.0)  z_spine <-> rod_53
+PASS  pick last slab, pocket  9: head/carriage clearance                      8.54  (limit 3.0)  z_spine <-> rod_59
+PASS  pick last slab, pocket 10: head/carriage clearance                      8.54  (limit 3.0)  z_spine <-> rod_65
+PASS  pick last slab, pocket 11: head/carriage clearance                      8.54  (limit 3.0)  z_spine <-> rod_71
+PASS  pick last slab, pocket 12: head/carriage clearance                      8.54  (limit 3.0)  z_spine <-> rod_77
+PASS  place first slab in pocket 0: slab-to-rod play (centred)                1.75  (limit 1.0)  held_slab <-> rod_02
+PASS  empty travel 1->2: clearance over rods/stacks                           30.0  (limit 9.0)  cup <-> stack_1
+PASS  loaded travel 1->2: clearance                                           18.4  (limit 9.0)  held_slab <-> rod_12
+PASS  empty travel 6->7: clearance over rods/stacks                          49.48  (limit 9.0)  cup <-> stack_6
+PASS  loaded travel 6->7: clearance                                          18.49  (limit 9.0)  held_slab <-> rod_42
+PASS  empty travel 10->11: clearance over rods/stacks                         30.0  (limit 9.0)  cup <-> stack_10
+PASS  loaded travel 10->11: clearance                                         18.4  (limit 9.0)  held_slab <-> rod_68
+PASS  Z machinery over rods with cup at c=0.0                                 8.29  (limit 5.0)  z_plate <-> rod_37
+PASS  Z machinery over rods with cup at c=6.6                                 8.54  (limit 5.0)  z_spine <-> rod_33
+PASS  station read: held slab clearance to everything static                  1.85  (limit 1.0)  held_slab <-> rod_42
+PASS  station read: lens-to-slab-front distance error (mm)                     0.0  (limit 3.0)  140.0 vs 140.0
 PASS  station camera line-of-sight to front label: blocked volume (mm3)        0.0  (limit 1.0)  
 PASS  head camera line-of-sight to back label: blocked volume (mm3)            0.0  (limit 1.0)  
 PASS  head camera half-angle needed to see label edge (deg, <= 30)           24.82  (limit 30.0)  
-PASS  travel extreme x_min,y_min c=7: moving parts vs frame                    5.1  (limit 2.0)  y_plate_L <-> y_beam_L
-PASS  travel extreme x_min,y_min c=210: moving parts vs frame                  5.1  (limit 2.0)  y_plate_L <-> y_beam_L
-PASS  travel extreme x_max,y_max c=7: moving parts vs frame                    5.1  (limit 2.0)  y_plate_L <-> y_beam_L
-PASS  travel extreme x_max,y_max c=210: moving parts vs frame                  5.1  (limit 2.0)  y_plate_L <-> y_beam_L
-PASS  travel extreme x_min,y_max c=7: moving parts vs frame                    5.1  (limit 2.0)  y_plate_L <-> y_beam_L
-PASS  travel extreme x_min,y_max c=210: moving parts vs frame                  5.1  (limit 2.0)  y_plate_L <-> y_beam_L
-PASS  travel extreme x_max,y_min c=7: moving parts vs frame                    5.1  (limit 2.0)  y_plate_L <-> y_beam_L
-PASS  travel extreme x_max,y_min c=210: moving parts vs frame                  5.1  (limit 2.0)  y_plate_L <-> y_beam_L
-PASS  Y carriage on rail at front limit (mm margin)                           15.0  (limit 3.0)  
-PASS  Y carriage on rail at back limit (mm margin)                            23.6  (limit 3.0)  
-PASS  X carriage on rail at left limit (mm margin)                            18.3  (limit 3.0)  
-PASS  X carriage on rail at right limit (mm margin)                           18.3  (limit 3.0)  
+PASS  travel extreme x=42 c=7: moving parts vs frame                           8.0  (limit 2.0)  x_carriage <-> x_beam
+PASS  travel extreme x=42 c=250: moving parts vs frame                         8.0  (limit 2.0)  x_carriage <-> x_beam
+PASS  travel extreme x=1238 c=7: moving parts vs frame                         8.0  (limit 2.0)  x_carriage <-> x_beam
+PASS  travel extreme x=1238 c=250: moving parts vs frame                       8.0  (limit 2.0)  x_carriage <-> x_beam
+PASS  X carriage on rail at left limit (mm margin)                            29.3  (limit 3.0)  
+PASS  X carriage on rail at right limit (mm margin)                           29.3  (limit 3.0)  
 PASS  Z carriage on rail at c=0 (mm margin)                                    4.0  (limit 2.0)  
 PASS  Z carriage on rail at c=max (mm margin)                                 30.6  (limit 2.0)  
-PASS  X carriage clears X motor/idler mounts (mm)                             15.0  (limit 2.0)  
+PASS  X bracket clears X motor / idler mounts at the ends (mm)                26.0  (limit 2.0)  
 
-44/44 checks passed
+36/36 checks passed
 exit=0

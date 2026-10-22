@@ -62,10 +62,10 @@ def assembly(pose: str) -> list[M.Part]:
 def export_assembly(pose: str = "home") -> Path:
     d = OUT / "assembly"
     d.mkdir(parents=True, exist_ok=True)
-    assy = cq.Assembly(name=f"slabstack_{pose}")
+    assy = cq.Assembly(name=f"slabrail_{pose}")
     for p in assembly(pose):
         assy.add(p.shape, name=p.name, color=cq.Color(*p.color))
-    path = d / f"slabstack_{pose}.step"
+    path = d / f"slabrail_{pose}.step"
     assy.save(str(path))
     return path
 

@@ -40,6 +40,8 @@ class Config:
     probe_window: float = 12.0  # must stay < buffer stroke (25)
     approach_gap: float = 5.0  # fast Z stops this far above the predicted contact
     max_surprise: float = 4.5  # |measured - predicted| above this aborts the stack
+    peel_slow_mm: float = 1.0  # first mm of the lift at 2 mm/s: air gets between slabs, so the next one doesn't come along
+    feed_peel_slow: float = 120.0
     peel_mm: float = 5.0
     peel_dwell_s: float = 0.15
     # vacuum (kPa, negative = vacuum)

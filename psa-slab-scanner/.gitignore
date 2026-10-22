@@ -1,3 +1,4 @@
-cad/out/renders/stl_*/
+cad/out/renders/
 __pycache__/
 *.pyc
+software/batches/
