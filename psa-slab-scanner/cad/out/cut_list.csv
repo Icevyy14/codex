@@ -1,8 +1,11 @@
 profile,use,length_mm,qty
-2040,base rail (lying flat, under the bed),1416,2
+2040,"base rail (lying flat, under the bed)",1416,2
 4040,upright,401,2
 4040,X beam (on top of the uprights),1416,1
 2040,Z spine (both ends tapped M5),340,1
 2020,head drop arm,285,1
 T8x8 lead screw,Z screw below the motor face (cut the 400 mm screw; 311-356 works),340,1
+1 mm aluminium sheet,"probe flag blank, 24.3 wide (cut to cad/out/probe_flag_blank.svg; bend; then drill 5.2)",39,1
+2020,Phase 0 jig post (cut square +/-0.5),312,2
+2020,"Phase 0 jig arm stub (5.5 mm cross hole 19 mm from one end, match-drilled through head_foot)",70,1
 8mm hardwood dowel,guide rod,236,82

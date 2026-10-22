@@ -518,11 +518,11 @@ def cmd_sim(args, con):
         con.say(f"(sim: face_down_threshold {SIM_FACE_DOWN_THRESHOLD}, picked on the simulator's synthetic card backs; on the machine Phase 0 "
                 "measures it on yours. Head parts in view: " + ("today's CAD head" if args.sim_head == "cad" else f"'{args.sim_head}' (hypothetical)") + ")")
     hw = sim_hardware(cfg, stacks=stacks, head=args.sim_head)
-    sim_operator = None
-    if args.face_down_check and cfg.face_down_check != "off":
-        def sim_operator(src: int) -> bool:  # looks at the slab the check stopped on; the simulated slabs are all face-down
-            top = hw.world.stacks[src][-1]
-            return top.face_down
+
+    def look(src: int) -> bool:  # the simulated operator looks at the slab the check stopped on
+        return hw.world.stacks[src][-1].face_down
+
+    sim_operator = look if args.face_down_check and cfg.face_down_check != "off" else None
     hw.head_cam, hw.station_cam = _Count(hw.head_cam), _Count(hw.station_cam)
     hw.lights, hw.vacuum = _CountLights(hw.lights), _CountVac(hw.vacuum)
     writer = BatchWriter(Path(cfg.out_dir), new_batch_id(args.name, "sim-"))

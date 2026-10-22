@@ -146,15 +146,21 @@ def test_cgc_slabs_are_read_and_stacked_normally(tmp_path):
 
 
 class _FlakyCamera(SimCamera):
-    """Head camera that dies on its Nth frame (USB unplugged, driver crash)."""
+    """Head camera that dies on its Nth frame of a slab (USB unplugged, driver crash). The survey's frame over an
+    empty pocket (learned face-down check) does not count."""
 
     def __init__(self, world, fail_at):
         super().__init__(world, "head")
         self.fail_at = fail_at
+        self.k = 0
 
     def capture(self):
-        if self.n + 1 >= self.fail_at:
-            raise RuntimeError("camera head returned no frame")
+        w = self.w
+        p = w.pocket_at(w.x, w.y)
+        if w.held or (p is not None and w.stacks.get(p.index)):
+            self.k += 1
+            if self.k >= self.fail_at:
+                raise RuntimeError("camera head returned no frame")
         return super().capture()
 
 

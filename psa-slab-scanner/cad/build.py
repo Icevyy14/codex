@@ -1,4 +1,4 @@
-"""Export printable parts (STL + STEP), the assembly (STEP), a cut list, and PNG renders.
+"""Export printable parts (STL + STEP), the assembly (STEP), a cut list, the probe-flag drawing, and PNG renders.
 
 Run from the cad/ folder:  python build.py            (everything)
                            python build.py --renders  (renders only)
@@ -8,6 +8,7 @@ Renders need OpenSCAD + xvfb-run (headless). STL/STEP need only CadQuery.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import shutil
 import subprocess
@@ -110,10 +111,129 @@ def render(pose: str, views=("iso",), size=(1600, 1100), hide: tuple[str, ...] =
 
 
 def write_cut_list() -> None:
+    """cad/out/cut_list.csv. Fields with commas are quoted (csv module), so every row has exactly 4 columns."""
     OUT.mkdir(exist_ok=True)
-    rows = ["profile,use,length_mm,qty"] + [f"{a},{b},{c:.0f},{q}" for a, b, c, q in M.cut_list()]
-    rows += [f"8mm hardwood dowel,guide rod,{L.POST_H + L.PAD_T + L.ROD_EMBED:.0f},{len(L.rods())}"]
-    (OUT / "cut_list.csv").write_text("\n".join(rows) + "\n")
+    rows = [("profile", "use", "length_mm", "qty")] + [(a, b, f"{c:.0f}", q) for a, b, c, q in M.cut_list()]
+    rows += [("8mm hardwood dowel", "guide rod", f"{L.POST_H + L.PAD_T + L.ROD_EMBED:.0f}", len(L.rods()))]
+    with open(OUT / "cut_list.csv", "w", newline="") as f:
+        csv.writer(f, lineterminator="\n").writerows(rows)
+
+
+def _flag_drawing() -> tuple[list, float, float]:
+    """Probe-flag blank as drawing primitives in mm (page coordinates, y down): ("poly", pts) | ("line", p, q, dashed)
+    | ("circle", p, r) | ("text", p, str, size). Returns (items, width, height)."""
+    pts = M.flag_blank()
+    us, vs = [u for u, _ in pts], [v for _, v in pts]
+    m, right = 20.0, 62.0  # margin; notes column right of the part
+    w, h = max(us) - min(us) + 2 * m + right, max(vs) - min(vs) + 2 * m + 16
+    X = lambda u: u - min(us) + m  # noqa: E731
+    Y = lambda v: max(vs) - v + m  # noqa: E731
+    P = lambda u, v: (X(u), Y(v))  # noqa: E731
+    tx, x0, x1 = M.FLAG_TAB_X, M.FLAG_X[0], M.FLAG_X[1]
+    top, bot = M.FLAG_TOP - M.FLAG_BEND_Z, M.FLAG_BOTTOM - M.FLAG_BEND_Z
+    w0, w1 = M.FLAG_WEB[0] - M.FLAG_BEND_Z, M.FLAG_WEB[1] - M.FLAG_BEND_Z
+    ba = 1.5708 * (M.FLAG_BEND_R + 0.44 * M.FLAG_T)  # [Likely] bend allowance, 90 deg, K = 0.44
+    hole_v = ba + (M.PROBE_Y - M.FLAG_T / 2 - M.FLAG_BEND_R)  # where the hole lands if drilled flat
+    it = [("poly", [P(u, v) for u, v in pts])]
+    it.append(("line", P(-tx - 13, 0), P(tx + 3, 0), True))  # bend line
+    it.append(("text", P(-tx - 19.5, 0.8), "BEND", 2.2))
+    it.append(("line", P(0, bot - 3), P(0, 13 + 3), True))  # neck centre line = hole line
+    it.append(("circle", P(0, hole_v), M.FLAG_HOLE / 2))
+    it.append(("line", P(-3.5, hole_v), P(3.5, hole_v), False))
+    sz = 2.0
+    def dim_h(v, ua, ub, label):  # horizontal dimension at height v
+        it.extend([("line", P(ua, v), P(ub, v), False), ("line", P(ua, v - 1), P(ua, v + 1), False), ("line", P(ub, v - 1), P(ub, v + 1), False),
+                   ("text", P((ua + ub) / 2 - len(label) * 0.55, v + 0.8), label, sz)])
+    def dim_v(u, va, vb, label, left=False):  # vertical dimension at u, label right (or left) of it
+        tu = u - 1.2 - len(label) * 1.1 if left else u + 1.2
+        it.extend([("line", P(u, va), P(u, vb), False), ("line", P(u - 1, va), P(u + 1, va), False), ("line", P(u - 1, vb), P(u + 1, vb), False),
+                   ("text", P(tu, (va + vb) / 2 - 0.7), label, sz)])
+    dim_h(bot - 4, 0, x1, f"{x1:.1f}")
+    dim_h(bot - 8, 0, x0, f"{x0:.1f}")
+    dim_h(13 + 3, -tx, tx, f"{2 * tx:.1f}")
+    dim_v(x1 + 4, 0, top, f"{top:.1f}")
+    dim_v(x1 + 4, 0, bot, f"{-bot:.2f}")
+    dim_v(x0 - 2, 0, w1, f"{-w1:.1f}", left=True)
+    dim_v(-tx - 3, 0, w0, f"{-w0:.1f}", left=True)
+    dim_v(-tx - 3, 0, 13, "13 (trim)", left=True)
+    notes = [
+        "SlabRail probe flag, 1:1 (check the 10 mm bar)",
+        f"1.0 mm aluminium sheet. Blank {x1 + tx:.1f} x {13 - bot:.2f} mm.",
+        "Dimensions from the BEND line and the dashed",
+        "neck centre line (= hole centre line).",
+        "1. Cut and file to the outline. The blade's top",
+        "   edge is the trip edge: straight, square.",
+        "2. This view shows the face that faces the buffer.",
+        "   Neck in the vise, jaws at the BEND line; bend",
+        "   the tab 90 deg TOWARD YOU (r ~1 mm). Bent the",
+        "   other way the blade ends up on the wrong side.",
+        "   Plate stays flat; check 90 deg with a square.",
+        "3. THEN drill 5.2 mm on the centre line,",
+        f"   {M.PROBE_Y - M.FLAG_T / 2:.1f} mm from the plate's inner face",
+        f"   (lands ~{hole_v:.1f} above the bend line flat).",
+        "4. Trim the tab to 2 mm past the hole.",
+        "5. Deburr. It rides in a 1.9 mm guide slot",
+        "   and a 3.1 mm sensor slot.",
+    ]
+    for i, n in enumerate(notes):
+        it.append(("text", (X(x1) + 14, m + 2 + i * 3.4), n, 2.0))
+    sb = (m, h - 6)  # 10 mm scale bar
+    it.extend([("line", sb, (sb[0] + 10, sb[1]), False), ("line", (sb[0], sb[1] - 1.5), (sb[0], sb[1] + 1.5), False),
+               ("line", (sb[0] + 10, sb[1] - 1.5), (sb[0] + 10, sb[1] + 1.5), False), ("text", (sb[0] + 12, sb[1] + 0.8), "10 mm", 2.0)])
+    return it, w, h
+
+
+def export_flag_drawing(png: Path | None = None) -> Path:
+    """cad/out/probe_flag_blank.svg (print at 100 %) + .dxf (outline), and optionally a PNG of the same drawing."""
+    OUT.mkdir(exist_ok=True)
+    items, w, h = _flag_drawing()
+    svg = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{w:.1f}mm" height="{h:.1f}mm" viewBox="0 0 {w:.2f} {h:.2f}">',
+           f'<rect width="{w:.2f}" height="{h:.2f}" fill="white"/>']
+    for kind, *a in items:
+        if kind == "poly":
+            svg.append('<polygon points="' + " ".join(f"{x:.2f},{y:.2f}" for x, y in a[0]) + '" fill="#dde3ea" stroke="black" stroke-width="0.25"/>')
+        elif kind == "line":
+            (x0, y0), (x1, y1), dashed = a
+            svg.append(f'<line x1="{x0:.2f}" y1="{y0:.2f}" x2="{x1:.2f}" y2="{y1:.2f}" stroke="black" stroke-width="0.15"' + (' stroke-dasharray="1.2,0.8"' if dashed else "") + "/>")
+        elif kind == "circle":
+            (x, y), r = a
+            svg.append(f'<circle cx="{x:.2f}" cy="{y:.2f}" r="{r:.2f}" fill="none" stroke="black" stroke-width="0.15" stroke-dasharray="0.8,0.6"/>')
+        else:
+            (x, y), s, size = a
+            svg.append(f'<text x="{x:.2f}" y="{y:.2f}" font-family="sans-serif" font-size="{size}">{s}</text>')
+    path = OUT / "probe_flag_blank.svg"
+    path.write_text("\n".join(svg + ["</svg>"]) + "\n")
+    cq.exporters.export(cq.Workplane("XY").polyline(M.flag_blank()).close(), str(OUT / "probe_flag_blank.dxf"))
+    if png is not None:
+        from PIL import Image, ImageDraw, ImageFont
+
+        k = 12  # px per mm
+        im = Image.new("RGB", (int(w * k), int(h * k)), (255, 255, 255))
+        d = ImageDraw.Draw(im)
+        for kind, *a in items:
+            if kind == "poly":
+                d.polygon([(x * k, y * k) for x, y in a[0]], fill=(221, 227, 234), outline=(0, 0, 0), width=3)
+            elif kind == "line":
+                (x0, y0), (x1, y1), dashed = a
+                if dashed:
+                    n = int(((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5 / 2.0)
+                    for i in range(n):
+                        f0, f1 = i / n, (i + 0.6) / n
+                        d.line([((x0 + (x1 - x0) * f0) * k, (y0 + (y1 - y0) * f0) * k), ((x0 + (x1 - x0) * f1) * k, (y0 + (y1 - y0) * f1) * k)], fill=(0, 0, 0), width=2)
+                else:
+                    d.line([(x0 * k, y0 * k), (x1 * k, y1 * k)], fill=(0, 0, 0), width=2)
+            elif kind == "circle":
+                (x, y), r = a
+                d.ellipse([(x - r) * k, (y - r) * k, (x + r) * k, (y + r) * k], outline=(0, 0, 0), width=2)
+            else:
+                (x, y), s, size = a
+                try:
+                    font = ImageFont.truetype("DejaVuSans.ttf", int(size * k))
+                except OSError:
+                    font = ImageFont.load_default()
+                d.text((x * k, y * k - size * k * 0.85), s, fill=(0, 0, 0), font=font)
+        im.save(png)
+    return path
 
 
 if __name__ == "__main__":
@@ -123,6 +243,7 @@ if __name__ == "__main__":
     if not a.renders:
         print(json.dumps(export_printed(), indent=1))
         write_cut_list()
+        print("flag drawing", export_flag_drawing())
         for pose in POSES:
             print("assembly", export_assembly(pose))
     for pose in POSES:

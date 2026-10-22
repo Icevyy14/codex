@@ -70,11 +70,11 @@ All commands are `python -m slabscan <command>`. Add `--sim` to use the simulato
 | `calibrate z` / `calibrate x` | See above. |
 | `focus head\|station [--save] [--no-motion]` | Live sharpness score (Laplacian variance of the sharpest tiles) plus what decodes. With `--no-motion` you hold the slab in view, for example in the Phase 0 jig. |
 | `mark [--only 0,12] [--dry-run]` | Drill-template walk (above). `--dry-run` prints the order and positions. |
-| `run [--name NAME] [--front-photo always\|fallback] [--yes]` | One batch. It refuses to start before `calibrate z` and `calibrate x` have been run. `--yes` skips the start question. |
-| `resume BATCH_DIR [--accept-heights]` | Continues a stopped batch (below). |
-| `sim [--slabs N]` | Full simulated batch. Prints the summary and a time estimate. |
+| `run [--name NAME] [--front-photo always\|fallback] [--all-face-down] [--yes]` | One batch. It refuses to start before `calibrate z` and `calibrate x` have been run. `--yes` skips the start question. `--all-face-down` turns the face-down check off for this batch (below). |
+| `resume BATCH_DIR [--accept-heights] [--face-down-ok]` | Continues a stopped batch (below). `--face-down-ok`: you checked the slab the face-down check stopped on. |
+| `sim [--slabs N] [--face-down-check] [--sim-head cad\|open]` | Full simulated batch. Prints the summary and a time estimate. `--face-down-check` keeps the check on and counts the slabs it would stop at. |
 | `web [--port 8080]` | Phone page (below). |
-| `phase0 [--sim N] [--out DIR]` | The Phase 0 camera test (same as `python -m tools.phase0`): reads 30-50 of your slabs in the Phase 0 jig before you buy any motion parts. |
+| `phase0 [--sim N] [--out DIR] [--face-up 5] [--save]` | The Phase 0 camera test (same as `python -m tools.phase0`): reads 30-50 of your slabs in the Phase 0 jig before you buy any motion parts. The face-up pass measures whether the learned face-down check can work; `--save` writes its threshold on a GO. |
 
 **Jog safety rules** (enforced in software):
 - Nothing moves before homing.
@@ -94,6 +94,19 @@ Loading rules:
 - Slabs go **face-down**, **label end toward you**, in pockets 1–11.
 - No stack goes above the MAX line on the fill gauge.
 - Pocket 0 and pocket 12 stay empty.
+
+**Face-down check** (`face_down_check` in the config). Before the cup touches a slab, the frame from
+above must prove the slab is face-down. Otherwise the run stops with nothing touched, and you
+confirm it with `resume --face-down-ok`.
+- `"stop"`: only a PSA back-label QR proves it. Older labels and CGC stop every time.
+- `"learned"` (the default): a back QR, or a card window that matches the card backs of earlier
+  QR- or operator-confirmed slabs (`slabscan/facedown.py`). The references live in
+  `config/card_backs.npz` (not in git; delete it to start over). It only becomes active once
+  Phase 0 has written `face_down_threshold` and 5 references exist. Until then it acts like
+  `"stop"`. **With today's CAD head it never becomes active** [Certain, in the CAD and the
+  simulator]: the head foot hides the card window from the head camera, and the check detects
+  that and refuses.
+- `"off"` (or `run --all-face-down`): no check. A face-up slab gets the cup on its front.
 
 The machine:
 - homes,
@@ -204,6 +217,7 @@ Motion uses a trapezoid acceleration model. Camera frame times and the Pi's deco
 | `factory.py` | Builds real or simulated backends from the config. |
 | `ops.py` | jog, calibrate, focus, mark, selftest. |
 | `cli.py`, `web.py` | Command line and web page. |
-| `simworld.py`, `sim.py` | Simulator with a crash monitor, and synthetic labels. |
+| `facedown.py` | Learned face-down check: card-window descriptor, card-back references, the accept rule. |
+| `simworld.py`, `sim.py` | Simulator with a crash monitor, synthetic labels, card backs and fronts, and the head parts in the head camera's view. |
 | `config.py`, `results.py`, `psa_api.py` | Config TOML, batch output files, PSA API client. |
 | `tools/gen_config.py`, `tools/enrich.py`, `tools/phase0.py`, `tools/decode_sweep.py` | Config generator, PSA enrichment, Phase 0 camera test, decode sweep. |

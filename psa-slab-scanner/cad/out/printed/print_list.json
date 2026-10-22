@@ -115,10 +115,10 @@
     "size_mm": [
       45.5,
       63.5,
-      37.0
+      44.0
     ],
-    "volume_cm3": 31.3,
-    "note": "PETG, 5 walls, 40% infill"
+    "volume_cm3": 34.8,
+    "note": "PETG, foot down (as exported), 5 walls, 40% infill; clear the 1.9 mm flag slot and the board slots with a hacksaw blade"
   },
   {
     "part": "camera_bracket",
@@ -196,6 +196,17 @@
     ],
     "volume_cm3": 54.9,
     "note": "PLA/PETG (Phase 0 test jig), ring up"
+  },
+  {
+    "part": "phase0_occluder_mount",
+    "qty": 1,
+    "size_mm": [
+      89.2,
+      59.2,
+      18.0
+    ],
+    "volume_cm3": 14.1,
+    "note": "PLA/PETG (Phase 0 test jig), flat on its beam (as exported), 4 walls, 30% infill"
   },
   {
     "part": "awl_adapter",

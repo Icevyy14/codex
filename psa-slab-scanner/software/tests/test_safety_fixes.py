@@ -142,7 +142,7 @@ def test_a_crash_during_recovery_is_not_swallowed(tmp_path):
 
     class DeadCamera(SimCamera):
         def capture(self):
-            if self.n + 1 >= 2:  # frame 1 = hover; frame 2 = first back read with the slab held
+            if self.w.held:  # the hover frame works; the first back read with the slab held fails
                 failed.append(True)
                 raise RuntimeError("camera head returned no frame")
             return super().capture()
@@ -314,7 +314,7 @@ def test_a_failed_park_keeps_the_pump_holding_and_says_a_slab_is_on_the_cup(tmp_
 
     class DeadCamera(SimCamera):
         def capture(self):
-            if self.n + 1 >= 2:
+            if self.w.held:  # dies on the first frame with the slab held
                 failed.append(True)
                 raise RuntimeError("camera head returned no frame")
             return super().capture()

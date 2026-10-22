@@ -84,10 +84,61 @@ def phase0_jig(dest: Path) -> None:
                     "--colorscheme=Tomorrow", "scene.scad"], check=True, cwd=d, capture_output=True, timeout=600)
 
 
+PROBE_PARTS = ("head_foot", "buffer", "buffer_rod", "buffer_stop", "cup", "probe_flag", "vac_fitting", "contact_sensor", "probe_m3", "probe_nut")
+
+
+def probe_closeup(dest: Path) -> None:
+    """The contact probe on head_foot, buffer free (slot clear) and fully pushed up (flag through the slot),
+    side by side. The sensor is drawn see-through so the flag shows inside its slot."""
+    import subprocess
+
+    import cadquery as cq
+    import model as M
+    from PIL import Image, ImageDraw, ImageFont
+
+    tiles = []
+    for t, text in ((0.0, "Cup free: flag 2 mm below the beam, slot clear"), (float(L.BUFFER_STROKE), f"Pushed up {L.BUFFER_STROKE:.0f} mm: flag through the slot, still in its guide")):
+        d = build.OUT / "renders" / f"stl_probe_{t:.0f}"
+        d.mkdir(parents=True, exist_ok=True)
+        lines = []
+        for p in M.head_parts(0.0, 0.0, compression=t):
+            if not p.name.startswith(PROBE_PARTS):
+                continue
+            cq.exporters.export(p.shape, str(d / f"{p.name}.stl"), tolerance=0.05, angularTolerance=0.1)
+            r, g, b, a = p.color
+            a = {"contact_sensor": 0.35, "head_foot": 0.45}.get(p.name, a)
+            lines.append(f'color([{r},{g},{b},{a}]) import("{p.name}.stl");')
+        beam = M.cyl((M.TCST_AXIS_X, M.PROBE_Y - 7, M.PROBE_BEAM_Z), 0.8, 14, (0, 1, 0))  # the light beam, drawn as a red rod
+        cq.exporters.export(beam, str(d / "beam.stl"), tolerance=0.05, angularTolerance=0.1)
+        lines.append('color([1.0,0.1,0.1,1.0]) import("beam.stl");')
+        lines.sort(key=lambda ln: ",0.35]" in ln or ",0.45]" in ln)  # opaque first: see-through parts blend over them
+        (d / "scene.scad").write_text("\n".join(lines) + "\n")
+        png = d / "probe.png"
+        subprocess.run(["xvfb-run", "-a", "openscad", "-o", str(png), "--imgsize=900,900", "--camera=120,-210,140,13,6,86", "--projection=p",
+                        "--colorscheme=Tomorrow", "scene.scad"], check=True, cwd=d, capture_output=True, timeout=600)
+        tiles.append((Image.open(png).convert("RGB"), text))
+    w, h = tiles[0][0].size
+    bar = 60
+    out = Image.new("RGB", (2 * w, h + bar), (250, 250, 250))
+    dr = ImageDraw.Draw(out)
+    try:
+        font = ImageFont.truetype("DejaVuSans.ttf", 24)
+    except OSError:
+        font = ImageFont.load_default()
+    for i, (im, text) in enumerate(tiles):
+        out.paste(im, (i * w, 0))
+        dr.text((i * w + 18, h + 16), text, fill=(20, 20, 20), font=font)
+    out.save(dest)
+
+
 def main():
     DOCS.mkdir(parents=True, exist_ok=True)
     phase0_jig(DOCS / "phase0_jig.png")
     print(DOCS / "phase0_jig.png")
+    probe_closeup(DOCS / "probe_closeup.png")
+    print(DOCS / "probe_closeup.png")
+    build.export_flag_drawing(DOCS / "probe_flag.png")
+    print(DOCS / "probe_flag.png")
     for name, (x, c, held, fill, cam) in SHOTS.items():
         build.POSES[name] = (x, c, held, fill)
         build.VIEWS[name] = cam

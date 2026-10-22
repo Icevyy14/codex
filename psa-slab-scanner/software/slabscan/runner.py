@@ -481,18 +481,20 @@ class Runner:
     def _hover_mm(self) -> float:
         return float((self.cfg.cam_head or {}).get("lens_to_label_mm", 140.0)) + self.cfg.approach_gap + 2
 
-    def _fd_describe(self, frame):
-        """Card-window descriptor of a frame from the hover height (facedown.describe). The first frame of a run is
-        also saved with the window drawn on it (images/face_down_window.jpg), so you can check where it lies."""
+    def _fd_describe(self, frame, picture: str | None = None):
+        """Card-window descriptor of a frame from the hover height (facedown.describe). The first slab's frame of a
+        run is also saved with the window drawn on it (images/face_down_window.jpg), so you can check where it lies;
+        ``picture`` names another such picture (the empty-pocket view)."""
         if frame is None:
             return None
         spec = self.cfg.cam_head or {}
         view = frame_view_mm(frame.shape, self._hover_mm(), spec, self.head_cam)
         rects = image_rects(self.cfg.face_down_window_mm, str(spec.get("row_axis", "x")))
-        if not self._window_saved:
-            self._window_saved = True
+        if picture is None and not self._window_saved:
+            self._window_saved, picture = True, "face_down_window.jpg"
+        if picture:
             try:
-                self._save(draw_window(frame, rects, view), "face_down_window.jpg")
+                self._save(draw_window(frame, rects, view), picture)
             except Exception:  # noqa: BLE001 - a picture for the operator, never a reason to stop
                 pass
         return describe(frame, rects, view)
@@ -543,13 +545,14 @@ class Runner:
             return "off"
         learned = cfg.face_down_check == "learned"
         desc = self._fd_describe(frame) if learned else None
-        if self.face_down_ok_once:
-            self.face_down_ok_once = False
-            note = self._learn(desc, "operator", src) if learned else ""
-            self._journal({"face_down_confirmed": src, "by": "operator", **({"reference": note} if note else {}), "t": round(time.time(), 1)})
-            return "operator"
         psa_back = any(r.source == "back_qr" and r.grader == "PSA" for r in hover_reads)
         fronts = sorted({r.grader for r in hover_reads if r.grader not in ("PSA", "unknown")})
+        if self.face_down_ok_once:
+            self.face_down_ok_once = False
+            # a front code in view contradicts the confirmation: the slab is picked (your call), but never learned from
+            note = (self._learn(desc, "operator", src) if not fronts else "not used as a reference: a front-label code is in view") if learned else ""
+            self._journal({"face_down_confirmed": src, "by": "operator", **({"reference": note} if note else {}), "t": round(time.time(), 1)})
+            return "operator"
         if psa_back and not fronts:
             if learned:
                 self._learn(desc, "qr", src)
@@ -678,7 +681,7 @@ class Runner:
             return
         self._baseline_taken = True
         frame = self._frames(self.head_cam, "head", 1)[0]
-        d = self._fd_describe(frame)
+        d = self._fd_describe(frame, picture="face_down_empty.jpg")
         if d is not None:
             self.refs.set_baseline(d, {"batch": self.w.batch_id, "pocket": pocket, "t": round(time.time(), 1)})
             self._refs_dirty += 1

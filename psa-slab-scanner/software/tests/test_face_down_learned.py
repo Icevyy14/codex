@@ -179,6 +179,19 @@ def test_learned_mode_waits_for_a_measured_threshold(tmp_path):
     assert "learned check not active yet" in r.face_down_status()
 
 
+def test_stop_mode_ignores_the_references_and_off_mode_is_recorded(tmp_path):
+    refs = CardBackRefs(None, from_layout().face_down_window_mm)
+    cfg = _cfg()
+    _runner(cfg, _world(cfg, ["qr"] * 6), tmp_path, refs=refs, batch="b1").run()
+    assert refs.n_refs == 6
+    stop = _cfg(face_down_check="stop")
+    with pytest.raises(Stop, match=r"no PSA back-label QR was seen from above\)"):  # no learned reason: QR only
+        _runner(stop, _world(stop, ["old"], start=40), tmp_path, refs=refs, batch="b2").run()
+    off = _cfg(face_down_check="off")
+    _runner(off, _world(off, ["old"], start=60), tmp_path, refs=refs, batch="b3").run()
+    assert _rows(tmp_path, "b3")[0]["face_down"] == "off" and refs.n_refs == 6
+
+
 # ---------------------------------------------------------------------- the descriptor
 def _desc(img, cfg=None):
     cfg = cfg or from_layout()

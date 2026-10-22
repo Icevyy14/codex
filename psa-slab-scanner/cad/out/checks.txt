@@ -1,81 +1,99 @@
 layout checks: OK
-PASS  pick last slab, pocket  0: head/carriage clearance                                                   21.35  (limit 3.0)  head_foot <-> stack_1
-PASS  pick last slab, pocket  1: head/carriage clearance                                                   21.35  (limit 3.0)  head_foot <-> stack_2
-PASS  pick last slab, pocket  2: head/carriage clearance                                                   21.35  (limit 3.0)  head_foot <-> stack_3
-PASS  pick last slab, pocket  3: head/carriage clearance                                                   21.35  (limit 3.0)  head_foot <-> stack_4
-PASS  pick last slab, pocket  4: head/carriage clearance                                                   21.35  (limit 3.0)  head_foot <-> stack_5
-PASS  pick last slab, pocket  5: head/carriage clearance                                                   21.35  (limit 3.0)  head_foot <-> stack_6
-PASS  pick last slab, pocket  6: head/carriage clearance                                                    24.4  (limit 3.0)  drop_arm <-> gate_beam
-PASS  pick last slab, pocket  7: head/carriage clearance                                                   21.35  (limit 3.0)  head_foot <-> stack_8
-PASS  pick last slab, pocket  8: head/carriage clearance                                                   21.35  (limit 3.0)  head_foot <-> stack_9
-PASS  pick last slab, pocket  9: head/carriage clearance                                                   21.35  (limit 3.0)  head_foot <-> stack_10
-PASS  pick last slab, pocket 10: head/carriage clearance                                                   21.35  (limit 3.0)  head_foot <-> stack_11
-PASS  pick last slab, pocket 11: head/carriage clearance                                                    24.4  (limit 3.0)  drop_arm <-> gate_beam
-PASS  pick last slab, pocket 12: head/carriage clearance                                                    24.4  (limit 3.0)  drop_arm <-> gate_beam
-PASS  place first slab in pocket 0: slab-to-rod play (centred)                                              1.75  (limit 1.0)  held_slab <-> rod_02
-PASS  empty travel 1->2: head/carriage clearance over rods/stacks                                           21.9  (limit 9.0)  cup <-> gate_beam
-PASS  loaded travel 1->2: head/carriage/slab clearance                                                      21.4  (limit 9.0)  held_slab <-> rod_12
-PASS  empty travel 6->7: head/carriage clearance over rods/stacks                                           21.9  (limit 9.0)  cup <-> gate_beam
-PASS  loaded travel 6->7: head/carriage/slab clearance                                                     21.48  (limit 9.0)  held_slab <-> rod_42
-PASS  empty travel 10->11: head/carriage clearance over rods/stacks                                         21.9  (limit 9.0)  cup <-> gate_beam
-PASS  loaded travel 10->11: head/carriage/slab clearance                                                    21.4  (limit 9.0)  held_slab <-> rod_68
-PASS  loaded travel: double pick of 2 x 11.5 mm holders over the rods                                       5.33  (limit 4.99)  double_pick <-> rod_42
-PASS  Z machinery over rods with cup at c=-14.0                                                             48.3  (limit 5.0)  z_plate <-> rod_35
-PASS  Z machinery over rods with cup at c=0.0                                                               49.0  (limit 5.0)  z_end_cap <-> rod_33
-PASS  Z machinery over rods with cup at c=6.6                                                               49.0  (limit 5.0)  z_end_cap <-> rod_33
-PASS  held slab at c=250 (C_MAX): clearance to the parts fixed to the X carriage                            17.0  (limit 10.0)  held_slab <-> z_end_cap
-PASS  held slab at c=262 (Z hard top stop): clearance to the parts fixed to the X carriage                   5.0  (limit 4.99)  held_slab <-> z_end_cap
-PASS  held slab vs every non-cup part, c = 6.6..262 (worst at c=262)                                         5.0  (limit 2.0)  held_slab <-> z_end_cap
-PASS  interference, pick last slab, pocket 0: worst overlap (mm3)                                            0.0  (limit 0.5)  
-PASS  interference, pick last slab, pocket 6: worst overlap (mm3)                                            0.0  (limit 0.5)  
-PASS  interference, pick last slab, pocket 12: worst overlap (mm3)                                           0.0  (limit 0.5)  
-PASS  interference, empty travel 6->7: worst overlap (mm3)                                                   0.0  (limit 0.5)  
-PASS  interference, loaded travel 6->7: worst overlap (mm3)                                                  0.0  (limit 0.5)  
-PASS  interference, held slab at C_MAX: worst overlap (mm3)                                                  0.0  (limit 0.5)  
-PASS  interference, station read: worst overlap (mm3)                                                        0.0  (limit 0.5)  
-PASS  interference, X left hard stop: worst overlap (mm3)                                                    0.0  (limit 0.5)  
-PASS  interference, X right hard stop: worst overlap (mm3)                                                   0.0  (limit 0.5)  
-PASS  interference, Z bottom hard stop c=-14 (carriage + head): worst overlap (mm3)                          0.0  (limit 0.5)  
-PASS  interference, Z top hard stop c=262 with a held slab (carriage + head): worst overlap (mm3)            0.0  (limit 0.5)  
-PASS  interference, static parts vs each other: worst overlap (mm3)                                          0.0  (limit 0.5)  
-PASS  overfill beam clear of the head homed at c=255, over pocket 0                                         40.4  (limit 5.0)  cup <-> gate_beam
-PASS  overfill beam clear of the head homed at c=255, over pocket 6                                         40.4  (limit 5.0)  cup <-> gate_beam
-PASS  overfill beam clear of the head homed at c=255, over pocket 12                                        40.4  (limit 5.0)  cup <-> gate_beam
-PASS  station read: held slab clearance to everything static                                                1.85  (limit 1.0)  held_slab <-> rod_42
-PASS  station read: lens-to-slab-front distance error (mm)                                                   0.0  (limit 3.0)  140.0 vs 140.0
-PASS  station camera line-of-sight to front label: blocked volume (mm3)                                      0.0  (limit 1.0)  
-PASS  head camera line-of-sight to back label: blocked volume (mm3)                                          0.0  (limit 1.0)  
-PASS  head camera half-angle needed to see label edge (deg, <= 30)                                         24.82  (limit 30.0)  
-PASS  travel extreme x=42 c=7: moving parts vs frame                                                         3.0  (limit 2.0)  x_carriage <-> x_beam
-PASS  travel extreme x=42 c=250: moving parts vs frame                                                       3.0  (limit 2.0)  x_carriage <-> x_beam
-PASS  travel extreme x=1238 c=7: moving parts vs frame                                                       3.0  (limit 2.0)  x_carriage <-> x_beam
-PASS  travel extreme x=1238 c=250: moving parts vs frame                                                     3.0  (limit 2.0)  x_carriage <-> x_beam
-PASS  X hard stop x=15: x_bracket lands on x_bumper_L (gap mm)                                               0.0  (limit 0.01)  
-PASS  X hard stop x=15: everything else vs frame                                                             2.0  (limit 2.0)  z_spine <-> x_bumper_L
-PASS  X hard stop x=1262: x_bracket lands on x_motor_mount (gap mm)                                          0.0  (limit 0.01)  
-PASS  X hard stop x=1262: everything else vs frame                                                           2.0  (limit 2.0)  belt_clamp_R <-> x_motor_mount
-PASS  X carriage on rail at the left hard stop (mm margin)                                                   2.3  (limit 2.0)  
-PASS  X carriage on rail at the right hard stop (mm margin)                                                  5.3  (limit 2.0)  
-PASS  X left hard stop below the home switch trip (mm)                                                       4.0  (limit 3.0)  
-PASS  Z bottom hard stop c=-14: carriage lands on the z_end_cap lips (gap mm)                                0.0  (limit 0.01)  
-PASS  Z carriage on rail at the bottom hard stop c=-14 (mm margin)                                           5.0  (limit 2.0)  
-PASS  Z carriage on rail at c=-12 (mm margin)                                                                7.0  (limit 2.0)  
-PASS  Z bottom hard stop before the buffer bottoms on the bare pad (mm)                                     11.0  (limit 2.0)  
-PASS  Z top hard stop c=262: z_plate lands on the z_motor_mount (gap mm)                                     0.0  (limit 0.01)  
-PASS  Z carriage on rail at the top hard stop c=262 (mm margin)                                              3.6  (limit 2.0)  
-PASS  Z switch c=258: overtravel to the top hard stop (mm)                                                   4.0  (limit 2.0)  
-PASS  T8 nut stays on the 340 mm screw at the bottom hard stop (mm of screw below the nut)                  34.0  (limit 5.0)  
-PASS  X rail centre on a 4040 front-face slot (mm off)                                                       0.0  (limit 0.01)  
-PASS  Z rail centre on a 2040 spine slot (mm off)                                                            0.0  (limit 0.01)  
-PASS  bed plywood vs uprights overlap (mm3)                                                                  0.0  (limit 1.0)  
-PASS  printed parts that are not ONE solid (count)                                                             0  (limit 0)  
-PASS  Phase 0 tray: ledge under the slab edge, slab shifted by the full play (mm, X)                         2.1  (limit 2.0)  
-PASS  Phase 0 tray: ledge under the slab edge, slab shifted by the full play (mm, Y)                         2.1  (limit 2.0)  
-PASS  Phase 0 tray: label clear of the opening edge (mm, X)                                                 2.55  (limit 1.0)  
-PASS  interference, Phase 0 jig: worst overlap (mm3)                                                         0.0  (limit 0.5)  
-PASS  Phase 0: station camera line-of-sight to the front label: blocked volume (mm3)                         0.0  (limit 1.0)  
-PASS  Phase 0: head camera line-of-sight to the back label: blocked volume (mm3)                             0.0  (limit 1.0)  
-PASS  Phase 0: head board standoff for an 8 mm board-to-lens-front camera (mm, >= 0 = the posts work)        0.6  (limit 0.0)  
+PASS  pick last slab, pocket  0: head/carriage clearance                                                                          18.95  (limit 3.0)  probe_nut_-2 <-> stack_1
+PASS  pick last slab, pocket  1: head/carriage clearance                                                                          18.95  (limit 3.0)  probe_nut_-2 <-> stack_2
+PASS  pick last slab, pocket  2: head/carriage clearance                                                                          18.95  (limit 3.0)  probe_nut_-2 <-> stack_3
+PASS  pick last slab, pocket  3: head/carriage clearance                                                                          18.95  (limit 3.0)  probe_nut_-2 <-> stack_4
+PASS  pick last slab, pocket  4: head/carriage clearance                                                                          18.95  (limit 3.0)  probe_nut_-2 <-> stack_5
+PASS  pick last slab, pocket  5: head/carriage clearance                                                                          18.95  (limit 3.0)  probe_nut_-2 <-> stack_6
+PASS  pick last slab, pocket  6: head/carriage clearance                                                                           24.4  (limit 3.0)  drop_arm <-> gate_beam
+PASS  pick last slab, pocket  7: head/carriage clearance                                                                          18.95  (limit 3.0)  probe_nut_-2 <-> stack_8
+PASS  pick last slab, pocket  8: head/carriage clearance                                                                          18.95  (limit 3.0)  probe_nut_-2 <-> stack_9
+PASS  pick last slab, pocket  9: head/carriage clearance                                                                          18.95  (limit 3.0)  probe_nut_-2 <-> stack_10
+PASS  pick last slab, pocket 10: head/carriage clearance                                                                          18.95  (limit 3.0)  probe_nut_-2 <-> stack_11
+PASS  pick last slab, pocket 11: head/carriage clearance                                                                           24.4  (limit 3.0)  drop_arm <-> gate_beam
+PASS  pick last slab, pocket 12: head/carriage clearance                                                                           24.4  (limit 3.0)  drop_arm <-> gate_beam
+PASS  place first slab in pocket 0: slab-to-rod play (centred)                                                                     1.75  (limit 1.0)  held_slab <-> rod_02
+PASS  empty travel 1->2: head/carriage clearance over rods/stacks                                                                  21.9  (limit 9.0)  cup <-> gate_beam
+PASS  loaded travel 1->2: head/carriage/slab clearance                                                                             21.4  (limit 9.0)  held_slab <-> rod_12
+PASS  empty travel 6->7: head/carriage clearance over rods/stacks                                                                  21.9  (limit 9.0)  cup <-> gate_beam
+PASS  loaded travel 6->7: head/carriage/slab clearance                                                                            21.48  (limit 9.0)  held_slab <-> rod_42
+PASS  empty travel 10->11: head/carriage clearance over rods/stacks                                                                21.9  (limit 9.0)  cup <-> gate_beam
+PASS  loaded travel 10->11: head/carriage/slab clearance                                                                           21.4  (limit 9.0)  held_slab <-> rod_68
+PASS  loaded travel: double pick of 2 x 11.5 mm holders over the rods                                                              5.33  (limit 4.99)  double_pick <-> rod_42
+PASS  Z machinery over rods with cup at c=-14.0                                                                                    48.3  (limit 5.0)  z_plate <-> rod_35
+PASS  Z machinery over rods with cup at c=0.0                                                                                      49.0  (limit 5.0)  z_end_cap <-> rod_33
+PASS  Z machinery over rods with cup at c=6.6                                                                                      49.0  (limit 5.0)  z_end_cap <-> rod_33
+PASS  held slab at c=250 (C_MAX): clearance to the parts fixed to the X carriage                                                   17.0  (limit 10.0)  held_slab <-> z_end_cap
+PASS  held slab at c=262 (Z hard top stop): clearance to the parts fixed to the X carriage                                          5.0  (limit 4.99)  held_slab <-> z_end_cap
+PASS  held slab vs every non-cup part, c = 6.6..262 (worst at c=262)                                                                5.0  (limit 2.0)  held_slab <-> z_end_cap
+PASS  interference, pick last slab, pocket 0: worst overlap (mm3)                                                                   0.0  (limit 0.5)  
+PASS  interference, pick last slab, pocket 6: worst overlap (mm3)                                                                   0.0  (limit 0.5)  
+PASS  interference, pick last slab, pocket 12: worst overlap (mm3)                                                                  0.0  (limit 0.5)  
+PASS  interference, empty travel 6->7: worst overlap (mm3)                                                                          0.0  (limit 0.5)  
+PASS  interference, loaded travel 6->7: worst overlap (mm3)                                                                         0.0  (limit 0.5)  
+PASS  interference, held slab at C_MAX: worst overlap (mm3)                                                                         0.0  (limit 0.5)  
+PASS  interference, station read: worst overlap (mm3)                                                                               0.0  (limit 0.5)  
+PASS  interference, X left hard stop: worst overlap (mm3)                                                                           0.0  (limit 0.5)  
+PASS  interference, X right hard stop: worst overlap (mm3)                                                                          0.0  (limit 0.5)  
+PASS  interference, Z bottom hard stop c=-14 (carriage + head): worst overlap (mm3)                                                 0.0  (limit 0.5)  
+PASS  interference, Z top hard stop c=262 with a held slab (carriage + head): worst overlap (mm3)                                   0.0  (limit 0.5)  
+PASS  interference, static parts vs each other: worst overlap (mm3)                                                                 0.0  (limit 0.5)  
+PASS  overfill beam clear of the head homed at c=255, over pocket 0                                                                40.4  (limit 5.0)  cup <-> gate_beam
+PASS  overfill beam clear of the head homed at c=255, over pocket 6                                                                40.4  (limit 5.0)  cup <-> gate_beam
+PASS  overfill beam clear of the head homed at c=255, over pocket 12                                                               40.4  (limit 5.0)  cup <-> gate_beam
+PASS  station read: held slab clearance to everything static                                                                       1.85  (limit 1.0)  held_slab <-> rod_42
+PASS  station read: lens-to-slab-front distance error (mm)                                                                          0.0  (limit 3.0)  140.0 vs 140.0
+PASS  station camera line-of-sight to front label: blocked volume (mm3)                                                             0.0  (limit 1.0)  
+PASS  head camera line-of-sight to back label: blocked volume (mm3)                                                                 0.0  (limit 1.0)  
+PASS  head camera half-angle needed to see label edge (deg, <= 30)                                                                24.82  (limit 30.0)  
+PASS  probe: buffer travel at which the flag edge crosses the beam centre, error vs 2.0 mm (mm)                                     0.0  (limit 0.05)  trips at 2.00 mm
+PASS  probe: flag clear of the beam at rest: buffer travel before it starts to cover the aperture (mm)                              1.5  (limit 1.0)  blocked share at rest 0.000
+PASS  probe: beam fully blocked from 3.0 to 25 mm of buffer travel (min blocked share)                                              1.0  (limit 0.999)  lowest at 3 mm
+PASS  probe: flag vs the sensor over 0..25 mm of buffer travel (min clearance, mm)                                                  1.0  (limit 0.5)  at 0 mm
+PASS  probe: flag vs its guide in head_foot over 0..25 mm (min clearance, mm)                                                      0.45  (limit 0.3)  at 0 mm; slot 1.9 for a 1.0 flag
+PASS  probe: flag vs buffer nut, board screws, arm and camera over 0..25 mm (min clearance, mm)                                     2.0  (limit 1.0)  at 0 mm
+PASS  probe: buffer stop + vacuum fitting vs foot, sensor, arm and camera over 0..25 mm (min clearance, mm)                        5.97  (limit 1.0)  at 0 mm
+PASS  probe: blade depth in the guide, worst over 0..25 mm (mm)                                                                     4.0  (limit 3.0)  at 25 mm
+PASS  probe: rotating buffer, flag turned until the guide stops it: clearance to the sensor (mm)                                    0.6  (limit 0.3)  guide stops it at +1.33 deg (travel 2 mm)
+PASS  probe: trip adjustment, board slots +/-2.5 mm (>= +/-0.5): board vs head_foot overlap at the slot ends (mm3)                  0.0  (limit 0.5)  
+PASS  probe: trip adjustment: flag vs the sensor with the board at either slot end, over 0..25 mm (min clearance, mm)               1.0  (limit 0.5)  board at -2.5
+PASS  head camera label view: flag + buffer stop over the whole 25 mm stroke (max blocked mm3)                                      0.0  (limit 1.0)  
+PASS  head camera label view: vacuum fitting while reading (buffer travel 0..2 mm, blocked mm3)                                     0.0  (limit 1.0)  
+PASS  travel extreme x=42 c=7: moving parts vs frame                                                                                3.0  (limit 2.0)  x_carriage <-> x_beam
+PASS  travel extreme x=42 c=250: moving parts vs frame                                                                              3.0  (limit 2.0)  x_carriage <-> x_beam
+PASS  travel extreme x=1238 c=7: moving parts vs frame                                                                              3.0  (limit 2.0)  x_carriage <-> x_beam
+PASS  travel extreme x=1238 c=250: moving parts vs frame                                                                            3.0  (limit 2.0)  x_carriage <-> x_beam
+PASS  X hard stop x=15: x_bracket lands on x_bumper_L (gap mm)                                                                      0.0  (limit 0.01)  
+PASS  X hard stop x=15: everything else vs frame                                                                                    2.0  (limit 2.0)  z_spine <-> x_bumper_L
+PASS  X hard stop x=1262: x_bracket lands on x_motor_mount (gap mm)                                                                 0.0  (limit 0.01)  
+PASS  X hard stop x=1262: everything else vs frame                                                                                  2.0  (limit 2.0)  belt_clamp_R <-> x_motor_mount
+PASS  X carriage on rail at the left hard stop (mm margin)                                                                          2.3  (limit 2.0)  
+PASS  X carriage on rail at the right hard stop (mm margin)                                                                         5.3  (limit 2.0)  
+PASS  X left hard stop below the home switch trip (mm)                                                                              4.0  (limit 3.0)  
+PASS  Z bottom hard stop c=-14: carriage lands on the z_end_cap lips (gap mm)                                                       0.0  (limit 0.01)  
+PASS  Z carriage on rail at the bottom hard stop c=-14 (mm margin)                                                                  5.0  (limit 2.0)  
+PASS  Z carriage on rail at c=-12 (mm margin)                                                                                       7.0  (limit 2.0)  
+PASS  Z bottom hard stop before the buffer bottoms on the bare pad (mm)                                                            11.0  (limit 2.0)  
+PASS  Z top hard stop c=262: z_plate lands on the z_motor_mount (gap mm)                                                            0.0  (limit 0.01)  
+PASS  Z carriage on rail at the top hard stop c=262 (mm margin)                                                                     3.6  (limit 2.0)  
+PASS  Z switch c=258: overtravel to the top hard stop (mm)                                                                          4.0  (limit 2.0)  
+PASS  T8 nut stays on the 340 mm screw at the bottom hard stop (mm of screw below the nut)                                         34.0  (limit 5.0)  
+PASS  X rail centre on a 4040 front-face slot (mm off)                                                                              0.0  (limit 0.01)  
+PASS  Z rail centre on a 2040 spine slot (mm off)                                                                                   0.0  (limit 0.01)  
+PASS  bed plywood vs uprights overlap (mm3)                                                                                         0.0  (limit 1.0)  
+PASS  printed parts that are not ONE solid (count)                                                                                    0  (limit 0)  
+PASS  Phase 0 tray: ledge under the slab edge, slab shifted by the full play (mm, X)                                                2.1  (limit 2.0)  
+PASS  Phase 0 tray: ledge under the slab edge, slab shifted by the full play (mm, Y)                                                2.1  (limit 2.0)  
+PASS  Phase 0 tray: label clear of the opening edge (mm, X)                                                                        2.55  (limit 1.0)  
+PASS  interference, Phase 0 jig: worst overlap (mm3)                                                                                0.0  (limit 0.5)  
+PASS  Phase 0: station camera line-of-sight to the front label: blocked volume (mm3)                                                0.0  (limit 1.0)  
+PASS  Phase 0: head camera line-of-sight to the back label, occluder fitted: blocked volume (mm3)                                   0.0  (limit 1.0)  
+PASS  Phase 0: cup face above the slab back (mm)                                                                                    0.5  (limit 0.2)  cup centre 0.00 mm off the lens axis
+PASS  Phase 0 occluder vs machine, relative to the head lens: worst bounding-box offset (mm)                                        0.5  (limit 1.0)  vac_fitting; 14 parts compared
+PASS  Phase 0 vs machine: head camera's whole-slab-back view blocked by the occluder, |jig - machine| (% of machine)               0.09  (limit 1.0)  jig 41938 vs machine 41977 mm3 (carriage parts add 1131 at c=248: z_end_cap,z_leadscrew)
+PASS  Phase 0 vs machine: parts in the whole-slab-back view that are not in both (count)                                              0  (limit 0)  buffer,buffer_rod,buffer_stop,cup,drop_arm,head_foot,probe_flag,vac_fitting
+PASS  Phase 0: occluder flag, buffer stop and fitting over 0..25 mm vs mount, bridge, camera, stub, post (min clearance, mm)        3.0  (limit 1.0)  at 14 mm
+PASS  Phase 0: head board standoff for an 8 mm board-to-lens-front camera (mm, >= 0 = the posts work)                               0.6  (limit 0.0)  
 
-77/77 checks passed
+95/95 checks passed
 exit=0
