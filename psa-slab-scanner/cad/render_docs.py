@@ -114,7 +114,7 @@ def probe_closeup(dest: Path) -> None:
         lines.sort(key=lambda ln: ",0.35]" in ln or ",0.45]" in ln)  # opaque first: see-through parts blend over them
         (d / "scene.scad").write_text("\n".join(lines) + "\n")
         png = d / "probe.png"
-        subprocess.run(["xvfb-run", "-a", "openscad", "-o", str(png), "--imgsize=900,900", "--camera=120,-210,140,13,6,86", "--projection=p",
+        subprocess.run(["xvfb-run", "-a", "openscad", "-o", str(png), "--imgsize=900,900", "--camera=128,-224,152,13,6,92", "--projection=p",
                         "--colorscheme=Tomorrow", "scene.scad"], check=True, cwd=d, capture_output=True, timeout=600)
         tiles.append((Image.open(png).convert("RGB"), text))
     w, h = tiles[0][0].size

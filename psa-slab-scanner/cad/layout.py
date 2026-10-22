@@ -54,15 +54,15 @@ C_SAFE_EMPTY = POST_H + SLAB_T_THICK_MAX + CARRY_CLEAR + CUP_HANG  # 236.5: empt
 C_SAFE_LOADED = POST_H + 2 * SLAB_T_THICK_MAX + CARRY_CLEAR + CUP_HANG  # 248: a double pick of two thick holders (2 x 11.5) still clears the rods by 5 mm
 C_MAX = 250.0  # top of Z travel the software uses (cup face)
 C_MIN = -12.0  # lowest cup height the design allows (firmware soft limit -8; probing the bare pad trips near -2)
-C_HARD_BOTTOM = C_MIN - 2.0  # -14: Z carriage skirts land on the z_end_cap lips (hard stop; the buffer would bottom on the bare pad only at about -25)
+C_HARD_BOTTOM = C_MIN - 2.0  # -14: Z carriage skirts land on the z_end_cap lips (hard stop; the buffer would bottom on the bare pad only at -18)
 Z_SWITCH_C = C_MAX + 8.0  # 258: Z home switch trip height (firmware mpos 255 + 3 mm pull-off)
 C_HARD_TOP = Z_SWITCH_C + 4.0  # 262: z_plate top meets the z_motor_mount (hard stop, 4 mm past the switch)
 HELD_SLAB_CLEAR = 5.0  # held slab back (= cup face) to the lowest part fixed to the X carriage, even at C_HARD_TOP
 X_HOME_SWITCH = 19.0  # cup X where the X home switch trips (firmware mpos 22 - 3 mm pull-off)
 X_HARD_STOP = (15.0, 1262.0)  # cup X where the x_bracket meets the left / right end bumpers
 HEAD_ENVELOPE = (70.0, 116.0)  # X, Y footprint of everything below C+POST_H; must fit in a pocket
-PROBE_WINDOW = 12.0  # max probing travel past predicted contact (< buffer stroke 25)
-BUFFER_STROKE = 25.0
+PROBE_WINDOW = 12.0  # max probing travel past predicted contact (< buffer stroke 20)
+BUFFER_STROKE = 20.0  # SMC ZPT25UUK20-B5-A10. [Certain, SMC ZP catalog Table 2] pads of 10-32 mm come in 10/20/30/40/50 mm only
 PROBE_TRIP_TOL = 0.5  # the flag may trip within CUP_HANG +/- this (BUILD_GUIDE 7.6; = software buffer_trip_tol_mm default)
 Y_ROW = 0.0  # pocket row centre line = cup Y
 
@@ -212,7 +212,7 @@ def check() -> list[str]:
         problems.append("station cell must not be at an end")
     if not C_MAX < Z_SWITCH_C < C_HARD_TOP:
         problems.append("Z switch must trip between C_MAX and the hard top stop")
-    if not -BUFFER_STROKE + 2 <= C_HARD_BOTTOM < C_MIN:
+    if not -(BUFFER_STROKE - CUP_HANG) + 2 <= C_HARD_BOTTOM < C_MIN:  # on the bare pad the buffer is compressed CUP_HANG - c
         problems.append("Z bottom hard stop must lie below C_MIN and >= 2 mm before the buffer bottoms on the bare pad")
     lowest_fixed = min(Z_SPINE_BOTTOM - Z_END_CAP_T, Z_SCREW_TIP, Z_RAIL_BOTTOM)
     if lowest_fixed < C_HARD_TOP + HELD_SLAB_CLEAR:

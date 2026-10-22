@@ -69,11 +69,13 @@ class Config:
     # "stop": only a PSA back-label QR proves it; otherwise the run stops untouched and the operator confirms
     #         (resume --face-down-ok).
     # "learned": a PSA back QR, or a card window that matches the card backs of earlier QR- or operator-confirmed
-    #         slabs (slabscan/facedown.py). Active only once face_down_threshold is measured (Phase 0) and
-    #         face_down_min_refs references exist; until then it behaves like "stop".
+    #         slabs (slabscan/facedown.py). Active only once face_down_threshold is measured (phase0 --save writes
+    #         it with face_down_threshold_sig, the card window it was measured for), face_down_min_refs references
+    #         exist and the head's view of the window is checked on this machine; until then it behaves like "stop".
     # "off": no check - only the operator's face-down loading protects the fronts.
     face_down_check: str = "learned"
     face_down_threshold: float | None = None  # similarity a card window needs; Phase 0 measures it (phase0 --save writes it)
+    face_down_threshold_sig: str | None = None  # facedown.threshold_tag() of the window and check it was measured for
     face_down_min_refs: int = 5  # references (QR- or operator-confirmed card backs) needed before a learned match counts
     # Card-window rectangles [along the row, along the slab, ...] in mm on the slab plane from the head-camera axis,
     # label end negative. They must lie on the card (not the label) and be clear of the head's own cup, buffer and
@@ -127,6 +129,7 @@ class Config:
 
 _TUPLE_FIELDS = ("station_xy", "accepted_graders", "x_travel", "psa_cert_digits")
 FACE_DOWN_MODES = ("learned", "stop", "off")
+FACE_DOWN_THRESHOLD_FLOOR = 0.5  # facedown.THRESHOLD_FLOOR: no measured threshold below it is used [Guessing: sim face-up scores reach 0.38-0.51]
 
 
 def check_face_down(raw: dict) -> None:
@@ -134,8 +137,11 @@ def check_face_down(raw: dict) -> None:
     if mode not in FACE_DOWN_MODES:
         raise ValueError(f"face_down_check must be one of {', '.join(repr(m) for m in FACE_DOWN_MODES)}, not {mode!r}")
     t = raw.get("face_down_threshold")
-    if t is not None and not (isinstance(t, (int, float)) and 0.0 < float(t) < 1.0):
-        raise ValueError(f"face_down_threshold must be a number between 0 and 1 (Phase 0 measures it), not {t!r}")
+    if t is not None and not (isinstance(t, (int, float)) and not isinstance(t, bool) and FACE_DOWN_THRESHOLD_FLOOR <= float(t) < 1.0):
+        raise ValueError(f"face_down_threshold must be a number from {FACE_DOWN_THRESHOLD_FLOOR} to below 1 (Phase 0 measures it), not {t!r}")
+    sig = raw.get("face_down_threshold_sig")
+    if sig is not None and not isinstance(sig, str):
+        raise ValueError(f"face_down_threshold_sig must be the text phase0 --save wrote, not {sig!r}")
     n = raw.get("face_down_min_refs", 1)
     if not isinstance(n, int) or n < 1:
         raise ValueError(f"face_down_min_refs must be a whole number >= 1, not {n!r}")

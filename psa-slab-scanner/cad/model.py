@@ -471,8 +471,6 @@ def z_motor_mount() -> cq.Workplane:
 
 # --------------------------------------------------------------------------- head (moves with Z)
 
-CUP_D = 25.0
-BUFFER_BODY = (16.0, 20.0, 62.0)  # dia, z0, z1 above cup face
 FOOT_Z = (62.0, 75.0)
 CAM_Z = L.CAM_TO_SLAB  # lens face height above the cup face (= held slab back)
 ARM_Z = (FOOT_Z[0] + 3.0, L.Z_CARRIAGE_ABOVE_CUP + 55.0)  # arm bottoms on head_foot's socket floor; top 3 mm under the z_plate top
@@ -483,53 +481,69 @@ HEAD_LENS_PROJ = 20.0
 HEAD_RING_OD = 40.0  # head LED ring: 40 mm COB angel eye (a 60 mm ring would cut into the drop arm)
 LENS_WINDOW_D = 25.0  # passes a 16 mm square M12 holder (22.6 mm diagonal)
 
-# Spring buffer above the foot. Heights are above c with the buffer AT REST (fully extended); the moving parts
-# (cup, rod, rod end, flag, fitting) rise by the buffer travel t. The model's standard pose is t = CUP_HANG, the probe
-# trip, which puts the cup face at c (a free cup hangs CUP_HANG lower).
-# [Guessing] SMC ZPT..J/K..-B5-A10 layout from SMC's general drawings, not a measured part: the M10x1 body is held by a
-# nut each side of the foot; the hollow rod slides up through it on contact and carries a stopper block with the M5
-# vacuum port on top, which rests on the body top when the cup is free. MEASURE yours (BUILD_GUIDE 7.6).
-BUFFER_NUT = (17.0, 5.0)  # top M10x1 nut on the foot: envelope dia (a 14-15 mm hex), thickness
-BUFFER_TOP = 83.0  # body top = stopper seat
+# Cup + spring buffer: SMC ZPT25UUK20-B5-A10 (25 mm flat urethane pad, non-rotating buffer, 20 mm stroke, M5 female vacuum
+# port on top, M10x1 body). [Certain, SMC ZP catalog p.13-11-12, ø20/ø25 at 20 mm stroke] the M10x1 body is G = 51 long and
+# starts E = 44.5 above the pad face; the port top is F = 108.5 above the pad face, on an 8 mm hex 5 mm tall; the pad is
+# øA 25 (lip) / øB 28 (outside), its own 8 mm hex ends D = 23 above the face; the nuts are 14 mm across flats.
+# [Likely, read off the same drawing] the 13 mm above the body is an ~8 mm neck (Ø~8) plus the 5 mm hex, both rising with
+# the rod and resting on the body top when the cup is free; the nuts are 3 mm thick. [Guessing] hollow rod Ø6, pad hub Ø14.
+# Heights are above c with the buffer AT REST (fully extended); the moving parts (pad, rod, neck + hex, flag, fitting) rise by
+# the buffer travel t. The model's standard pose is t = CUP_HANG, the probe trip, which puts the pad face at c (a free cup
+# hangs CUP_HANG lower). The buffer's place on its thread puts the foot's underside 64 mm above the free pad face.
+BUF_E, BUF_G, BUF_F = 44.5, 51.0, 108.5  # pad face to the body bottom, body length, pad face to the port top
+PAD_B, PAD_Y, PAD_HUB, PAD_C, PAD_D = 28.0, 4.0, 14.0, 14.0, 23.0  # pad outside dia, skirt height, hub dia, hub top, pad hex top
+HEX8 = 8.0 / 0.8660254  # 8 mm hex across corners (envelopes are round)
+BUFFER_NUT = (14.0 / 0.8660254, 3.0)  # M10x1 nut on each face of the foot: across corners, thickness
 BUFFER_ROD_D = 6.0
-ROD_END = (11.5, 8.0)  # stopper block with the M5 port (10 mm hex): envelope dia, height
-VAC_FITTING = (10.0, 15.0)  # straight M5 push-in fitting for 4 mm tube: envelope dia, height above the flag tab
+BUF_NECK = (8.0, 8.0)  # neck between the body top and the port hex: dia, height
+PAD_REST = -L.CUP_HANG  # free pad face, above c
+BODY_Z = (PAD_REST + BUF_E, PAD_REST + BUF_E + BUF_G)  # (42.5, 93.5): the fixed M10 body
+PORT_TOP = PAD_REST + BUF_F  # 106.5: top of the M5 port hex at rest; the flag tab sits on it, under the fitting
+# Vacuum fitting: SMC M-5ALU-4 barb elbow (M5, 7 mm hex, for 4 x 2.5 urethane tube), tube toward +Y (away from the label).
+# [Likely, SMC part page: A 13.3, B 9.3, hex 7] 9.3 mm above the port face on a 4 mm M5 thread (A - B = 4 for every size).
+# [Guessing] the barb arm's height and reach. A push-in elbow is too tall here: SMC KQ2L04-M5A stands 15.9 mm above its seat
+# [Certain, SMC KQ2 catalog], so at full stroke it would reach 3.4 mm past the head lens front.
+VAC_FITTING = (7.0 / 0.8660254, 9.3)  # body envelope: dia (7 mm hex across corners), height above the flag tab
+VAC_BARB = (4.5, 12.0, 5.5)  # barb arm + tube end envelope: dia, reach along +Y from the axis, axis height above the tab
+VAC_THREAD = 4.0  # M5 thread length: 3 mm (3.75 turns) engaged through the 1 mm flag tab
 
 # Contact probe: a TCST2103 slotted optical sensor on its endstop board, on the post's -X face. Optical axis along Y;
 # the slot is open toward the buffer AND along Z, so the flag (a flat plate in the slot's mid-plane) passes straight
-# THROUGH it over the whole stroke and never bottoms. [Certain, Vishay] 3.1 mm gap, 1 mm aperture, 24.5 x 6.3 x 10.8 mm
-# body (the 2103 has mounting flanges; the flangeless TCST1103 is 11.9 mm long). [Likely] the board's 19 mm holes are
-# the flange holes, so the slot sits midway between them. [Guessing] flange 3 mm thick, slot 6.2 mm deep, optical axis
-# 3.2 mm below the arm tips, aperture 1.5 mm tall, 3-pin header at the board's +Y end.
-PROBE_Y = 7.5  # slot (= flag) mid-plane, Y from the cup axis: clears the rod end, and stays on the far side from the label
+# THROUGH it over the whole stroke and never bottoms. [Certain, Vishay doc 81147, drawing 6.550-5040.01-4] 24.5 x 6.3 x
+# 10.8 mm with mounting flanges, 3.1 mm gap, flange holes 19 mm apart and symmetric about the slot, slot bottom and flange
+# top 3.1 mm above the base (slot 7.7 deep), optical axis 2.6 mm below the arm tips, aperture a 1 mm slit running 3.8 mm
+# down from the tips. [Likely] the endstop board's two holes are the flange holes. [Guessing] the board outline and the
+# 3-pin header at its +Y end.
+PROBE_Y = 7.5  # slot (= flag) mid-plane, Y from the cup axis: clears the port hex and the body, and stays on the far side from the label
 PROBE_BEAM_Z = 99.0  # beam centre above c; the flag's top edge crosses it after CUP_HANG of buffer travel
-PROBE_ADJ = 2.5  # vertical slots for the board's M3 screws: +/- this much trip adjustment
+PROBE_ADJ = 4.0  # vertical slots for the board's M3 screws: +/- this much trip adjustment (covers BUFFER_SHIFT + PROBE_TRIP_TOL)
 PROBE_PCB = (33.0, 10.5, 1.6)  # endstop board: along the hole line (Y), across (Z), thickness (X)
 PROBE_HOLES = 19.0
-TCST_GAP, TCST_AP, TCST_AP_H = 3.1, 1.0, 1.5  # slot width (Y); aperture along the flag travel (Z) and across it (X)
+TCST_GAP, TCST_AP, TCST_AP_DEPTH = 3.1, 1.0, 3.8  # slot width (Y); aperture slit width along the flag travel (Z), depth from the arm tips (X)
 TCST_H, TCST_W, TCST_L, TCST_U = 10.8, 6.3, 24.5, 11.9  # height (X), width (Z), flange length (Y), U-body length (Y)
-TCST_FLANGE_T, TCST_SLOT_DEPTH, TCST_AXIS = 3.0, 6.2, 3.2  # flange thickness; slot depth and optical axis from the arm tips
+TCST_FLANGE_T, TCST_SLOT_DEPTH, TCST_AXIS = 3.1, 7.7, 2.6  # flange thickness; slot depth and optical axis from the arm tips
 TCST_BASE_X = SENSOR_POST_X[0] - PROBE_PCB[2]  # 24.9: sensor base on the board
 TCST_TIP_X = TCST_BASE_X - TCST_H  # 14.1: arm tips (slot mouth)
-TCST_SLOT_X = TCST_TIP_X + TCST_SLOT_DEPTH  # 20.3: slot bottom
-TCST_AXIS_X = TCST_TIP_X + TCST_AXIS  # 17.3: optical axis
+TCST_SLOT_X = TCST_TIP_X + TCST_SLOT_DEPTH  # 21.8: slot bottom
+TCST_AXIS_X = TCST_TIP_X + TCST_AXIS  # 16.7: optical axis
 SENSOR_POST_TOP = PROBE_BEAM_Z + PROBE_ADJ + 4.5
 
 # Probe flag: 1 mm aluminium sheet, one 90-deg bend (BUILD_GUIDE 7.6 and cad/out/probe_flag_blank.svg).
 FLAG_T, FLAG_BEND_R = 1.0, 1.0  # sheet thickness, inside bend radius
-FLAG_X = (12.0, TCST_SLOT_X - 1.0)  # blade inner / outer edge from the cup axis: the outer edge stays 1 mm off the slot bottom
+FLAG_X = (12.0, TCST_TIP_X + TCST_AP_DEPTH + 1.5)  # blade inner / outer edge: covers the aperture slit with 2.1 / 1.5 mm to spare
 FLAG_TAB_X = 5.0  # neck and tab half width
 FLAG_HOLE = 5.2  # tab hole: clears the M5 fitting thread
-FLAG_BEND_Z = BUFFER_TOP + ROD_END[1] - FLAG_BEND_R  # 90: top of the plate's flat part (= the bend line), at rest
+FLAG_BEND_Z = PORT_TOP - FLAG_BEND_R  # 105.5: top of the plate's flat part (= the bend line), at rest
 FLAG_TOP = PROBE_BEAM_Z - L.CUP_HANG  # 97: blade top edge at rest
-FLAG_WEB = (FLAG_BEND_Z - 8.0, FLAG_BEND_Z - 2.0)  # web from the neck to the blade (its top edge is the bend relief)
+FLAG_BAND_Z = FLAG_TOP - 6.0  # bottom of the band that joins the neck to the blade; its top edge is the blade's
 FLAG_TAB_END = -(FLAG_HOLE / 2 + 2.0)  # tab end, Y: 2 mm of metal past the hole
 # Anti-rotation guide in head_foot: two fins with a slot between them, continued through the foot. The blade rides in
 # it over the whole stroke, so even a rotating (J) buffer cannot swing the flag into the sensor.
 GUIDE_GAP, GUIDE_WALL = FLAG_T + 2 * 0.45, 2.5  # 1.9 mm slot: 0.45 mm each side of the flag
 GUIDE_TOP = PROBE_BEAM_Z - TCST_W / 2 - PROBE_ADJ - 0.6  # fins stop under the sensor even with the board slid to its lowest
-FLAG_ENGAGE = 4.0  # the blade stays this deep in the guide at full stroke
-FLAG_BOTTOM = GUIDE_TOP - L.BUFFER_STROKE - FLAG_ENGAGE  # 63.75: blade bottom at rest, inside the foot's slot
+BUFFER_SHIFT = 3.0  # BUILD_GUIDE 7.5 may move the buffer this far either way on its thread (lens height); checks.py sweeps it
+FLAG_ENGAGE = 8.0  # the blade stays this deep in the guide at full stroke (5 mm with the buffer BUFFER_SHIFT higher)
+FLAG_BOTTOM = GUIDE_TOP - L.BUFFER_STROKE - FLAG_ENGAGE  # 63.25: blade bottom at rest, inside the foot's slot
 
 
 def occluder_parts(cup_x: float, cup_y: float, c: float, compression: float = L.CUP_HANG, prefix: str = "", group: str = "head") -> list[Part]:
@@ -537,25 +551,36 @@ def occluder_parts(cup_x: float, cup_y: float, c: float, compression: float = L.
     head_parts() puts them on the machine; phase0_parts() hangs the same set under the Phase 0A camera.
     ``compression`` = buffer travel t (0 = free cup); the moving parts sit t above their rest heights."""
     m = c + compression  # rest heights of the moving parts are given above c
+    x, y = cup_x, cup_y
+    pad = cyl((x, y, m + PAD_REST), PAD_B, PAD_Y).union(cyl((x, y, m + PAD_REST + PAD_Y), PAD_HUB, PAD_C - PAD_Y))
+    pad = pad.union(cyl((x, y, m + PAD_REST + PAD_C), HEX8, PAD_D - PAD_C))
+    stop = cyl((x, y, m + BODY_Z[1]), BUF_NECK[0], BUF_NECK[1]).union(cyl((x, y, m + BODY_Z[1] + BUF_NECK[1]), HEX8, PORT_TOP - BODY_Z[1] - BUF_NECK[1]))
     parts = [
-        Part(prefix + "head_foot", head_foot(L.ARM_TO_CUP).translate((cup_x, cup_y, c)), PETG, "printed", group),
-        Part(prefix + "buffer", cyl((cup_x, cup_y, c + BUFFER_BODY[1]), BUFFER_BODY[0], BUFFER_BODY[2] - BUFFER_BODY[1])
-             .union(cyl((cup_x, cup_y, c + FOOT_Z[0]), 10.0, FOOT_Z[1] - FOOT_Z[0]))
-             .union(cyl((cup_x, cup_y, c + FOOT_Z[1]), BUFFER_NUT[0], BUFFER_NUT[1]))
-             .union(cyl((cup_x, cup_y, c + FOOT_Z[1] + BUFFER_NUT[1]), 10.0, BUFFER_TOP - FOOT_Z[1] - BUFFER_NUT[1])),
-             STEEL, "purchased", group, note="M10x1 spring buffer body + nuts, 25 mm stroke"),
-        Part(prefix + "cup", cyl((cup_x, cup_y, m - L.CUP_HANG), CUP_D, 8), BLACK, "purchased", group, note="25 mm non-marking cup"),
-        Part(prefix + "buffer_rod", cyl((cup_x, cup_y, m - L.CUP_HANG + 8), BUFFER_ROD_D, BUFFER_TOP - 8 + L.CUP_HANG), STEEL, "purchased", group,
+        Part(prefix + "head_foot", head_foot(L.ARM_TO_CUP).translate((x, y, c)), PETG, "printed", group),
+        Part(prefix + "buffer", cyl((x, y, c + BODY_Z[0]), 10.0, BUF_G)
+             .union(cyl((x, y, c + FOOT_Z[0] - BUFFER_NUT[1]), BUFFER_NUT[0], BUFFER_NUT[1]))
+             .union(cyl((x, y, c + FOOT_Z[1]), BUFFER_NUT[0], BUFFER_NUT[1])),
+             STEEL, "purchased", group, note="M10x1 x 51 buffer body + 2 nuts, 20 mm stroke"),
+        Part(prefix + "cup", pad, BLACK, "purchased", group, note="25 mm flat urethane pad on its 8 mm hex adapter"),
+        Part(prefix + "buffer_rod", cyl((x, y, m + PAD_REST + PAD_D), BUFFER_ROD_D, BODY_Z[1] - PAD_REST - PAD_D), STEEL, "purchased", group,
              note="hollow rod, slides up through the body on contact"),
-        Part(prefix + "buffer_stop", cyl((cup_x, cup_y, m + BUFFER_TOP), *ROD_END), STEEL, "purchased", group, note="stopper with the M5 port"),
-        Part(prefix + "probe_flag", probe_flag().translate((cup_x, cup_y, m)), ALU, "made", group, note="1 mm aluminium, cut + bent"),
-        Part(prefix + "vac_fitting", cyl((cup_x, cup_y, m + BUFFER_TOP + ROD_END[1] + FLAG_T), *VAC_FITTING), BLACK, "purchased", group, note="M5 push-in, 4 mm tube"),
-        Part(prefix + "contact_sensor", probe_sensor().translate((cup_x, cup_y, c)), BLACK, "purchased", group, note="TCST2103 optical endstop, slot along Z"),
+        Part(prefix + "buffer_stop", stop, STEEL, "purchased", group, note="neck + 8 mm hex with the M5 port; rests on the body top when free"),
+        Part(prefix + "probe_flag", probe_flag().translate((x, y, m)), ALU, "made", group, note="1 mm aluminium, cut + bent"),
+        Part(prefix + "vac_fitting", vac_fitting().translate((x, y, m + PORT_TOP + FLAG_T)), BLACK, "purchased", group, note="M5 barb elbow, 4 mm tube toward +Y"),
+        Part(prefix + "contact_sensor", probe_sensor().translate((x, y, c)), BLACK, "purchased", group, note="TCST2103 optical endstop, slot along Z"),
     ]
-    for y in (PROBE_Y - PROBE_HOLES / 2, PROBE_Y + PROBE_HOLES / 2):  # M3x12 through the sensor flange, board and post slot
-        parts.append(Part(prefix + f"probe_m3_{y:+.0f}", cyl((cup_x + TCST_BASE_X - TCST_FLANGE_T, cup_y + y, c + PROBE_BEAM_Z), M3_HEAD[0], M3_HEAD[1], (-1, 0, 0)), STEEL, "fastener", group))
-        parts.append(Part(prefix + f"probe_nut_{y:+.0f}", cyl((cup_x + SENSOR_POST_X[1], cup_y + y, c + PROBE_BEAM_Z), 6.4, 2.4, (1, 0, 0)), STEEL, "fastener", group))
+    for yy in (PROBE_Y - PROBE_HOLES / 2, PROBE_Y + PROBE_HOLES / 2):  # M3x12 through the sensor flange, board and post slot
+        parts.append(Part(prefix + f"probe_m3_{yy:+.0f}", cyl((x + TCST_BASE_X - TCST_FLANGE_T, y + yy, c + PROBE_BEAM_Z), M3_HEAD[0], M3_HEAD[1], (-1, 0, 0)), STEEL, "fastener", group))
+        parts.append(Part(prefix + f"probe_nut_{yy:+.0f}", cyl((x + SENSOR_POST_X[1], y + yy, c + PROBE_BEAM_Z), 6.4, 2.4, (1, 0, 0)), STEEL, "fastener", group))
     return parts
+
+
+def vac_fitting() -> cq.Workplane:
+    """M5 barb elbow envelope, local origin = its seat on the flag tab, on the cup axis: body, plus the barb arm (and the
+    first few mm of tube on it) toward +Y."""
+    d, h = VAC_FITTING
+    ad, reach, az = VAC_BARB
+    return cyl((0, 0, 0), d, h).union(cyl((0, 0, az), ad, reach, (0, 1, 0)))
 
 
 def head_parts(cup_x: float, c: float, compression: float = L.CUP_HANG) -> list[Part]:
@@ -629,13 +654,13 @@ def head_foot(arm_offset: float) -> cq.Workplane:
 
 def probe_flag() -> cq.Workplane:
     """Probe flag at rest, head-local (cup axis, Z above c). A flat plate in the sensor slot's mid-plane (Y = PROBE_Y)
-    plus a tab bent 90 deg toward the cup axis, clamped between the buffer's stopper block and the M5 vacuum fitting.
+    plus a tab bent 90 deg toward the cup axis, clamped between the buffer's port hex and the M5 vacuum fitting.
     The blade's top edge enters the beam after CUP_HANG of buffer travel and the blade stays in it to full stroke;
     its lower part rides in head_foot's guide. Flat blank and drill dimensions: flag_blank() / build.export_flag_drawing()."""
     y0, y1 = PROBE_Y - FLAG_T / 2, PROBE_Y + FLAG_T / 2
     tx, b, ri, ro = FLAG_TAB_X, FLAG_BEND_Z, FLAG_BEND_R, FLAG_BEND_R + FLAG_T
-    plate = box(-tx, y0, FLAG_WEB[0], tx, y1, b)  # neck under the bend
-    plate = plate.union(box(-tx, y0, FLAG_WEB[0], FLAG_X[0] + 0.5, y1, FLAG_WEB[1]))  # web
+    plate = box(-tx, y0, FLAG_BAND_Z, tx, y1, b)  # neck under the bend
+    plate = plate.union(box(-tx, y0, FLAG_BAND_Z, FLAG_X[1], y1, FLAG_TOP))  # band from the neck to the blade
     plate = plate.union(box(FLAG_X[0], y0, FLAG_BOTTOM, FLAG_X[1], y1, FLAG_TOP))  # blade
     yc = y0 - ri  # bend axis (along X)
     bend = cyl((-tx, yc, b), 2 * ro, 2 * tx, (1, 0, 0)).cut(cyl((-tx - 1, yc, b), 2 * ri, 2 * tx + 2, (1, 0, 0)))
@@ -647,11 +672,9 @@ def probe_flag() -> cq.Workplane:
 def flag_blank() -> list[tuple[float, float]]:
     """Flat blank outline of the probe flag, before bending: (u, v) mm, u = along the plate from the neck centre line
     (= the hole centre) toward the sensor, v = up from the bend line. The tab is left long (trim after bending)."""
-    tx, top, bot = FLAG_TAB_X, FLAG_TOP - FLAG_BEND_Z, FLAG_BOTTOM - FLAG_BEND_Z
-    w0, w1 = FLAG_WEB[0] - FLAG_BEND_Z, FLAG_WEB[1] - FLAG_BEND_Z
+    tx, top, bot, band = FLAG_TAB_X, FLAG_TOP - FLAG_BEND_Z, FLAG_BOTTOM - FLAG_BEND_Z, FLAG_BAND_Z - FLAG_BEND_Z
     tab = 13.0
-    return [(-tx, w0), (FLAG_X[0], w0), (FLAG_X[0], bot), (FLAG_X[1], bot), (FLAG_X[1], top), (FLAG_X[0], top), (FLAG_X[0], w1),
-            (tx, w1), (tx, tab), (-tx, tab)]
+    return [(-tx, band), (FLAG_X[0], band), (FLAG_X[0], bot), (FLAG_X[1], bot), (FLAG_X[1], top), (tx, top), (tx, tab), (-tx, tab)]
 
 
 def probe_sensor() -> cq.Workplane:
@@ -669,8 +692,9 @@ def probe_sensor() -> cq.Workplane:
 
 
 def probe_aperture() -> cq.Workplane:
-    """The light path the flag has to block, head-local: the aperture (TCST_AP along Z x TCST_AP_H along X) across the gap."""
-    return box(TCST_AXIS_X - TCST_AP_H / 2, PROBE_Y - TCST_GAP / 2, PROBE_BEAM_Z - TCST_AP / 2, TCST_AXIS_X + TCST_AP_H / 2, PROBE_Y + TCST_GAP / 2, PROBE_BEAM_Z + TCST_AP / 2)
+    """The light path the flag has to block, head-local: the aperture slit (TCST_AP along Z, TCST_AP_DEPTH down from the
+    arm tips along X) across the gap."""
+    return box(TCST_TIP_X, PROBE_Y - TCST_GAP / 2, PROBE_BEAM_Z - TCST_AP / 2, TCST_TIP_X + TCST_AP_DEPTH, PROBE_Y + TCST_GAP / 2, PROBE_BEAM_Z + TCST_AP / 2)
 
 
 def ring_seat(z_bot: float, z_top: float, ring_od: float) -> cq.Workplane:
@@ -761,11 +785,13 @@ P0_BAR_TOP = P0_BAR_Z0 + P0_BAR_T  # 317
 P0_TRAY_PLAY = 1.0  # total slab play in the tray recess. Set dims.SLAB_W/H to your LARGEST measured slab (sec. 1.2)
 P0_LEDGE = 2.6  # ledge under each slab edge (centred slab); >= 2.1 mm even when shifted by the full play
 # The occluder (head_foot + buffer + cup + probe on a 2020 arm stub) hangs under the head camera exactly as on the
-# machine, lifted P0_CUP_GAP so the cup face clears the slab back. Push the cup up by hand to change slabs.
+# machine at the probe trip: the cup rests on the slab back and the slab pushes it up CUP_HANG, so the foot's underside is
+# FOOT_Z[0] above the slab back. Push the cup up by hand to change slabs. For the face-up pass the mount (with the stub)
+# slides P0_FACE_UP_LIFT up its post, so the free cup hangs clear of the slab's front.
 P0_POST_X = (L.POCKET_W + 2 * 12) / 2 + 11  # jig post centres at X = +/- 65
-P0_CUP_GAP = 0.5
-P0_OCC_C = P0_TOP_Z - CAM_Z + P0_CUP_GAP  # the jig's "c": head parts at the machine's height below the lens, + the gap
-P0_STUB = 70.0  # 2020 arm stub, bottoms in head_foot's socket like the drop arm
+P0_OCC_C = P0_TOP_Z - CAM_Z  # the jig's "c" = the slab back: every head part sits where it is on the machine, relative to the lens
+P0_FACE_UP_LIFT = L.CUP_HANG + 1.0  # the free cup then hangs 1 mm above a face-up slab
+P0_STUB = 66.0  # 2020 arm stub, bottoms in head_foot's socket like the drop arm; its top stays under the bridge even lifted
 P0_MOUNT_Z = (110.0, 128.0)  # occluder mount band above P0_OCC_C: over the sensor post, under the bridge
 
 
@@ -841,8 +867,9 @@ def phase0_base() -> cq.Workplane:
     return body
 
 
-def phase0_parts(compression: float = L.CUP_HANG) -> list[Part]:
-    """The Phase 0A jig, occluder included; ``compression`` = the occluder buffer's travel (as in head_parts)."""
+def phase0_parts(compression: float = L.CUP_HANG, lift: float = 0.0) -> list[Part]:
+    """The Phase 0A jig, occluder included; ``compression`` = the occluder buffer's travel (as in head_parts), ``lift`` = how
+    far the occluder mount (with the stub and everything on it) is slid up its post (P0_FACE_UP_LIFT for the face-up pass)."""
     ow = L.POCKET_W + 2 * 12
     parts = [Part("p0_base", phase0_base(), PETG, "printed", "static"),
              Part("p0_station_camera", station_camera(0, 0, 0.0), GREEN, "purchased", "static")]
@@ -855,16 +882,17 @@ def phase0_parts(compression: float = L.CUP_HANG) -> list[Part]:
     zs = P0_BAR_TOP + p0_board_spacer()  # board underside
     cam = cbox(0, 0, zs + 5, 38, 38, 10).union(cbox(0, 0, (P0_TOP_Z + 6 + zs) / 2, 16, 16, zs - P0_TOP_Z - 6)).union(cyl((0, 0, P0_TOP_Z), 14, 6))
     parts.append(Part("p0_head_camera", cam, GREEN, "purchased", "static"))
-    parts += phase0_occluder(compression)
+    parts += phase0_occluder(compression, lift)
     return parts
 
 
-def phase0_occluder(compression: float = L.CUP_HANG) -> list[Part]:
+def phase0_occluder(compression: float = L.CUP_HANG, lift: float = 0.0) -> list[Part]:
     """The machine's occluder set under the jig's head camera, on its arm stub and mount (same functions as the machine)."""
-    yc, z0 = L.ARM_TO_CUP, P0_OCC_C + ARM_Z[0]
-    parts = occluder_parts(0.0, 0.0, P0_OCC_C, compression, prefix="p0_", group="static")
+    c = P0_OCC_C + lift
+    yc, z0 = L.ARM_TO_CUP, c + ARM_Z[0]
+    parts = occluder_parts(0.0, 0.0, c, compression, prefix="p0_", group="static")
     parts.append(Part("p0_arm_stub", box(-10, yc - 10, z0, 10, yc + 10, z0 + P0_STUB), ALU, "purchased", "static", note=f"2020 x {P0_STUB:.0f}"))
-    parts.append(Part("p0_occluder_mount", phase0_occluder_mount().translate((0, 0, P0_OCC_C + P0_MOUNT_Z[0])), PETG, "printed", "static"))
+    parts.append(Part("p0_occluder_mount", phase0_occluder_mount().translate((0, 0, c + P0_MOUNT_Z[0])), PETG, "printed", "static"))
     return parts
 
 

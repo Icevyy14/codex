@@ -124,14 +124,13 @@ def _flag_drawing() -> tuple[list, float, float]:
     | ("circle", p, r) | ("text", p, str, size). Returns (items, width, height)."""
     pts = M.flag_blank()
     us, vs = [u for u, _ in pts], [v for _, v in pts]
-    m, right = 20.0, 62.0  # margin; notes column right of the part
+    m, right = 20.0, 66.0  # margin; notes column right of the part
     w, h = max(us) - min(us) + 2 * m + right, max(vs) - min(vs) + 2 * m + 16
     X = lambda u: u - min(us) + m  # noqa: E731
     Y = lambda v: max(vs) - v + m  # noqa: E731
     P = lambda u, v: (X(u), Y(v))  # noqa: E731
     tx, x0, x1 = M.FLAG_TAB_X, M.FLAG_X[0], M.FLAG_X[1]
-    top, bot = M.FLAG_TOP - M.FLAG_BEND_Z, M.FLAG_BOTTOM - M.FLAG_BEND_Z
-    w0, w1 = M.FLAG_WEB[0] - M.FLAG_BEND_Z, M.FLAG_WEB[1] - M.FLAG_BEND_Z
+    top, bot, band = M.FLAG_TOP - M.FLAG_BEND_Z, M.FLAG_BOTTOM - M.FLAG_BEND_Z, M.FLAG_BAND_Z - M.FLAG_BEND_Z
     ba = 1.5708 * (M.FLAG_BEND_R + 0.44 * M.FLAG_T)  # [Likely] bend allowance, 90 deg, K = 0.44
     hole_v = ba + (M.PROBE_Y - M.FLAG_T / 2 - M.FLAG_BEND_R)  # where the hole lands if drilled flat
     it = [("poly", [P(u, v) for u, v in pts])]
@@ -151,10 +150,9 @@ def _flag_drawing() -> tuple[list, float, float]:
     dim_h(bot - 4, 0, x1, f"{x1:.1f}")
     dim_h(bot - 8, 0, x0, f"{x0:.1f}")
     dim_h(13 + 3, -tx, tx, f"{2 * tx:.1f}")
-    dim_v(x1 + 4, 0, top, f"{top:.1f}")
-    dim_v(x1 + 4, 0, bot, f"{-bot:.2f}")
-    dim_v(x0 - 2, 0, w1, f"{-w1:.1f}", left=True)
-    dim_v(-tx - 3, 0, w0, f"{-w0:.1f}", left=True)
+    dim_v(x1 + 4, 0, top, f"{-top:.1f}")  # trip edge, below the bend line
+    dim_v(x1 + 9, 0, bot, f"{-bot:.2f}")
+    dim_v(-tx - 3, 0, band, f"{-band:.1f}", left=True)
     dim_v(-tx - 3, 0, 13, "13 (trim)", left=True)
     notes = [
         "SlabRail probe flag, 1:1 (check the 10 mm bar)",
@@ -176,7 +174,7 @@ def _flag_drawing() -> tuple[list, float, float]:
         "   and a 3.1 mm sensor slot.",
     ]
     for i, n in enumerate(notes):
-        it.append(("text", (X(x1) + 14, m + 2 + i * 3.4), n, 2.0))
+        it.append(("text", (X(x1) + 18, m + 2 + i * 3.4), n, 2.0))
     sb = (m, h - 6)  # 10 mm scale bar
     it.extend([("line", sb, (sb[0] + 10, sb[1]), False), ("line", (sb[0], sb[1] - 1.5), (sb[0], sb[1] + 1.5), False),
                ("line", (sb[0] + 10, sb[1] - 1.5), (sb[0] + 10, sb[1] + 1.5), False), ("text", (sb[0] + 12, sb[1] + 0.8), "10 mm", 2.0)])

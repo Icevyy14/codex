@@ -11,14 +11,15 @@ Builds the machine at every critical pose and measures exact minimum distances
   * the held slab against every part above it at every lift height up to the Z hard top stop,
   * reading at the upward-camera station, camera line-of-sight to the label (head and station),
   * X / Z hard stops (bumpers, Z end cap, top stop) and carriage-on-rail margins,
-  * the contact probe over the whole 25 mm buffer stroke: trip travel, beam fully blocked after the trip, flag
+  * the contact probe over the whole 20 mm buffer stroke: trip travel, beam fully blocked after the trip, flag
     clear of the sensor and of its anti-rotation guide (also turned against the guide, for a rotating buffer),
-    trip adjustment, and the flag out of the head camera's label view,
-  * every printed part is ONE solid, and the Phase 0 jig (ledge overlap, line of sight, fit, and its occluder
-    against the machine's: same parts at the same place under the lens, same blocked view).
+    the pad clear of the buffer body, trip adjustment, the buffer moved +/-3 mm on its thread (lens setting),
+    hex-key access to the board screws, and the moving parts out of the head camera's label view,
+  * every printed part is ONE solid, and the Phase 0 jig (ledge overlap, line of sight, fit, its occluder against
+    the machine's: same parts at the same place under the lens, same blocked view, and the face-up lift).
 What is NOT checked: flexible parts (belt slack, cables, vacuum tube), real purchased-part shapes beyond the
-envelopes in model.py (the buffer above the foot and the sensor package are partly guessed), print tolerances,
-the flag's bend accuracy, and anything under load.
+envelopes in model.py (the buffer's neck and rod, the barb elbow's arm and the endstop board are read off drawings or
+guessed), print tolerances, the flag's bend accuracy, and anything under load.
 Exit code 1 if any check fails. Run:  python checks.py
 """
 
@@ -317,16 +318,18 @@ def _bisect(f, lo: float, hi: float, n: int = 14) -> float:
     return (lo + hi) / 2
 
 
-STROKE = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, L.BUFFER_STROKE]
+STROKE = sorted({0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, L.BUFFER_STROKE})
+READ_T = L.CUP_HANG + L.PROBE_TRIP_TOL  # the head camera reads with the cup free or seated (a late trip at most)
+PROBE_T = READ_T + L.PROBE_WINDOW  # deepest buffer travel while probing (a late trip plus the whole window)
 
 
 def check_probe() -> None:
     """Probe flag vs the TCST2103's beam, the sensor, its guide in head_foot and the head camera's label view, swept over
-    the whole buffer stroke (t = 0 free .. 25 mm), in head-local coordinates (cup axis X = Y = 0, c = 0)."""
+    the whole buffer stroke (t = 0 free .. 20 mm), in head-local coordinates (cup axis X = Y = 0, c = 0)."""
     rest = {p.name: p.shape.val() for p in M.head_parts(0.0, 0.0, compression=0.0)}
     flag, sensor, foot = rest["probe_flag"], rest["contact_sensor"], rest["head_foot"]
     ap = M.probe_aperture().val()
-    full = M.TCST_AP * M.TCST_AP_H * M.FLAG_T  # aperture area x plate thickness
+    full = M.TCST_AP * M.TCST_AP_DEPTH * M.FLAG_T  # aperture area x plate thickness
     frac = lambda t: _moved(flag, t).intersect(ap).Volume() / full  # noqa: E731  share of the beam the flag blocks
     trip = _bisect(lambda t: frac(t) >= 0.5, 0.0, 6.0)
     record(f"probe: buffer travel at which the flag edge crosses the beam centre, error vs {L.CUP_HANG} mm (mm)", abs(trip - L.CUP_HANG), 0.05,
@@ -339,11 +342,12 @@ def check_probe() -> None:
     record(f"probe: beam fully blocked from {after[0]:.1f} to {L.BUFFER_STROKE:.0f} mm of buffer travel (min blocked share)", frac(worst_t), 0.999,
            f"lowest at {worst_t:.0f} mm")
     # clearances over the whole stroke (the buffer stop rests ON the body top when free, so it is checked against the rest)
+    S = f"0..{L.BUFFER_STROKE:.0f} mm"
     guide_box = M.box(M.FLAG_X[0] + 0.5, M.PROBE_Y - M.GUIDE_GAP / 2, M.FOOT_Z[0], M.FLAG_X[1], M.PROBE_Y + M.GUIDE_GAP / 2, M.GUIDE_TOP).val()
     blade_w = M.FLAG_X[1] - M.FLAG_X[0] - 0.5
     fixed_other = [rest[n] for n in rest if n in ("buffer", "camera_bracket", "head_camera", "drop_arm") or n.startswith("probe_m3") or n.startswith("probe_nut")]
     above = [rest[n] for n in ("head_foot", "contact_sensor", "camera_bracket", "head_camera", "drop_arm")]
-    ds, dg, do, dm, eng = (1e9, 0), (1e9, 0), (1e9, 0), (1e9, 0), (1e9, 0)
+    ds, dg, do, dm, dc, eng = (1e9, 0), (1e9, 0), (1e9, 0), (1e9, 0), (1e9, 0), (1e9, 0)
     for t in STROKE:
         ft = _moved(flag, t)
         ds = min(ds, (ft.distance(sensor), t))
@@ -351,12 +355,14 @@ def check_probe() -> None:
         do = min(do, (min(ft.distance(o) for o in fixed_other), t))
         movers = [_moved(rest["buffer_stop"], t), _moved(rest["vac_fitting"], t)]
         dm = min(dm, (min(m.distance(o) for m in movers for o in above), t))
+        dc = min(dc, (_moved(rest["cup"], t).distance(rest["buffer"]), t))
         eng = min(eng, (ft.intersect(guide_box).Volume() / (blade_w * M.FLAG_T), t))
-    record("probe: flag vs the sensor over 0..25 mm of buffer travel (min clearance, mm)", ds[0], 0.5, f"at {ds[1]:.0f} mm")
-    record("probe: flag vs its guide in head_foot over 0..25 mm (min clearance, mm)", dg[0], 0.3, f"at {dg[1]:.0f} mm; slot {M.GUIDE_GAP:.1f} for a {M.FLAG_T:.1f} flag")
-    record("probe: flag vs buffer nut, board screws, arm and camera over 0..25 mm (min clearance, mm)", do[0], 1.0, f"at {do[1]:.0f} mm")
-    record("probe: buffer stop + vacuum fitting vs foot, sensor, arm and camera over 0..25 mm (min clearance, mm)", dm[0], 1.0, f"at {dm[1]:.0f} mm")
-    record("probe: blade depth in the guide, worst over 0..25 mm (mm)", eng[0], 3.0, f"at {eng[1]:.0f} mm")
+    record(f"probe: flag vs the sensor over {S} of buffer travel (min clearance, mm)", ds[0], 0.5, f"at {ds[1]:.0f} mm")
+    record(f"probe: flag vs its guide in head_foot over {S} (min clearance, mm)", dg[0], 0.3, f"at {dg[1]:.0f} mm; slot {M.GUIDE_GAP:.1f} for a {M.FLAG_T:.1f} flag")
+    record(f"probe: flag vs buffer body and nuts, board screws, arm and camera over {S} (min clearance, mm)", do[0], 1.0, f"at {do[1]:.0f} mm")
+    record(f"probe: buffer stop + vacuum fitting vs foot, sensor, arm and camera over {S} (min clearance, mm)", dm[0], 1.0, f"at {dm[1]:.0f} mm")
+    record(f"probe: pad and its hex vs the buffer body over {S} (min clearance, mm)", dc[0], 1.0, f"at {dc[1]:.0f} mm")
+    record(f"probe: blade depth in the guide, worst over {S} (mm)", eng[0], 3.0, f"at {eng[1]:.0f} mm")
     # rotating (J) buffer: turn the flag about the cup axis until it touches the guide; the sensor must still be clear
     worst = (1e9, 0.0, 0.0)
     for t in (L.CUP_HANG, L.BUFFER_STROKE):
@@ -371,22 +377,88 @@ def check_probe() -> None:
         sz = _moved(sensor, dz)
         worst_o = max(worst_o, sz.intersect(foot).Volume())
         worst_f = min(worst_f, (min(_moved(flag, t).distance(sz) for t in STROKE), dz))
-    record(f"probe: trip adjustment, board slots +/-{M.PROBE_ADJ} mm (>= +/-{L.PROBE_TRIP_TOL}): board vs head_foot overlap at the slot ends (mm3)",
+    record(f"probe: trip adjustment, board slots +/-{M.PROBE_ADJ} mm: board vs head_foot overlap at the slot ends (mm3)",
            worst_o, OVERLAP_TOL, "", larger_is_better=False)
-    record("probe: trip adjustment: flag vs the sensor with the board at either slot end, over 0..25 mm (min clearance, mm)", worst_f[0], 0.5, f"board at {worst_f[1]:+.1f}")
-    # the flag and the buffer stop stay out of the head camera's label view over the whole stroke; the fitting while reading
+    record(f"probe: trip adjustment: flag vs the sensor with the board at either slot end, over {S} (min clearance, mm)", worst_f[0], 0.5, f"board at {worst_f[1]:+.1f}")
+    check_buffer_shift(rest)
+    check_key_access()
+    # the head camera's label view: every moving part while it reads; the flag and the buffer stop to the end of a probe
     label_y = -SLAB_H / 2 + 5 + 10
     fr = frustum((0, 0, M.CAM_Z - 0.5), (-37, label_y - 12, 0.5), (37, label_y + 12, 0.5))
-    worst_v = (0.0, 0.0)
-    for t in STROKE:
-        for nm in ("probe_flag", "buffer_stop"):
-            sh = _moved(rest[nm], t)
-            if _near(fr, sh, 1):
-                worst_v = max(worst_v, (fr.intersect(sh).Volume(), t))
-    record("head camera label view: flag + buffer stop over the whole 25 mm stroke (max blocked mm3)", worst_v[0], 1.0, f"at {worst_v[1]:.0f} mm" if worst_v[0] else "",
-           larger_is_better=False)
-    vf = max(fr.intersect(_moved(rest["vac_fitting"], t)).Volume() for t in (0.0, L.CUP_HANG))
-    record("head camera label view: vacuum fitting while reading (buffer travel 0..2 mm, blocked mm3)", vf, 1.0, "", larger_is_better=False)
+    def view(names, ts):
+        w = (0.0, 0.0)
+        for t in ts:
+            for nm in names:
+                sh = _moved(rest[nm], t)
+                if _near(fr, sh, 1):
+                    w = max(w, (fr.intersect(sh).Volume(), t))
+        return w
+    vr = view(("probe_flag", "buffer_stop", "vac_fitting", "cup", "buffer_rod"), [t for t in STROKE if t <= READ_T])
+    record(f"head camera label view while reading (buffer travel 0..{READ_T} mm): every moving part (max blocked mm3)", vr[0], 1.0,
+           f"at {vr[1]:.1f} mm" if vr[0] else "", larger_is_better=False)
+    vp = view(("probe_flag", "buffer_stop"), [t for t in STROKE if t <= PROBE_T] + [PROBE_T])
+    record(f"head camera label view: flag + buffer stop to the end of a probe (0..{PROBE_T} mm, max blocked mm3)", vp[0], 1.0,
+           f"at {vp[1]:.1f} mm" if vp[0] else "", larger_is_better=False)
+
+
+def check_buffer_shift(rest: dict) -> None:
+    """BUILD_GUIDE 7.5 sets the head lens 140 mm above the cup by moving the buffer on its M10 nuts. A buffer moved up by d
+    carries the flag d higher past the foot-mounted sensor and guide; the board is slid d to keep the 2 mm trip, and the
+    lens ends up 140 mm above the cup again, so the head camera moves with the buffer. Sweep d = +/-BUFFER_SHIFT."""
+    d0 = M.BUFFER_SHIFT
+    record(f"probe: buffer moved +/-{d0:.0f} mm on its thread: board slide needed incl. the trip tolerance, vs the +/-{M.PROBE_ADJ} slots (spare mm)",
+           M.PROBE_ADJ - d0 - L.PROBE_TRIP_TOL, 0.0)
+    moving = ("cup", "buffer_rod", "buffer_stop", "probe_flag", "vac_fitting")
+    board = [n for n in rest if n == "contact_sensor" or n.startswith(("probe_m3", "probe_nut"))]
+    guide_box = M.box(M.FLAG_X[0] + 0.5, M.PROBE_Y - M.GUIDE_GAP / 2, M.FOOT_Z[0], M.FLAG_X[1], M.PROBE_Y + M.GUIDE_GAP / 2, M.GUIDE_TOP).val()
+    blade_w = M.FLAG_X[1] - M.FLAG_X[0] - 0.5
+    nuts = M.cyl((0, 0, M.FOOT_Z[0] - M.BUFFER_NUT[1]), *M.BUFFER_NUT).val().fuse(M.cyl((0, 0, M.FOOT_Z[1]), *M.BUFFER_NUT).val())  # stay on the foot
+    lims = {"head_foot": 0.3, "contact_sensor": 0.5}  # the guide, the sensor; everything else 1.0 (as over the stroke above)
+    eng, dflag, dstk = (1e9, 0, 0), (1e9, 0, 0, ""), (1e9, 0, 0, "")
+    for d in (-d0, d0):
+        fixed = {"head_foot": rest["head_foot"], "drop_arm": rest["drop_arm"], "camera_bracket": rest["camera_bracket"], "nuts": nuts,
+                 "buffer body": M.cyl((0, 0, M.BODY_Z[0] + d), 10.0, M.BUF_G).val(), "head_camera": _moved(rest["head_camera"], d),
+                 **{n: _moved(rest[n], d) for n in board}}
+        for t in (0.0, L.CUP_HANG, L.PROBE_WINDOW, L.BUFFER_STROKE):
+            mv = {n: _moved(rest[n], d + t) for n in moving}
+            fl = mv["probe_flag"]
+            if t == L.BUFFER_STROKE:
+                eng = min(eng, (fl.intersect(guide_box).Volume() / (blade_w * M.FLAG_T), d, t))
+            for n, o in fixed.items():
+                dflag = min(dflag, (fl.distance(o) - lims.get(n, 1.0), d, t, n))
+                for k in ("buffer_stop", "vac_fitting", "cup"):
+                    if n not in ("buffer body", "nuts") or k == "cup":  # the stop rests on the body top when free
+                        dstk = min(dstk, (mv[k].distance(o), d, t, f"{k}/{n}"))
+    record(f"probe: buffer moved +/-{d0:.0f} mm on its thread: blade depth in the guide at full stroke (mm)", eng[0], 3.0, f"buffer {eng[1]:+.0f} mm")
+    record(f"probe: buffer moved +/-{d0:.0f} mm: flag vs guide (0.3), sensor (0.5), body, nuts, screws, arm, camera (1.0): worst margin over its limit (mm)", dflag[0], 0.0,
+           f"{dflag[3]}, buffer {dflag[1]:+.0f} mm, travel {dflag[2]:.0f} mm")
+    record(f"probe: buffer moved +/-{d0:.0f} mm: buffer stop, fitting and pad vs foot, sensor, board, body, nuts, arm, camera (min clearance, mm)", dstk[0], 1.0,
+           f"{dstk[3]}, buffer {dstk[1]:+.0f} mm, travel {dstk[2]:.0f} mm")
+
+
+def check_key_access() -> None:
+    """Step 8 of BUILD_GUIDE 7.6 slides the board with both M3 screws loose and the flag and fitting in place. The rear screw
+    (Y +17) takes a plain 2.5 mm key straight along -X; the front one (label side, Y -2) sits in the buffer's and the
+    fitting's shadow, so it needs a ball-end key tilted toward the label. Both at the slot ends and centre, free and tripped."""
+    tilt = 20.0
+    out = {}
+    for y, deg in ((M.PROBE_Y - M.PROBE_HOLES / 2, tilt), (M.PROBE_Y + M.PROBE_HOLES / 2, 0.0)):
+        a = math.radians(deg)
+        direction = (-math.cos(a), -math.sin(a), 0.0)
+        worst = (1e9, "")
+        for t in (0.0, L.CUP_HANG):
+            parts = [p for p in M.head_parts(0.0, 0.0, compression=t) if not p.name.startswith(("probe_m3", "probe_nut", "z_", "fh_"))]
+            for dz in (-M.PROBE_ADJ, 0.0, M.PROBE_ADJ):
+                x0 = M.TCST_BASE_X - M.TCST_FLANGE_T - M.M3_HEAD[1] + 1.5  # 1.5 mm into the M3 socket
+                key = M.cyl((x0, y, M.PROBE_BEAM_Z + dz), 2.5, 70.0, direction).val()
+                for p in parts:
+                    sh = _moved(p.shape.val(), dz) if p.name == "contact_sensor" else p.shape.val()
+                    if _near(key, sh, 5):
+                        worst = min(worst, (key.distance(sh), p.name))
+        out[y] = worst
+    yf, yr = sorted(out)
+    record(f"probe board: 2.5 mm ball-end key into the front (label-side) M3 screw, tilted {tilt:.0f} deg toward the label (min clearance, mm)", out[yf][0], 0.5, out[yf][1])
+    record("probe board: 2.5 mm key straight into the rear M3 screw (min clearance, mm)", out[yr][0], 0.5, out[yr][1])
 
 
 def check_rail_slots() -> None:
@@ -435,7 +507,7 @@ def check_extremes() -> None:
     record(f"Z bottom hard stop c={L.C_HARD_BOTTOM:.0f}: carriage lands on the z_end_cap lips (gap mm)", d, 0.01, "", larger_is_better=False)
     record(f"Z carriage on rail at the bottom hard stop c={L.C_HARD_BOTTOM:.0f} (mm margin)", L.Z_CARRIAGE_ABOVE_CUP + L.C_HARD_BOTTOM - rail_lo, 2.0)
     record(f"Z carriage on rail at c={L.C_MIN:.0f} (mm margin)", L.Z_CARRIAGE_ABOVE_CUP + L.C_MIN - rail_lo, 2.0)
-    record("Z bottom hard stop before the buffer bottoms on the bare pad (mm)", L.C_HARD_BOTTOM + L.BUFFER_STROKE, 2.0)
+    record("Z bottom hard stop before the buffer bottoms on the bare pad (mm)", L.C_HARD_BOTTOM + L.BUFFER_STROKE - L.CUP_HANG, 2.0)
     hi = moving_only(P[3].x, L.C_HARD_TOP)
     d, _ = min_dist([p for p in hi if p.name == "z_plate"], [p for p in hi if p.name == "z_motor_mount"])
     record(f"Z top hard stop c={L.C_HARD_TOP:.0f}: z_plate lands on the z_motor_mount (gap mm)", d, 0.01, "", larger_is_better=False)
@@ -474,7 +546,8 @@ def check_phase0() -> None:
     # occluder: the jig must show the head camera what the machine shows it
     jp = {p.name: p for p in parts}
     cup = jp["p0_cup"].shape.val().BoundingBox()
-    record("Phase 0: cup face above the slab back (mm)", cup.zmin - zb, 0.2, f"cup centre {math.hypot(cup.center.x, cup.center.y):.2f} mm off the lens axis")
+    record(f"Phase 0: cup face on the slab back, pushed up the {L.CUP_HANG:.0f} mm trip travel (gap mm)", abs(cup.zmin - zb), 0.05,
+           f"cup centre {math.hypot(cup.center.x, cup.center.y):.2f} mm off the lens axis", larger_is_better=False)
     mx, mc = P[4].x, L.C_SAFE_LOADED
     mp = {p.name: p for p in M.machine(mx, mc, held_slab=True, fill=FULL)}
     lens_m, lens_j = (mx, 0.0, mc + M.CAM_Z), (0.0, 0.0, M.P0_TOP_Z)
@@ -500,10 +573,26 @@ def check_phase0() -> None:
     record("Phase 0 vs machine: parts in the whole-slab-back view that are not in both (count)", len(names_m ^ names_j), 0,
            ",".join(sorted(names_m ^ names_j)) or ",".join(sorted(names_m)), larger_is_better=False)
     # the occluder buffer pushed through its stroke (changing slabs) stays clear of the mount, bridge and camera
+    S = f"0..{L.BUFFER_STROKE:.0f} mm"
+    movers = ("p0_probe_flag", "p0_buffer_stop", "p0_vac_fitting")
     jrest = {p.name: p.shape.val() for p in M.phase0_parts(compression=0.0)}
     obst = [jrest[n] for n in ("p0_occluder_mount", "p0_top", "p0_head_camera", "p0_arm_stub", "p0_post_1")]
-    dj = min((min(_moved(jrest[n], t).distance(o) for n in ("p0_probe_flag", "p0_buffer_stop", "p0_vac_fitting") for o in obst), t) for t in STROKE)
-    record("Phase 0: occluder flag, buffer stop and fitting over 0..25 mm vs mount, bridge, camera, stub, post (min clearance, mm)", dj[0], 1.0, f"at {dj[1]:.0f} mm")
+    dj = min((min(_moved(jrest[n], t).distance(o) for n in movers for o in obst), t) for t in STROKE)
+    record(f"Phase 0: occluder flag, buffer stop and fitting over {S} vs mount, bridge, camera, stub, post (min clearance, mm)", dj[0], 1.0, f"at {dj[1]:.0f} mm")
+    # face-up pass: the mount (with the stub and the whole occluder) slid P0_FACE_UP_LIFT up its post
+    lift = M.P0_FACE_UP_LIFT
+    up = M.phase0_parts(compression=0.0, lift=lift)
+    record_interference(f"Phase 0 jig, occluder mount slid up {lift:.0f} mm for the face-up pass", up, movers_only=False)
+    ju = {p.name: p.shape.val() for p in up}
+    record(f"Phase 0 face-up pass (mount slid up {lift:.0f} mm): free cup above the slab's front (mm)", ju["p0_cup"].BoundingBox().zmin - zb, 0.5)
+    obst = [ju[n] for n in ("p0_occluder_mount", "p0_top", "p0_head_camera", "p0_arm_stub", "p0_post_1")]
+    push = [t for t in STROKE if t <= 12.0]
+    du = min((min(_moved(ju[n], t).distance(o) for n in movers for o in obst), t) for t in push)
+    record(f"Phase 0 face-up pass: flag, stop and fitting pushed up 0..12 mm to change a slab vs mount, bridge, camera, stub, post (min clearance, mm)",
+           du[0], 1.0, f"at {du[1]:.0f} mm")
+    df = min((min(_moved(ju[n], t).distance(o) for n in movers for o in obst), t) for t in STROKE if t > 12.0)
+    record(f"Phase 0 face-up pass: the same pushed on to the buffer's end ({L.BUFFER_STROKE:.0f} mm): no contact (min clearance, mm)", df[0], 0.1,
+           f"at {df[1]:.0f} mm")
     record("Phase 0: head board standoff for an 8 mm board-to-lens-front camera (mm, >= 0 = the posts work)", M.p0_board_spacer(8.0), 0.0)
 
 

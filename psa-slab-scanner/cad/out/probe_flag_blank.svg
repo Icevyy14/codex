@@ -1,62 +1,58 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="126.3mm" height="95.2mm" viewBox="0 0 126.30 95.25">
-<rect width="126.30" height="95.25" fill="white"/>
-<polygon points="20.00,41.00 37.00,41.00 37.00,59.25 44.30,59.25 44.30,26.00 37.00,26.00 37.00,35.00 30.00,35.00 30.00,20.00 20.00,20.00" fill="#dde3ea" stroke="black" stroke-width="0.25"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="130.4mm" height="111.2mm" viewBox="0 0 130.40 111.25">
+<rect width="130.40" height="111.25" fill="white"/>
+<polygon points="20.00,47.50 37.00,47.50 37.00,75.25 44.40,75.25 44.40,41.50 30.00,41.50 30.00,20.00 20.00,20.00" fill="#dde3ea" stroke="black" stroke-width="0.25"/>
 <line x1="7.00" y1="33.00" x2="33.00" y2="33.00" stroke="black" stroke-width="0.15" stroke-dasharray="1.2,0.8"/>
 <text x="0.50" y="32.20" font-family="sans-serif" font-size="2.2">BEND</text>
-<line x1="25.00" y1="62.25" x2="25.00" y2="17.00" stroke="black" stroke-width="0.15" stroke-dasharray="1.2,0.8"/>
+<line x1="25.00" y1="78.25" x2="25.00" y2="17.00" stroke="black" stroke-width="0.15" stroke-dasharray="1.2,0.8"/>
 <circle cx="25.00" cy="24.74" r="2.60" fill="none" stroke="black" stroke-width="0.15" stroke-dasharray="0.8,0.6"/>
 <line x1="21.50" y1="24.74" x2="28.50" y2="24.74" stroke="black" stroke-width="0.15"/>
-<line x1="25.00" y1="63.25" x2="44.30" y2="63.25" stroke="black" stroke-width="0.15"/>
-<line x1="25.00" y1="64.25" x2="25.00" y2="62.25" stroke="black" stroke-width="0.15"/>
-<line x1="44.30" y1="64.25" x2="44.30" y2="62.25" stroke="black" stroke-width="0.15"/>
-<text x="32.45" y="62.45" font-family="sans-serif" font-size="2.0">19.3</text>
-<line x1="25.00" y1="67.25" x2="37.00" y2="67.25" stroke="black" stroke-width="0.15"/>
-<line x1="25.00" y1="68.25" x2="25.00" y2="66.25" stroke="black" stroke-width="0.15"/>
-<line x1="37.00" y1="68.25" x2="37.00" y2="66.25" stroke="black" stroke-width="0.15"/>
-<text x="28.80" y="66.45" font-family="sans-serif" font-size="2.0">12.0</text>
+<line x1="25.00" y1="79.25" x2="44.40" y2="79.25" stroke="black" stroke-width="0.15"/>
+<line x1="25.00" y1="80.25" x2="25.00" y2="78.25" stroke="black" stroke-width="0.15"/>
+<line x1="44.40" y1="80.25" x2="44.40" y2="78.25" stroke="black" stroke-width="0.15"/>
+<text x="32.50" y="78.45" font-family="sans-serif" font-size="2.0">19.4</text>
+<line x1="25.00" y1="83.25" x2="37.00" y2="83.25" stroke="black" stroke-width="0.15"/>
+<line x1="25.00" y1="84.25" x2="25.00" y2="82.25" stroke="black" stroke-width="0.15"/>
+<line x1="37.00" y1="84.25" x2="37.00" y2="82.25" stroke="black" stroke-width="0.15"/>
+<text x="28.80" y="82.45" font-family="sans-serif" font-size="2.0">12.0</text>
 <line x1="20.00" y1="17.00" x2="30.00" y2="17.00" stroke="black" stroke-width="0.15"/>
 <line x1="20.00" y1="18.00" x2="20.00" y2="16.00" stroke="black" stroke-width="0.15"/>
 <line x1="30.00" y1="18.00" x2="30.00" y2="16.00" stroke="black" stroke-width="0.15"/>
 <text x="22.80" y="16.20" font-family="sans-serif" font-size="2.0">10.0</text>
-<line x1="48.30" y1="33.00" x2="48.30" y2="26.00" stroke="black" stroke-width="0.15"/>
-<line x1="47.30" y1="33.00" x2="49.30" y2="33.00" stroke="black" stroke-width="0.15"/>
-<line x1="47.30" y1="26.00" x2="49.30" y2="26.00" stroke="black" stroke-width="0.15"/>
-<text x="49.50" y="30.20" font-family="sans-serif" font-size="2.0">7.0</text>
-<line x1="48.30" y1="33.00" x2="48.30" y2="59.25" stroke="black" stroke-width="0.15"/>
-<line x1="47.30" y1="33.00" x2="49.30" y2="33.00" stroke="black" stroke-width="0.15"/>
-<line x1="47.30" y1="59.25" x2="49.30" y2="59.25" stroke="black" stroke-width="0.15"/>
-<text x="49.50" y="46.83" font-family="sans-serif" font-size="2.0">26.25</text>
-<line x1="35.00" y1="33.00" x2="35.00" y2="35.00" stroke="black" stroke-width="0.15"/>
-<line x1="34.00" y1="33.00" x2="36.00" y2="33.00" stroke="black" stroke-width="0.15"/>
-<line x1="34.00" y1="35.00" x2="36.00" y2="35.00" stroke="black" stroke-width="0.15"/>
-<text x="30.50" y="34.70" font-family="sans-serif" font-size="2.0">2.0</text>
-<line x1="17.00" y1="33.00" x2="17.00" y2="41.00" stroke="black" stroke-width="0.15"/>
+<line x1="48.40" y1="33.00" x2="48.40" y2="41.50" stroke="black" stroke-width="0.15"/>
+<line x1="47.40" y1="33.00" x2="49.40" y2="33.00" stroke="black" stroke-width="0.15"/>
+<line x1="47.40" y1="41.50" x2="49.40" y2="41.50" stroke="black" stroke-width="0.15"/>
+<text x="49.60" y="37.95" font-family="sans-serif" font-size="2.0">8.5</text>
+<line x1="53.40" y1="33.00" x2="53.40" y2="75.25" stroke="black" stroke-width="0.15"/>
+<line x1="52.40" y1="33.00" x2="54.40" y2="33.00" stroke="black" stroke-width="0.15"/>
+<line x1="52.40" y1="75.25" x2="54.40" y2="75.25" stroke="black" stroke-width="0.15"/>
+<text x="54.60" y="54.83" font-family="sans-serif" font-size="2.0">42.25</text>
+<line x1="17.00" y1="33.00" x2="17.00" y2="47.50" stroke="black" stroke-width="0.15"/>
 <line x1="16.00" y1="33.00" x2="18.00" y2="33.00" stroke="black" stroke-width="0.15"/>
-<line x1="16.00" y1="41.00" x2="18.00" y2="41.00" stroke="black" stroke-width="0.15"/>
-<text x="12.50" y="37.70" font-family="sans-serif" font-size="2.0">8.0</text>
+<line x1="16.00" y1="47.50" x2="18.00" y2="47.50" stroke="black" stroke-width="0.15"/>
+<text x="11.40" y="40.95" font-family="sans-serif" font-size="2.0">14.5</text>
 <line x1="17.00" y1="33.00" x2="17.00" y2="20.00" stroke="black" stroke-width="0.15"/>
 <line x1="16.00" y1="33.00" x2="18.00" y2="33.00" stroke="black" stroke-width="0.15"/>
 <line x1="16.00" y1="20.00" x2="18.00" y2="20.00" stroke="black" stroke-width="0.15"/>
 <text x="5.90" y="27.20" font-family="sans-serif" font-size="2.0">13 (trim)</text>
-<text x="58.30" y="22.00" font-family="sans-serif" font-size="2.0">SlabRail probe flag, 1:1 (check the 10 mm bar)</text>
-<text x="58.30" y="25.40" font-family="sans-serif" font-size="2.0">1.0 mm aluminium sheet. Blank 24.3 x 39.25 mm.</text>
-<text x="58.30" y="28.80" font-family="sans-serif" font-size="2.0">Dimensions from the BEND line and the dashed</text>
-<text x="58.30" y="32.20" font-family="sans-serif" font-size="2.0">neck centre line (= hole centre line).</text>
-<text x="58.30" y="35.60" font-family="sans-serif" font-size="2.0">1. Cut and file to the outline. The blade's top</text>
-<text x="58.30" y="39.00" font-family="sans-serif" font-size="2.0">   edge is the trip edge: straight, square.</text>
-<text x="58.30" y="42.40" font-family="sans-serif" font-size="2.0">2. This view shows the face that faces the buffer.</text>
-<text x="58.30" y="45.80" font-family="sans-serif" font-size="2.0">   Neck in the vise, jaws at the BEND line; bend</text>
-<text x="58.30" y="49.20" font-family="sans-serif" font-size="2.0">   the tab 90 deg TOWARD YOU (r ~1 mm). Bent the</text>
-<text x="58.30" y="52.60" font-family="sans-serif" font-size="2.0">   other way the blade ends up on the wrong side.</text>
-<text x="58.30" y="56.00" font-family="sans-serif" font-size="2.0">   Plate stays flat; check 90 deg with a square.</text>
-<text x="58.30" y="59.40" font-family="sans-serif" font-size="2.0">3. THEN drill 5.2 mm on the centre line,</text>
-<text x="58.30" y="62.80" font-family="sans-serif" font-size="2.0">   7.0 mm from the plate's inner face</text>
-<text x="58.30" y="66.20" font-family="sans-serif" font-size="2.0">   (lands ~8.3 above the bend line flat).</text>
-<text x="58.30" y="69.60" font-family="sans-serif" font-size="2.0">4. Trim the tab to 2 mm past the hole.</text>
-<text x="58.30" y="73.00" font-family="sans-serif" font-size="2.0">5. Deburr. It rides in a 1.9 mm guide slot</text>
-<text x="58.30" y="76.40" font-family="sans-serif" font-size="2.0">   and a 3.1 mm sensor slot.</text>
-<line x1="20.00" y1="89.25" x2="30.00" y2="89.25" stroke="black" stroke-width="0.15"/>
-<line x1="20.00" y1="87.75" x2="20.00" y2="90.75" stroke="black" stroke-width="0.15"/>
-<line x1="30.00" y1="87.75" x2="30.00" y2="90.75" stroke="black" stroke-width="0.15"/>
-<text x="32.00" y="90.05" font-family="sans-serif" font-size="2.0">10 mm</text>
+<text x="62.40" y="22.00" font-family="sans-serif" font-size="2.0">SlabRail probe flag, 1:1 (check the 10 mm bar)</text>
+<text x="62.40" y="25.40" font-family="sans-serif" font-size="2.0">1.0 mm aluminium sheet. Blank 24.4 x 55.25 mm.</text>
+<text x="62.40" y="28.80" font-family="sans-serif" font-size="2.0">Dimensions from the BEND line and the dashed</text>
+<text x="62.40" y="32.20" font-family="sans-serif" font-size="2.0">neck centre line (= hole centre line).</text>
+<text x="62.40" y="35.60" font-family="sans-serif" font-size="2.0">1. Cut and file to the outline. The blade's top</text>
+<text x="62.40" y="39.00" font-family="sans-serif" font-size="2.0">   edge is the trip edge: straight, square.</text>
+<text x="62.40" y="42.40" font-family="sans-serif" font-size="2.0">2. This view shows the face that faces the buffer.</text>
+<text x="62.40" y="45.80" font-family="sans-serif" font-size="2.0">   Neck in the vise, jaws at the BEND line; bend</text>
+<text x="62.40" y="49.20" font-family="sans-serif" font-size="2.0">   the tab 90 deg TOWARD YOU (r ~1 mm). Bent the</text>
+<text x="62.40" y="52.60" font-family="sans-serif" font-size="2.0">   other way the blade ends up on the wrong side.</text>
+<text x="62.40" y="56.00" font-family="sans-serif" font-size="2.0">   Plate stays flat; check 90 deg with a square.</text>
+<text x="62.40" y="59.40" font-family="sans-serif" font-size="2.0">3. THEN drill 5.2 mm on the centre line,</text>
+<text x="62.40" y="62.80" font-family="sans-serif" font-size="2.0">   7.0 mm from the plate's inner face</text>
+<text x="62.40" y="66.20" font-family="sans-serif" font-size="2.0">   (lands ~8.3 above the bend line flat).</text>
+<text x="62.40" y="69.60" font-family="sans-serif" font-size="2.0">4. Trim the tab to 2 mm past the hole.</text>
+<text x="62.40" y="73.00" font-family="sans-serif" font-size="2.0">5. Deburr. It rides in a 1.9 mm guide slot</text>
+<text x="62.40" y="76.40" font-family="sans-serif" font-size="2.0">   and a 3.1 mm sensor slot.</text>
+<line x1="20.00" y1="105.25" x2="30.00" y2="105.25" stroke="black" stroke-width="0.15"/>
+<line x1="20.00" y1="103.75" x2="20.00" y2="106.75" stroke="black" stroke-width="0.15"/>
+<line x1="30.00" y1="103.75" x2="30.00" y2="106.75" stroke="black" stroke-width="0.15"/>
+<text x="32.00" y="106.05" font-family="sans-serif" font-size="2.0">10 mm</text>
 </svg>

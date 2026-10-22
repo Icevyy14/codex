@@ -115,7 +115,7 @@
     "size_mm": [
       45.5,
       63.5,
-      44.0
+      45.5
     ],
     "volume_cm3": 34.8,
     "note": "PETG, foot down (as exported), 5 walls, 40% infill; clear the 1.9 mm flag slot and the board slots with a hacksaw blade"

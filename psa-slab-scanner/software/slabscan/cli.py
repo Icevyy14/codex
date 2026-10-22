@@ -10,6 +10,7 @@
   run [--name NAME] [--front-photo always|fallback] [--all-face-down] [--yes]
   resume BATCH_DIR [--accept-heights] [--face-down-ok] [--yes]
   sim [--slabs N] [--face-down-check]   full simulated batch, no hardware
+  refs [--drop CERT | --drop-operator]  list (or delete) the learned face-down check's card-back references
   web [--port 8080]               phone page: start/stop/resume, progress, downloads
   phase0 [--sim N] [--out DIR]    Phase 0 camera read-rate test (tools/phase0.py; its own options)
 
@@ -31,11 +32,11 @@ from pathlib import Path
 
 from .config import Config, from_layout, load
 from .facedown import FILE_NAME as CARD_BACKS_FILE
-from .facedown import CardBackRefs
+from .facedown import CardBackRefs, threshold_tag
 from .motion import ControllerLost, MotionError
 from .ops import CalError, Console, calibrate_x, calibrate_z, focus, mark, mark_order, selftest
 from .results import BatchWriter
-from .runner import HardStop, Runner, Stop
+from .runner import FACE_DOWN_OK_REFUSED, HardStop, Runner, Stop, last_face_down_stop, read_journal
 
 SOFTWARE_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = SOFTWARE_DIR / "config" / "machine.toml"
@@ -422,13 +423,17 @@ def cmd_resume(args, con):
         cfg = dataclasses.replace(cfg, face_down_check=opts["face_down_check"])  # a batch keeps the choice it was started with
     if (bdir / "stop.json").exists():
         con.say("last stop: " + json.loads((bdir / "stop.json").read_text()).get("message", ""))
+    fd_pocket = last_face_down_stop(read_journal(bdir / "journal.jsonl"))
+    if args.face_down_ok and fd_pocket is None:
+        con.say(FACE_DOWN_OK_REFUSED)
+        return 2
     if not is_calibrated(cal):
         con.say(CALIBRATION_MISSING.format(cal=cal))
         return 1
     if not args.yes:
         con.say("Before resuming: hands out of the machine (light roof on, if fitted). Any slab you took off the cup is back face-down on top of\n"
-                "the pocket it came from." + ("\n--face-down-ok: you checked that the top slab the face-down check stopped on IS face-down (its card back\n"
-                                               "becomes a reference for the learned check)." if args.face_down_ok else ""))
+                "the pocket it came from." + (f"\n--face-down-ok: you checked that the top slab of pocket {fd_pocket}, where the face-down check stopped,\n"
+                                               "IS face-down. It confirms that one slab only." if args.face_down_ok else ""))
         if not con.confirm("Resume the run?"):
             return 1
     hw = _hw(args, cfg, ("motion", "vacuum", "lights", "head_cam", "station_cam", "gate", "lid"))
@@ -514,7 +519,7 @@ def cmd_sim(args, con):
                 "(the default) they are first compared with the card backs of QR-confirmed slabs: `sim --face-down-check` shows how many "
                 "would still stop.)")
     if args.face_down_check and cfg.face_down_check == "learned" and cfg.face_down_threshold is None:
-        cfg = dataclasses.replace(cfg, face_down_threshold=SIM_FACE_DOWN_THRESHOLD)
+        cfg = dataclasses.replace(cfg, face_down_threshold=SIM_FACE_DOWN_THRESHOLD, face_down_threshold_sig=threshold_tag(cfg.face_down_window_mm))
         con.say(f"(sim: face_down_threshold {SIM_FACE_DOWN_THRESHOLD}, picked on the simulator's synthetic card backs; on the machine Phase 0 "
                 "measures it on yours. Head parts in view: " + ("today's CAD head" if args.sim_head == "cad" else f"'{args.sim_head}' (hypothetical)") + ")")
     hw = sim_hardware(cfg, stacks=stacks, head=args.sim_head)
@@ -567,6 +572,33 @@ def cmd_sim(args, con):
         con.say(f"face-down check ({cfg.face_down_check}): {stops} of {n_slabs} slabs stopped for you (the simulated operator confirmed each; "
                 f"checking only the back QR, {unconfirmable} would have). On the machine every stop waits for you, and resume homes and "
                 f"re-surveys first (~{survey_s + survey_vents * cfg.vent_s:.0f} s), so the time above is for an unbroken run.")
+    return 0
+
+
+def cmd_refs(args, con):
+    """The learned face-down check's card-back references (config/card_backs.npz): list them, or delete some. Every
+    operator-confirmed reference carries the batch, position, cert and back photo it came from (journal:
+    face_down_reference), so a wrong confirmation can be found and removed on its own."""
+    cfg, cal = load_config(args)
+    path = card_backs_path(cal)
+    refs = CardBackRefs(path, cfg.face_down_window_mm)
+    if refs.note and not refs.note.startswith("loaded"):
+        con.say(refs.note)
+    if args.drop or args.drop_operator:
+        n = refs.drop(cert=args.drop) if args.drop else refs.drop(source="operator")
+        if n:
+            refs.save()
+        con.say(f"removed {n} reference(s) from {path}" + ("" if n else " (nothing matched)"))
+    con.say(f"{path}: {refs.summary()}")
+    for i, r in enumerate(refs.refs):
+        m = r.meta
+        where = f"batch {m.get('batch', '-')} #{m.get('position', '-')}" if "batch" in m else (f"phase0 slab {m['phase0_slab']}" if "phase0_slab" in m else "-")
+        con.say(f"  {i + 1:3d}  prototype {r.proto}  {r.source:8}  {where:32}  cert {m.get('cert') or '-':>10}  {m.get('image_back', '')}")
+    if refs.baseline is not None:
+        con.say(f"  empty-pocket view: batch {refs.baseline_meta.get('batch', '-')}, pocket {refs.baseline_meta.get('pocket', '-')}")
+    for p, n in sorted(refs.protos().items()):
+        if not refs.usable(p):
+            con.say(f"  prototype {p} ({n} operator confirmation(s)) is not matched yet: it needs more confirmations or a back-QR slab")
     return 0
 
 
@@ -671,7 +703,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("batch_dir")
     p.add_argument("--accept-heights", action="store_true", help="take the re-surveyed stack heights even if they changed")
     p.add_argument("--face-down-ok", action="store_true",
-                   help="you checked the top slab the face-down check stopped on: it IS face-down (its card back becomes a reference)")
+                   help="you checked the top slab the face-down check stopped on: it IS face-down. Only after a face-down stop; it "
+                        "confirms that one slab (once it is placed, its card back becomes a reference)")
     p.add_argument("--yes", action="store_true", help="no 'hands clear?' question")
     p.set_defaults(fn=cmd_resume)
 
@@ -691,6 +724,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(fn=cmd_sim)
 
     sub.add_parser("phase0", help="Phase 0 camera read-rate test, see `phase0 --help` (same as python -m tools.phase0)").set_defaults(fn=cmd_phase0)
+
+    p = sub.add_parser("refs", help="list or delete the learned face-down check's card-back references")
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("--drop", metavar="CERT", help="delete the references taken from the slab with this cert")
+    g.add_argument("--drop-operator", action="store_true", help="delete every reference you confirmed (keeps the back-QR ones)")
+    p.set_defaults(fn=cmd_refs)
 
     p = sub.add_parser("web", help="phone-friendly web page")
     p.add_argument("--port", type=int, default=8080)
