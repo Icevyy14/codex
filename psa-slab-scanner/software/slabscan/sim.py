@@ -22,6 +22,8 @@ LABEL_TOP_MM = 5.0  # label offset from slab top edge (guess - calibrate on real
 
 def _symbol(text: str, fmt: str, module_mm: float, height_mm: float | None = None) -> np.ndarray:
     """Render a symbol with a given module size in mm at PX_PER_MM_RENDER."""
+    if fmt == "ITF" and len(text) % 2:
+        text = "0" + text  # ITF needs an even digit count; PSA reportedly zero-pads
     bc = zxingcpp.create_barcode(text, getattr(zxingcpp.BarcodeFormat, fmt))
     img = np.array(zxingcpp.write_barcode_to_image(bc, scale=1, add_quiet_zones=True))
     if img.ndim == 3:
@@ -49,7 +51,7 @@ def _text(canvas: np.ndarray, s: str, x_mm: float, y_mm: float, size_mm: float) 
     cv2.putText(canvas, s, (int(x_mm * PX_PER_MM_RENDER), int(y_mm * PX_PER_MM_RENDER)), cv2.FONT_HERSHEY_SIMPLEX, scale, 0, max(1, int(scale * 2)), cv2.LINE_AA)
 
 
-def render_label(cert: str, side: str = "front", symbology: str = "Code128", module_mm: float = 0.25) -> np.ndarray:
+def render_label(cert: str, side: str = "front", symbology: str = "ITF", module_mm: float = 0.25) -> np.ndarray:
     """Grayscale label at PX_PER_MM_RENDER. side='front' -> 1D code, side='back' -> QR + 1D."""
     canvas = np.full((int(LABEL_H_MM * PX_PER_MM_RENDER), int(LABEL_W_MM * PX_PER_MM_RENDER)), 245, np.uint8)
     cv2.rectangle(canvas, (0, 0), (canvas.shape[1] - 1, canvas.shape[0] - 1), 120, 6)
@@ -84,7 +86,7 @@ class Degrade:
     haze: float = 0.12  # slab plastic lowers contrast
 
 
-def slab_view(cert: str, side: str, deg: Degrade, symbology: str = "Code128", module_mm: float = 0.25, seed: int = 0) -> np.ndarray:
+def slab_view(cert: str, side: str, deg: Degrade, symbology: str = "ITF", module_mm: float = 0.25, seed: int = 0) -> np.ndarray:
     """Camera view of the top ~45 mm of a slab (label + border), degraded."""
     rng = np.random.default_rng(seed)
     label = render_label(cert, side, symbology, module_mm)

@@ -16,14 +16,17 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 
-# Certs are stored as strings so leading zeros on old certs survive.
-# PSA went from 8 to 9 digits around late 2024. 7-10 digits covers old and future certs.
-MIN_DIGITS = 7
+# PSA went from 8 to 9 digits around late 2024. Forum reports say the front barcode is
+# Interleaved 2 of 5 (ITF), which only holds an even digit count, so a 9-digit cert is
+# printed as "0" + cert. Certs are therefore canonicalised by stripping leading zeros
+# (the QR URL and the ITF payload then compare equal). The raw payload is always kept.
+MIN_DIGITS = 6  # after stripping leading zeros
 MAX_DIGITS = 10
+RAW_MIN_DIGITS = 7  # a bare-digit payload shorter than this is treated as a short read
 
-_URL_CERT_RE = re.compile(r"psacard\.com/cert/(\d{%d,%d})" % (MIN_DIGITS, MAX_DIGITS), re.I)
-_KEYED_CERT_RE = re.compile(r"cert(?:ificate)?(?:\s*(?:no\.?|number|#))?\s*[/=#:]?\s*(\d{%d,%d})\b" % (MIN_DIGITS, MAX_DIGITS), re.I)
-_BARE_DIGITS_RE = re.compile(r"^\d{%d,%d}$" % (MIN_DIGITS, MAX_DIGITS))
+_URL_CERT_RE = re.compile(r"psacard\.com/cert/(\d{%d,%d})" % (MIN_DIGITS, MAX_DIGITS + 1), re.I)
+_KEYED_CERT_RE = re.compile(r"cert(?:ificate)?(?:\s*(?:no\.?|number|#))?\s*[/=#:]?\s*(\d{%d,%d})\b" % (MIN_DIGITS, MAX_DIGITS + 1), re.I)
+_BARE_DIGITS_RE = re.compile(r"^\d{%d,%d}$" % (RAW_MIN_DIGITS, MAX_DIGITS + 1))
 
 # Lower number = more trustworthy. A machine-readable symbol beats OCR.
 SOURCE_RANK = {
@@ -36,8 +39,16 @@ SOURCE_RANK = {
 }
 
 
+def canonical(digits: str) -> str | None:
+    """Strip leading zeros and range-check. Returns None if it can't be a cert."""
+    c = digits.lstrip("0")
+    if MIN_DIGITS <= len(c) <= MAX_DIGITS:
+        return c
+    return None
+
+
 def parse_cert(payload: str, custom_regex: str | None = None) -> str | None:
-    """Extract a PSA cert number from a decoded barcode/QR/OCR payload.
+    """Extract a canonical PSA cert number from a decoded barcode/QR/OCR payload.
 
     ``custom_regex`` (one capture group) overrides the built-in rules. It exists
     because PSA does not document the barcode payload. If calibration shows the
@@ -50,16 +61,16 @@ def parse_cert(payload: str, custom_regex: str | None = None) -> str | None:
         return None
     if custom_regex:
         m = re.search(custom_regex, text)
-        return m.group(1) if m else None
+        return canonical(m.group(1)) if m else None
     m = _URL_CERT_RE.search(text)
     if m:
-        return m.group(1)
+        return canonical(m.group(1))
     m = _KEYED_CERT_RE.search(text)
     if m:
-        return m.group(1)
+        return canonical(m.group(1))
     compact = text.replace(" ", "").replace("-", "")
     if _BARE_DIGITS_RE.match(compact):
-        return compact
+        return canonical(compact)
     return None
 
 
@@ -82,12 +93,14 @@ class Verdict:
     note: str = ""
 
 
-def consensus(reads: list[CodeRead]) -> Verdict:
+def consensus(reads: list[CodeRead], min_itf_reads: int = 2) -> Verdict:
     """Combine all reads of one slab into a single verdict.
 
     * no reads                         -> no_read
     * machine reads disagree           -> conflict (never guess between two codes)
-    * only OCR, or OCR-only alternative-> needs_review
+    * only OCR                         -> needs_review
+    * only ITF, fewer than min_itf_reads agreeing reads -> needs_review
+      (ITF has no mandatory check digit and is prone to "short reads")
     * machine reads agree              -> ok (OCR disagreement is noted, not fatal)
     """
     if not reads:
@@ -100,10 +113,13 @@ def consensus(reads: list[CodeRead]) -> Verdict:
             listing = ", ".join(f"{c} x{n}" for c, n in certs.most_common())
             return Verdict("conflict", None, tuple(sorted({r.source for r in machine})), f"codes disagree: {listing}")
         cert = next(iter(certs))
+        sources = tuple(sorted({r.source for r in machine}, key=lambda s: SOURCE_RANK.get(s, 9)))
+        only_itf = all(r.symbology == "ITF" for r in machine)
+        if only_itf and len(machine) < min_itf_reads and not any(r.cert == cert for r in ocr):
+            return Verdict("needs_review", cert, sources, "single ITF read - confirm")
         note = ""
         if ocr and any(r.cert != cert for r in ocr):
             note = "ocr disagreed (ignored)"
-        sources = tuple(sorted({r.source for r in machine}, key=lambda s: SOURCE_RANK.get(s, 9)))
         return Verdict("ok", cert, sources, note)
     certs = Counter(r.cert for r in ocr)
     cert, _ = certs.most_common(1)[0]
