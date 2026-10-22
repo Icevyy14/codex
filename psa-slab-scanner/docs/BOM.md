@@ -1,163 +1,196 @@
 # SlabRail bill of materials (October 2026)
 
-The line-by-line list with links is in [`BOM.csv`](BOM.csv). This page has the totals, the order
-plan, where to save and where not to, the tools, and the design gaps I found while pricing.
+The line-by-line list with links is in [`BOM.csv`](BOM.csv). The same parts, grouped into the three
+orders you actually place, are in [SHOPPING_LIST.md](SHOPPING_LIST.md). This page has the totals,
+the order plan, where to save and where not to, the tools, and the design gaps found while pricing.
 
-Confidence tags: **[Certain]** = primary source, **[Likely]** = several secondary sources or a
-dated listing, **[Guessing]** = estimate.
+Confidence tags: **[Certain]** = primary source (for a price: the product page itself, opened on
+22 Oct 2026), **[Likely]** = several secondary sources or a dated listing, **[Guessing]** = estimate.
 
 ## Bottom line
 
-- **The full list costs about $1,973 with a 15% allowance.** [Likely ±15%] You have said
-  $2,500–3,000 is fine if the machine works properly, so there is about $500–1,000 of headroom.
-- **The cup code is fixed.** [Certain, SMC ZP catalog] SMC sells no 25 mm stroke on a 25 mm pad;
-  the line is now `ZPT25UUK20-B5-A10` (20 mm stroke), and the CAD is built on its catalog
-  dimensions. [Likely] that exact code is orderable: get it confirmed before you pay.
-- **This round added $60 of parts** (+$69 with the allowance): a second SMC cup and buffer, the
-  M5 barb elbow the flag clamps under, a spare rail block and the Phase 0 jig's arm stub (below).
+- **The full list costs about $2,182 with a 15% allowance.** [Likely ±10%] You have said
+  $2,500–3,000 is fine if the machine works properly, so there is about $300–800 of headroom.
+- **It went up $209 this round** ($182 of parts, plus the allowance on them). Almost all of it is
+  the sourcing run replacing estimates with the prices of real product pages, not new parts. The
+  biggest moves: the Z motor (+$70: the only listing that publishes every spec the design needs is a
+  VXB 3-pack), the pad foam and cloth (+$24), the CanaKit microSD and cooler (+$21), the vacuum
+  sensor at the 5-piece price break (+$20) and the AutomationDirect E-stop set (+$20); the LiMo
+  rails came in $24 under the estimate. The carry-height sensor (the Z stall guard) adds $6: its
+  board, flag, lead and screws come out of packs the list already buys.
+- **$1,323 of the $1,897 subtotal is now a price seen on the product page** [Certain, 22 Oct 2026],
+  $288 is [Likely] and $286 is [Guessing] (mostly the Misumi extrusions, which block scripts: get
+  that quote first). The allowance covers shipping already seen but not in the line prices (LiMo
+  DDP $39, Digi-Key Marketplace $28, MakerStock $13.49, the endstop boards $5.70) and the ones not
+  shown (ELP express and duty, Proax shipping and brokerage, AFT's small-order fee, Misumi).
 - **The worst case fits too.** [Guessing] Add the tools you will probably have to buy
   ($35–40), the conditional lines Phase 0 is designed to trigger (HT1 cups and the light roof,
-  about $80 with the allowance), and the [Guessing] lines coming in 20% high (about +$145): about
-  **$2,235**, still under $2,500.
-- **About $1,703 if the school supplies its usual shop stock** (filament, wire, glue, fuses,
-  common screws). [Likely] It is the cheapest headroom: the same worst case then comes to about
-  $1,965.
-- **About $1,616 lean:** school stock, plus generic direct-acting valves instead of Clippard, plus
-  Home Depot plywood instead of Baltic birch. [Likely]
+  about $77 with the allowance), and the [Guessing] lines coming in 20% high (about +$66): about
+  **$2,365**, still under $2,500.
+- **About $1,862 if the school supplies its usual shop stock** (filament, wire, glue, fuses,
+  common screws, the flag sheet). [Likely] It is the cheapest headroom: the same worst case then
+  comes to about $2,039.
+- **About $1,787 lean:** school stock, plus generic direct-acting valves instead of Clippard.
+  [Likely] (The bed is already the Home Depot birch panel: the Baltic birch blank is no longer
+  listed online.)
 - **Keep a running tally** (a spreadsheet: line, quoted, paid). Order 1 (Phase 0) is quoted at
-  ≈ $655 and order 2 at ≈ $1,317. If order 1 comes in more than about 10% over its quote, re-quote
+  ≈ $637 and order 2 at ≈ $1,545. If order 1 comes in more than about 10% over its quote, re-quote
   order 2 before buying it.
 - **Spend the headroom only when a test asks for it.** The conditional lines are there for that:
   HT1 cups if Phase 0B leaves a mark, the light roof if Phase 0A shows glare, and one upgrade per
   acceptance test that can fail (below). Adding parts before the tests doesn't make the machine work
-  better. If every conditional line triggered at once, the total would reach about $3,050; that
+  better. If every conditional line triggered at once, the total would reach about $3,330; that
   many failed tests would mean the design needs rethinking, not more parts. [Guessing, arithmetic]
 - **Not in any total: junk graded slabs for the acceptance tests** (15–20, some deliberately
   dropped). Take your lowest-value slabs from stock and write off 2–3 of them, or budget
   $150–400 to buy them (BUILD_GUIDE §13).
-- **Things that add the most by themselves** (each still fits under $2,500):
-  - buying every tool new (about +$400);
-  - the genuine HIWIN rail tier (+$380, conditional line);
-  - a drag-chain-rated USB cable (+$135, conditional line).
-- **No price here is a live checkout price.** [Certain] Most prices come from search-engine
-  extracts of listings dated 2023 to August 2026. Two listings were loaded on 22 Oct 2026: the
-  M-5ALU-4 elbow ($2.09) and a sibling of the SMC cup (ZPT25UFK20-N6-A10, $37.10).
-  - Of the $1,715 subtotal, $1,089 is [Likely] and $626 is [Guessing].
-  - Misumi extrusion prices, the Z motor and both rails are the least certain items. Get the Misumi
-    quote first, because it moves the total the most.
+- **Things that add the most by themselves:**
+  - buying every tool new (about +$400, total about $2,580: over $2,500, inside $3,000);
+  - the genuine HIWIN rail tier (about +$420, conditional line);
+  - a branded pump with a flow curve (about +$200 [Guessing], conditional line).
+- **Six lines in the total still have only a search hint, no product link:** the 40 mm COB head
+  ring, the branch fuse holders, the drag chain, the M5×10 button heads and the two moving cables
+  (an igus alternative is linked in their notes). Their estimates stay in the total, and a few
+  linked prices were not visible (Amazon blocks scripts): SHOPPING_LIST.md marks each one. Look
+  them up before the order they belong to.
 
 ## Order plan
 
-The design says to pass two Phase 0 gates before buying any motion parts.
+The design says to pass two Phase 0 gates before buying any motion parts. Each order, with a link
+per line, is in [SHOPPING_LIST.md](SHOPPING_LIST.md).
 
 | Order | What | Cost incl. 15% |
 |---|---|---|
-| **1a — Phase 0A, camera test** | Pi 5 with PSU, microSD and cooler, both cameras, the 3 m USB extension, both LED rings, a 12 V wall adapter, M2 screws and standoffs, two 2020 jig posts and the 66 mm arm stub, the optical endstop board, the flag sheet, hookup wire, heat shrink, filament. Rows marked "PHASE 0A" in the CSV. | **≈ $457**; ≈ $293 with a borrowed school Pi; ≈ $220 if the school also supplies filament, wire and the flag sheet |
-| **1b — Phase 0B, cup bench test** | Two SMC cups and buffers (one is the spare), spare pads, the M5 barb elbows, PU tube, push fittings, IPA, a hand vacuum pump with gauge. No mains wiring, no electronics. Rows marked "PHASE 0B". Buy after 0A passes, or order the cups with 0A: their lead time can be 2–8 weeks, and the jig uses one as its occluder. | **≈ $198** |
-| **2 — Machine** | Extrusions, rails and a spare block, motors, belt, brackets, fasteners, bed, dowels, Rodent, valves, pump, reservoir, vacuum sensor and ADC, 24 V PSU, mains inlet and mains box, MOSFET modules, fuses, I/O board, limit switches, laser gate, drag chain, flex cables, E-stop. Add the light-roof lines only if Phase 0 showed glare, the HT1 cups only if the urethane cup marked, and an upgrade line only when its test failed. | **≈ $1,317** (+ ≈ $164 for the Pi set if you borrowed one for Phase 0) |
+| **1a — Phase 0A, camera test** | Pi 5 with PSU, microSD and cooler, both cameras, the 3 m USB extension, both LED rings, a 12 V wall adapter, M2 screws and standoffs, two 2020 jig posts and the 66 mm arm stub, the optical endstop boards, the flag sheet, hookup wire, heat shrink, filament. Rows marked "PHASE 0A" in the CSV. **Plus a handful of M5/M3 screws from school stock** (6 × M5×10, 6 M5 washers, 6 M5 T-nuts, 1 × M5×30 + nylock, 2 × M3×16 + 4 washers + 2 nuts): their packs are order-2 lines. | **≈ $470**; ≈ $281 with a borrowed school Pi; ≈ $202 if the school also supplies filament, wire, heat shrink and the flag sheet |
+| **1b — Phase 0B, cup bench test** | Two SMC cups and buffers (one is the spare), spare pads, the M5 barb elbows, PU tube, push fittings, IPA, a hand vacuum pump with gauge. No mains wiring, no electronics. Rows marked "PHASE 0B". Buy after 0A passes, or order the cups with 0A: Proax shows them back-ordered with no lead time, and the jig uses one as its occluder. | **≈ $167** |
+| **2 — Machine** | Extrusions, rails and a spare block, motors, belt, brackets, fasteners, bed, dowels, Rodent, valves, pump, reservoir, vacuum sensor and ADC, 24 V PSU, mains inlet and mains box, MOSFET modules, fuses, I/O board, limit switches, laser gate, drag chain, flex cables, E-stop, and the carry-height sensor's screws (its board is already in the 0A endstop packs). Add the light-roof lines only if Phase 0 showed glare, the HT1 cups only if the urethane cup marked, and an upgrade line only when its test failed. | **≈ $1,545** (+ ≈ $190 for the Pi set if you borrowed one for Phase 0) |
 
-**If Phase 0A fails, you have spent at most ≈ $457 (≈ $293 with a borrowed Pi). If Phase 0B fails,
-≈ $655, and the first fix is the HT1 cup (+ ≈ $41 plus an adapter), not abandoning the project.**
+**If Phase 0A fails, you have spent at most ≈ $470 (≈ $281 with a borrowed Pi). If Phase 0B fails,
+≈ $637, and the first fix is the HT1 cup (+ ≈ $41 plus an adapter), not abandoning the project.**
 Nothing from order 2 has been bought at that point. [Certain, by construction of the tags]
 
 ## Totals by category
 
 | Category | Total | Usually at school | Biggest line |
 |---|---:|---:|---|
-| Frame (extrusion) | $158.00 | — | X beam 4040 × 1416, $42 |
-| Motion | $145.00 | $8 | MGN12 1300 rail + block, $48 |
-| Fasteners & brackets | $207.00 | $39 | 4040 corner brackets, $18 |
-| Bed, rods & light roof | $136.00 | $32 | Baltic birch 12 × 60 in, $56 |
-| Controller & compute | $206.00 | — | Raspberry Pi 5 4 GB, $110 |
-| Cameras & lighting | $149.50 | — | ELP 8 MP head camera, $66 |
-| Vacuum & gripper | $310.50 | $10 | 2 × Clippard EV-2-24 valves, $72 |
-| Sensors | $62.00 | $3 | 2 × XGZP6847A, $16 |
-| Power & switching | $161.26 | $38 | Mean Well LRS-150-24, $21.51 |
-| Wiring & cable management | $144.00 | $68 | 8-core flex cable, $18 |
-| Printed parts (filament) | $36.00 | $36 | 2 kg PETG |
+| Frame (extrusion) | $158.00 | — | 2 × 2040 × 1416 base rails, $48 |
+| Motion | $191.69 | $10.99 | VXB Z motor 3-pack, $99.99 |
+| Fasteners & brackets | $268.99 | $49.13 | CNC Kitchen heat-set insert kit, $26.99 |
+| Bed, rods & light roof | $158.38 | $35.74 | PureBond birch panel, $60.17 |
+| Controller & compute | $225.80 | — | Raspberry Pi 5 4 GB, $110 |
+| Cameras & lighting | $137.30 | — | ELP 8 MP head camera, $55 |
+| Vacuum & gripper | $294.61 | $12.00 | 2 × Clippard EV-2-24 valves, $77.90 |
+| Sensors | $92.42 | $11.99 | 5 × XGZP6847A, $36 |
+| Power & switching | $197.28 | $47.12 | AutomationDirect E-stop set, $36.75 |
+| Wiring & cable management | $146.09 | $84.13 | 22 AWG hookup wire set, $19.95 |
+| Printed parts (filament) | $26.78 | $26.78 | 2 kg PETG |
 | Acceptance tests | $0.00 | — | junk slabs, conditional (qty 0) |
-| **Subtotal** | **$1,715.26** | **$234** | |
-| Spares, shipping, duties (15%) | $257.29 | | |
-| **Grand total** | **$1,972.55** | | |
-| Minus school stock (+ its 15%) | −$269 | | **≈ $1,703** |
-| Lean swaps (below), with school stock | | | **≈ $1,616** |
+| **Subtotal** | **$1,897.34** | **$277.88** | |
+| Spares, shipping, duties (15%) | $284.60 | | |
+| **Grand total** | **$2,181.94** | | |
+| Minus school stock (+ its 15%) | −$319.56 | | **≈ $1,862** |
+| Lean swap (generic valves), with school stock | | | **≈ $1,787** |
 
-**What changed in this round (+$60.18, +$69.21 with the allowance):**
-- a second SMC `ZPT25UUK20-B5-A10` cup and buffer, $42 (it replaces the $14 conditional generic
-  buffer, which cannot match the flag geometry). [Likely] One crash during commissioning would
-  otherwise stop the build for the SMC lead time.
-- two SMC `M-5ALU-4` barb elbows, $4.18: the fitting the probe flag clamps under. A push-in
-  elbow would reach past the head lens at full stroke. [Certain, SMC KQ2 catalog height placed
-  in the CAD geometry]
-- a spare MGN12H block from the rail seller, $10 (BUILD_GUIDE §6.1);
-- the Phase 0 jig's 66 mm 2020 arm stub, $4 (now in `cut_list.csv`).
-- Changed without a price change: the flag stock is a 25 × 56 mm sheet offcut, not a 6 mm strip; the
-  probe board takes M3×16; the jig's six M5×10 get washers; the HT1 cup needs an adapter.
+**What changed in this round (+$182.08, +$209.39 with the allowance):**
+- **Links and prices from a sourcing run** (22 Oct 2026), spot-checked line by line. Every line
+  in the total now carries a product link except the six above. Where the link is [Likely] or
+  [Guessing], the old search hint stays after it. Price changes of $10 or more: up, the Z motor
+  +$69.99, vacuum sensors +$20.00, E-stop +$19.75, mains and earth wire +$15.00 (still an
+  estimate), microSD +$13.95, pad cloth +$13.48, pad foam +$10.99, heat-set inserts +$10.99, check
+  valves +$10.60; down, the LiMo rails and block −$23.90, the hand pump −$14.01, the two SMC cups
+  −$13.76 (Proax), the head camera −$11.00 (the ELP store), the dowels −$10.00. Every other line
+  moved by less than $10.
+- **Spec corrections from the sourcing run, applied because they are plainly right:**
+  - **Bed:** the Woodcraft 12 × 60 in Baltic birch blank is no longer listed; the line is now a
+    Home Depot 3/4 in PureBond birch 2 × 8 ft panel (17.9 mm), one rip and one crosscut.
+  - **Dowels:** 5/16 in (7.94 mm) × 12 in, so the brad-point bit and collar are 5/16 in.
+  - **Class 2 laser:** the only module found (Quarton VLM-650-03) has a 7 mm body. Drill the left
+    gate post's 6.2 mm barrel hole out to 7.2 mm before fitting it (BUILD_GUIDE §5.9).
+  - **Pump "upgrade":** the VXB 10 L/min pump is probably the main pump itself (VXB's SKU is the
+    Amazon ASIN) [Likely]. The upgrade line is now an unsourced branded pump, about $200
+    [Guessing].
+  - **Optical endstop boards:** the 3-pack is out of stock; two 2-packs give 4 boards (probe,
+    carry-height sensor, 2 spares). The listing does not name the TCST2103: measure it.
+  - **Flag sheet:** at least 50 × 60 mm, for the probe flag and the new carry flag.
+- **Not applied:** the sourcing run's igus chainflex cable for both moving cables. It is
+  unshielded and 4-core, so the head cable would become two runs with renumbered cores. The
+  shielded 8-core line stays [Guessing, price not seen]; the igus cable is listed as a verified
+  alternative in the CSV.
+- **New lines for the carry-height sensor** (BUILD_GUIDE §7.4a, WIRING.md §6a): the board (the
+  second one in the endstop packs, $0), the carry flag (cut from the flag sheet, $0), 2 × M5×10
+  button heads ($6, new), the M3 screws, washers, nuts and T-nuts (from the existing packs, $0),
+  its 0.2 m lead (the board's own 3-pin cable, $0) and the two printed parts ($0). A 10 kΩ + 20 kΩ
+  divider for GPIO 6 comes from the resistor kit.
+- **Phase 0 jig:** six M5 washers, not twelve (one under each M5×10: the jig walls are now 4 mm).
 
-**What changed between the first pricing and the previous round (+$206):** +$112 of parts the
-review found the design needs (a closed mains box $20, a Class 2 laser $7, a second E-stop contact
-block $3, a hand vacuum pump for Phase 0B $30, a 12 V adapter for Phase 0A $10, separate head
-(40 mm) and station LED rings +$12, and M5×25 / M5×16 / M5×20 / button-head screws, M2 standoffs
-and M3 set screws +$30), and +$94 of allowance (15% instead of 10%).
+**What changed in the earlier rounds (+$266 in all):** the second SMC cup and buffer, the M5 barb
+elbows, a spare rail block and the jig's arm stub (+$60), and +$112 of parts the first review found
+the design needs (a closed mains box, a Class 2 laser, a second E-stop contact block, a hand vacuum
+pump, a 12 V adapter, separate head and station LED rings, more screw sizes, M2 standoffs, set
+screws), plus the allowance going from 10% to 15% (+$94).
 
 **Conditional lines are in the CSV with qty 0 and are not in the total.** Buy them only if a test
 fails:
-- Schmalz HT1 cups, 2 × $18. Buy if the urethane cup marks slabs. [Likely] The 25 mm HT1 cups are
-  G1/8-threaded, so find the adapter to the SMC buffer before Phase 0B.
-- Stepper extension cable, $8. Buy if the X motor's lead is too short.
-- Light roof (foam board $8, gaffer tape $12, two 2020 × ~500 mm posts $14). The roof is optional
-  (CONTRACT): buy it only if Phase 0 or the first runs show room-light glare on the labels.
+- Schmalz HT1 cups, 2 × $18 [Guessing: the price needs a Schmalz login]. Buy if the urethane cup
+  marks slabs. The 25 mm HT1 cups are G1/8-threaded and need an M10×1-to-G1/8 adapter nobody has
+  sourced yet: find it before Phase 0B.
+- Stepper extension cable, $8. Buy (or make) it if the X motor's lead is too short.
+- Light roof (4 foam boards $5, gaffer tape about $12, two 2020 × ~500 mm posts $14). The roof is
+  optional (CONTRACT): buy it only if Phase 0 or the first runs show room-light glare.
 - 1N5819 flyback diodes, $6. Only if you swap the Adafruit #5648 modules for ones without an
   on-board diode (for example D4184 modules).
 - Junk graded slabs for the acceptance tests (above).
 
-**Upgrades, also qty 0: buy one only when its test fails.** [Likely for the failure each one
-removes; Guessing for the prices]
+**Upgrades, also qty 0: buy one only when its test fails** (about $920 if all of them).
+[Likely for the failure each one removes; prices as tagged]
 
 | Upgrade | About | Buy only if |
 |---|---:|---|
-| Genuine HIWIN MGNR12 rail + block (replace both) | $380 | The generic X rail fails the §6.1 roll test (notches or binding after cleaning and greasing), or binds in §13.1 |
-| Z motor with a published torque curve | $55 | The §7.8 lift test still fails after the free fixes: Z at 3000 mm/min and Z current raised to about 60% of the motor's rating, motor under 50 °C |
-| Constant-force spring or counterweight for Z | $20 | The §7.8 hold test creeps |
-| Drag-chain-rated USB cable | $135 | Head-camera dropouts in §13.1, §13.2 or later runs that the spare cable does not cure |
-| VXB 10 L/min pump | $68 | The generic pump fails the §8.3 seal or reservoir test although the line holds |
-| Schneider Harmony E-stop with 2 × ZBE102 blocks | $50 | The monthly E-stop check ever finds the 24 V bus live. [Likely] Even these blocks are rated below the capacitor inrush (about 2.7 A DC-13 at 24 V for the older ZB2BE102), so keep two in series and the check. |
+| Genuine HIWIN MGNR12 rail + block (replace both) | $420 [Certain in EUR, Guessing on the exchange rate] | The generic X rail fails the §6.1 roll test (notches or binding after cleaning and greasing), or binds in §13.1 |
+| Z motor with a published torque curve | $55 [Guessing] | The §7.8 lift test still fails after the free fixes: Z at 3000 mm/min and Z current raised to about 60% of the motor's rating, motor under 50 °C. No off-the-shelf motor with an 8 mm lead and a 311–356 mm screw was found: ask for a custom screw length. |
+| Constant-force spring for Z | $20.36 [Likely] | The §7.8 hold test creeps. Its mount is not in the CAD. |
+| High-flex USB cable (L-com CAUAAHFX-3M + coupler) | $50 [Likely] | Head-camera dropouts in §13.1, §13.2 or later runs that the spare cable does not cure. It is rated 10,000 flex cycles, not continuous drag-chain duty. |
+| Branded 24 V vacuum pump with a flow curve | $200 [Guessing] | The generic pump fails the §8.3 seal or reservoir test although the line holds |
+| Schneider Harmony XB5AS8444 E-stop (2 NC) + box | $175 [Likely] | The monthly E-stop check ever finds the 24 V bus live. [Likely] Even these blocks are rated below the capacitor inrush, so keep two in series and the check. |
 
 **Not bought, on purpose:** a closed-loop Z motor (the Rodent has no step/dir header for one, and
 FluidNC uses StallGuard only for homing [Likely]); a spare Rodent (a dead board is a safe stop, and
 its Y and E driver sockets are already spares [Certain, CONTRACT]); a better head camera (it gives
 0.055 mm/px against the 0.14 mm/px the back QR needs [Certain, synthetic labels]; buy one only if
-Phase 0A fails on sharpness, not on glare). [Guessing, not designed] A cheaper Z stall detector
-than closed loop would be the spare TCST2103 from the 3-pack on the Z spine, with a flag on
-`z_plate`; it needs CAD, wiring and software work first.
+Phase 0A fails on sharpness, not on glare). **The Z stall detector is now in the design** at about
+$6: the spare TCST2103 board on the Z spine with a flag on `z_plate` (BUILD_GUIDE §7.4a). It sees a
+loaded head that ended more than about 2.5 mm low before any sideways move; it does not make a weak
+Z motor strong, so the §7.8 lift test still has to pass.
 
 **The allowance is 15%.** [Likely] The US removed the de minimis duty exemption in 2025, so
-AliExpress parcels now carry duty, and much of the small stuff comes from AliExpress.
+parcels from abroad (ELP from China, LiMo, Proax from Canada) carry duty, and several shops add
+shipping the line prices leave out (above).
 
 ## The 5 biggest cost items
 
-1. **Raspberry Pi 5 4 GB, $110.** [Likely] DRAM costs pushed the list price from $60 to $70 (Dec
-   2025), then $85 (Feb 2026), then about $110 (Apr 2026). Street prices may be higher.
-2. **Two Clippard EV-2-24 direct-acting NC valves, $72.** [Likely] Distributors list them at
-   $34.52 and $37.73.
-3. **ELP 8 MP IMX179 USB head camera with the 3.6 mm M12 lens, $66.** [Likely] eBay listings run
-   $60–71.
-4. **Rodent controller, $56, tied with the 18 mm Baltic birch bed blank, $56.** [Likely] The BIQU
-   US store listed the Rodent at $56 but showed it sold out, and the EU store lists it at €69.
-5. **MGN12 1300 mm rail + MGN12H, $48, tied with the two 2040 × 1416 base rails, 2 × $24.**
-   [Guessing]
+1. **Raspberry Pi 5 4 GB, $110** [Certain, CanaKit, board only]. DRAM costs pushed the list price
+   from $60 to $70 (Dec 2025), then $85 (Feb 2026), then about $110 (Apr 2026). [Likely]
+2. **VXB NEMA17 + TR8×8 400 mm, 3-pack, $99.99** [Certain, VXB]. 1.7 A, 1.7 Ω, 3.1 mH, 0.44 N·m:
+   every number the Z motor rule asks for is on the page. You need one; the other two are spares.
+   A single motor with the same published specs would save about $70.
+3. **Two Clippard EV-2-24 direct-acting NC valves, $77.90** [Certain, Clippard; AHE listed $25.90
+   each on sale].
+4. **Two SMC `ZPT25UUK20-B5-A10` cups and buffers, $70.24** [Certain, Proax: CAD 49.34 each,
+   back-ordered]. Canadian shipping and brokerage are extra.
+5. **The bed panel, $60.17** [Certain, Home Depot], then the Rodent ($56, in stock at BIQU) and the
+   ELP head camera ($55, ELP's own store).
 
-The 15% allowance ($257) is bigger than any single part.
+The 15% allowance ($285) is bigger than any single part.
 
 ## Where to save
 
-- **Valves.** Generic 24 V direct-acting 2/2 NC micro valves cost about $6 each instead of $36,
-  saving about $60.
+- **Valves.** Generic 24 V direct-acting 2/2 NC micro valves cost about $6 each instead of $39,
+  saving about $66.
   - They work if they are truly direct-acting. Test them when order 2 arrives (BUILD_GUIDE §8.3,
     reservoir test): hold −60 kPa for 60 s with the pump off and watch the sensor.
   - Their orifice is small, so venting is slower. Lengthen `vent_s` if release lags.
-- **Plywood.** Use 23/32 in sanded plywood from Home Depot, ripped to 290 mm, about $35–45 instead
-  of $56. It has more voids, so drill a test hole away from the pockets first.
+- **The Z motor.** A single motor whose listing gives 1.5–2.0 A, ≤ 4 mH and an 8 mm lead saves about
+  $70 over the VXB 3-pack. Measure 1–2 Ω per phase on arrival; reject anything around 10 Ω.
 - **Rails.** The generic MGN12 rail is enough here. Pockets have ±1.85 mm of play and the slabs sit
   in rods, so you don't need HIWIN precision.
   - Clean the rail.
@@ -168,9 +201,11 @@ The 15% allowance ($257) is bigger than any single part.
   ($130–150). Only do it if the school saw cuts square. Misumi's free cut to ±0.5 mm saves an
   afternoon of squaring.
 - **Fasteners.** One large M5 T-nut and screw kit plus one M3 kit can replace the separate packs.
-  Count first: about 124 M5 T-nuts (plus 6 for the Phase 0 jig) and 65 M3 rail screws are needed,
-  and the kit must contain M5×10/12/16/20/25/30, M5×12 button heads and M3×8/12/16/20 (BOM.csv
-  notes say where each goes).
+  Count first: about 126 M5 T-nuts (plus 6 for the Phase 0 jig) and 69 M3×10 are needed, and the kit
+  must contain M5×10/12/16/20/25/30, M5×12 and M5×10 button heads and M3×8/10/12/16/20 (BOM.csv
+  notes say where each goes). AFT charges a small-order fee under $75.
+- **Small shop items.** The flag sheet ($11.99 + $13.49 delivery for a 12 × 12 in sheet) and the
+  wood screws (Parts Express shipping) are cheaper as school offcuts or a local hardware-store pack.
 - **Pi 5 2 GB.** It would probably run the software. [Guessing] It saves maybe $30–40, but the
   contract specifies 4 GB, so test memory use in `sim` before switching.
 
@@ -184,6 +219,9 @@ The 15% allowance ($257) is bigger than any single part.
     post are built on that buffer's catalog heights. [Certain, CAD] A generic AliExpress buffer
     or a Schmalz or Piab spring plunger has other heights, and the Piab bodies are not M10.
     [Likely]
+- **The Z motor's specs.** 1.5–2.0 A, ≤ 4 mH, an 8 mm lead. A 0.4–0.6 A "integrated" motor stalls at
+  the speed the firmware runs it. The carry-height sensor stops the run after a stall; it does not
+  prevent one.
 - **Valve type.** Never use pilot-operated, "servo-assisted" or diaphragm water valves. They need
   a pressure difference of 0.2–0.5 bar to work, so they won't seal or open reliably on vacuum.
   [Likely] The listing must say "direct acting" and give a vacuum rating, or a "0 bar" minimum.
@@ -197,11 +235,11 @@ The 15% allowance ($257) is bigger than any single part.
 - **The laser.** Buy a ≤ 1 mW (Class 2) module. The KY-008 that comes with the receiver kit is
   usually sold as 5 mW (Class 3R), and the beam is on whenever the Pi is on, at face height when
   you bend over the stacks. [Likely]
-- **The E-stop's second contact block** (about $3). A single block switching the 24 V capacitor
-  inrush can weld closed without you noticing (WIRING.md §1.3).
+- **The E-stop's second contact block.** A single block switching the 24 V capacitor inrush can
+  weld closed without you noticing (WIRING.md §1.3). The AutomationDirect set has three.
 - **The 4040 profile type.** It must be 20-series, slot 6, with two slots per face. Amazon's
   "4040 European standard" is often 40-series slot 8 with one slot per face, and the printed mounts
-  won't fit it. [Likely]
+  won't fit it; so are Amazon's "4040 brackets". [Likely]
 - **Dowel straightness.** Roll every dowel on a flat table and reject bowed ones. A bowed rod
   narrows the pocket at the top, where the cup lifts a full stack.
 
@@ -213,27 +251,28 @@ doesn't have one.
 | Tool | Used for | Buy price if missing | At school? |
 |---|---|---:|---|
 | Drill (cordless or drill press) | 82 rod holes, bed bolts | $60–100 | Likely |
-| **8 mm brad-point bit, new and sharp** | Rod holes. Match the dowels you bought: use 5/16 in if they are 5/16 in. | $10 | **Buy** |
-| **Depth-stop collar, 8 mm** | All rod holes the same 15 mm deep | $5 | **Buy** |
+| **5/16 in brad-point bit, new and sharp** | Rod holes, for the BOM's 5/16 in dowels (8 mm if you buy 8 mm dowels) | $10 | **Buy** |
+| **Depth-stop collar, 5/16 in** | All rod holes the same 15 mm deep | $5 | **Buy** |
 | Drill guide (Milescraft DrillBlock type) or a drill press with long-table support | Holes square to the bed. The printed `drill_template` sets the position, not the angle. | $15–40 | Likely |
 | Metric hex keys, 1.5–10 mm, ball end | All socket screws. The probe board's front M3 screw needs the **2.5 mm ball end**, tilted about 20° (BUILD_GUIDE §7.6). | $15 | Likely |
 | Digital calipers, 150 mm | Measuring 5 of your slabs (`dims.py`), dowels, ring OD/ID, camera board holes | $20 | Likely |
 | Ferrule crimper (self-adjusting) | Screw-terminal wire ends | $25 | Maybe |
 | JST/Dupont crimper (IWISS SN-28B or SN-2549) | Sensor and GPIO connectors | $25 | Maybe |
 | Wire stripper, flush cutters | Wiring | $20 | Likely |
-| Multimeter | Wiring checks, sensor voltages, beam receiver level | $30 | Likely |
+| Multimeter | Wiring checks, sensor voltages, beam receiver level, setting the carry-sensor trip | $30 | Likely |
 | Temperature-controlled soldering iron | Diodes, divider resistors, LED ring leads | $30–100 | Likely |
 | **Heat-set insert tips** (ruthex set fits 900M/T18 irons; TS100-style tips for a Pinecil) | M5 insert in `awl_adapter`, spares | $10–16 | **Buy** unless the shop has them |
 | Fine saw + miter box, or a bandsaw | Cutting 82 dowels to 236 mm | $15 | Likely |
-| Junior hacksaw or piercing saw, needle files (one about 1.5 mm thick), a vise | The probe flag (BUILD_GUIDE §7.6); clearing the 1.9 mm flag slot in `head_foot` (a standard 12.7 mm hacksaw blade does not fit it) | $15 | Likely |
+| Junior hacksaw or piercing saw, needle files (one about 1.5 mm thick), a vise | The probe flag and the carry flag (BUILD_GUIDE §7.4a, §7.6); clearing the 1.9 mm flag slot in `head_foot` (a standard 12.7 mm hacksaw blade does not fit it) | $15 | Likely |
+| 7.2 mm (or 9/32 in) drill | Opening the left gate post's barrel hole for the 7 mm Class 2 laser | $3 | Likely |
 | Jigsaw | 41 × 41 mm notches in the bed for the uprights (CONTRACT) | $50 | Likely |
 | M5/M3 taps + tap handle; **1/8 NPT tap** | Extrusion end taps; reservoir caps | $8 (NPT) | Taps likely; NPT maybe |
 | Dial indicator + magnetic base | Beam-twist check (DESIGN.md) | $25 | Likely (machine shop) |
 | Heat gun, clamps, square, level, 120/220 sandpaper | General; doming the rod tops | $25 | Likely |
 
 **Tools you will probably have to buy: about $35–40.** That is the brad-point bit, depth collar,
-heat-set tips and NPT tap. **If you had to buy every tool new, the total would be about $2,370**
-($1,973 + about $400), so use the school's where you can.
+heat-set tips and NPT tap. **If you had to buy every tool new, the total would be about $2,580**
+($2,182 + about $400), so use the school's where you can.
 
 ## How the quantities were derived
 
@@ -246,114 +285,99 @@ heat-set tips and NPT tap. **If you had to buy every tool new, the total would b
   - 2040 × 340, both ends tapped M5 (1)
   - 2020 × 285 (1)
   - Phase 0 jig: 2020 × 312 (2) and the 2020 × 66 arm stub (1)
-  - plus the Z lead screw, cut to 340 mm below the motor face, and the 1 mm aluminium flag blank,
-    24.4 × 55 mm
+  - plus the Z lead screw, cut to 340 mm below the motor face, and two 1 mm aluminium flags: the
+    probe flag blank, 24.4 × 55 mm, and the carry flag, 19.9 × 36 mm
 - **Rods.** `len(layout.rods())` = 82. Each is 218 mm above the pad + 3 mm pad + 15 mm embedded =
-  236 mm, so 300 mm stock leaves room to trim. Buy 100 so you can reject bowed ones.
+  236 mm, so 12 in (305 mm) stock leaves room to trim. Buy 100 so you can reject bowed ones.
 - **Pads.** There are 13 pockets, and each pad is 83 × 138 mm.
 - **M3 rail screws.** MGN12 rails have holes at 25 mm pitch: 1300 mm needs 52 and 330 mm needs 13.
-  The carriages take 4 × M3 each on a 20 × 20 mm pattern. [Certain]
-- **M5 T-nuts, about 124.** That covers:
+  The carriages take 4 × M3 each on a 20 × 20 mm pattern. [Certain] The carry sensor adds 4 × M3×10
+  and 2 × M3×8.
+- **M5 T-nuts, about 126.** That covers:
   - brackets and joining plates (about 80–90 nuts);
-  - 14 for the printed mounts on the extrusions: x_motor_mount 4, x_idler_mount 2, x_bracket 4
-    (the spine), z_plate 2 (the drop arm), x_bumper_L 1, z_motor_mount tab 1. The z_motor_mount
-    and z_end_cap screw into the spine's tapped end bores instead;
+  - 16 for the printed mounts on the extrusions: x_motor_mount 4, x_idler_mount 2, x_bracket 4
+    (the spine), z_plate 2 (the drop arm), x_bumper_L 1, z_motor_mount tab 1, carry_sensor_mount 2.
+    The z_motor_mount and z_end_cap screw into the spine's tapped end bores instead;
   - 16 bed bolts;
-  - 6 feet (both base rails at each end and at midspan).
+  - 6 feet (both base rails at each end and at midspan; the OpenBuilds feet bring their own).
 - **Wood screws.** station_mount 4, gate posts 4 and the electronics panel.
-- **Filament.** `print_list.json` totals 723 cm³ of solid parts in 23 prints, including the
-  Phase 0 jig and its occluder mount, the drill template and two fill gauges. That is about 920 g
-  of PETG if printed solid, or about 650 g at the listed walls and infill. Add a Pi case,
-  electronics trays, cable clips and reprints, and it comes to about 1.0–1.3 kg, so the list has
-  2 kg. [Likely]
+- **Filament.** `print_list.json` totals 751 cm³ of solid parts in 25 prints from 23 STL files,
+  including the Phase 0 jig and its occluder mount, the drill template, two fill gauges and the two
+  carry-sensor parts. That is about 950 g of PETG if printed solid, or about 670 g at the listed
+  walls and infill. Add a Pi case, electronics trays, cable clips and reprints, and it comes to about
+  1.0–1.3 kg, so the list has 2 kg. [Likely]
 
 ## Design gaps found while pricing (for the CAD and wiring owners)
 
 These are not BOM problems, but they decide what gets bought.
 
 **Resolved since pricing** (the CAD decisions in CONTRACT.md):
-- The MGN12 rails now sit on slots: the X rail centre is at Z = 410 on the 4040's upper front slot,
-  and the Z rail is in the 2040 spine's right slot, on the cup axis. The M3 T-nuts in this BOM
-  reach every rail hole. [Certain, `cad/out/checks.txt`: both rails 0.0 mm off a slot]
-- The bed has 41 × 41 mm notches at the two upright positions, so the uprights pass through to the
-  back base rail. [Certain, `model.py`]
-- The light roof is optional and left out of the CAD. If you build it, it goes on two 2020 posts
-  bolted to the uprights' outer end faces (X −68 and 1348), clear of the joining plates and the X
-  motor (conditional lines in the CSV).
-- The 2020 drop arm is 285 mm and gets two 5.5 mm cross holes for the `head_foot` and
-  `camera_bracket` M5 bolts, 19 and 84 mm from its lower end (BUILD_GUIDE §7.5).
-- The Z machinery now sits above the highest point a held slab can reach (the Z top hard stop),
-  and the lead screw is cut to 340 mm, so nothing fixed to the X carriage can touch a held slab or
-  a stack. Printed end bumpers and a `z_end_cap` are hard stops on both axes. [Certain,
-  `cad/out/checks.txt`]
-- The mains side has a closed box, the laser is Class 2, and the E-stop has two contact blocks.
-- The MOSFET modules and limit switches now match WIRING.md: Adafruit #5648 (diode on board) and
-  bare SPDT lever microswitches wired C/NC.
+- The MGN12 rails sit on slots: the X rail centre is at Z = 410 on the 4040's upper front slot, and
+  the Z rail is in the 2040 spine's right slot, on the cup axis. [Certain, `cad/out/checks.txt`]
+- The bed has 41 × 41 mm notches at the two upright positions. [Certain, `model.py`]
+- The light roof is optional and left out of the CAD (conditional lines in the CSV).
+- The 2020 drop arm is 285 mm with two 5.5 mm cross holes, 19 and 84 mm from its lower end.
+- The Z machinery sits above the highest point a held slab can reach, and the lead screw is cut to
+  340 mm. Printed end bumpers and a `z_end_cap` are hard stops on both axes. [Certain]
+- The mains side has a closed box, the laser is Class 2, the E-stop has two contact blocks, and the
+  MOSFET modules and limit switches match WIRING.md.
+- The buffer code is `ZPT25UUK20-B5-A10` [Certain, SMC ZP catalog Table 2; Proax lists it], the
+  probe flag, its guide and the barb elbow are in the CAD, and the jig posts and arm stub are in
+  `cut_list.csv`.
+- **The head camera now sees the face-down card window** [Certain, CAD frustum check]: the lens
+  sits 5 mm toward the label from the cup axis and the foot was trimmed. Nothing to buy; the
+  `camera_bracket` and `phase0_top` STLs changed, so print the current ones.
+- **The fastener margins are closed in the CAD**: the probe board takes M3×16 with a washer under
+  the head and under the nut, and every Phase 0 jig wall an M5×10 passes through is 4 mm (one washer
+  per screw).
+- **The Z stall guard is designed** (carry-height sensor, above).
 
 **Still open:**
-1. **[Certain, CAD] There are only 18 mm between each rail end and the upright's inner face.** The
-   rail starts at X = −10 and ends at 1290; the uprights' inner faces are at −28 and 1308. A 40 mm
-   front-face corner bracket won't fit there, and on the right the `x_motor_mount` plate covers
-   the beam's front face anyway. Use back-face brackets and flat joining plates on the outer ends.
+1. **[Certain, CAD] There are only 18 mm between each rail end and the upright's inner face.** Use
+   back-face brackets and flat joining plates on the outer ends (BUILD_GUIDE §4.3).
 2. **[Likely] The laser receiver module is a 5 V board.** Divide its output before GPIO 5. It is
    also non-modulated, so room light can hold it HIGH. Test it with the room lights on.
-3. **[Likely] Angel-eye LED rings are 12 V parts.** The BOM adds a 24→12 V buck. Measure the ring
-   OD and ID before printing the ring seats (head: 40 mm ring, seat bore 41 mm; station 52–60 mm).
+3. **[Likely] Angel-eye LED rings are 12 V parts.** Measure the ring OD and ID before printing the
+   ring seats (head: 40 mm ring, seat bore 41 mm; station 52–60 mm; some "60 mm" rings are 63 mm).
 4. **[Guessing] Some mounting patterns in the CAD are not verified.**
-   - The head camera board's hole pattern is assumed to be 32 mm square, and its
-     board-to-lens-front length 20 mm (`HEAD_LENS_PROJ`).
-   - The optical endstop board: the TCST2103 itself is now from Vishay's drawing (19 mm flange
-     holes, symmetric about the slot) [Certain], but the board's header position and component
-     heights are unknown.
-   - Measure these parts before printing `camera_bracket`, `phase0_top` and `head_foot`.
-5. **Resolved: the buffer code.** [Certain, SMC ZP catalog Table 2] A 25 mm pad comes only with a
-   10/20/30/40/50 mm stroke, so the line is now `ZPT25UUK20-B5-A10`. `head_foot` has a flag guide,
-   so the rotating `J20` works too [Certain, `checks.txt`: the guide stops the flag at 1.32°, 0.6 mm
-   from the sensor]. [Likely] the exact code is orderable: confirm it before paying.
-6. **Mostly resolved: the probe flag and the fitting are in the CAD.** [Certain, `checks.txt`] The
-   buffer is modelled from SMC's catalog (port top 108.5 mm above the pad face, rod rising up to
-   20 mm). The flag's tab is clamped between the port hex and an `M-5ALU-4` barb elbow, sealed with
-   thread sealant, the tube toward the back. Left open: the elbow's height (9.3 mm, [Likely]) leaves
-   3.2 mm under the head lens at full stroke, and the tube on the barb is not modelled.
-7. **[Certain, forum report] BTT has shipped Rodents with an old FluidNC build.** Reflash the
+   - The head camera board's hole pattern is assumed to be 32 mm square (the ELP board is 38 × 38 mm),
+     and its board-to-lens-front length 20 mm (`HEAD_LENS_PROJ`).
+   - The optical endstop boards: the TCST2103 itself is from Vishay's drawing (19 mm flange holes,
+     symmetric about the slot) [Certain], but the listing does not name the sensor, and the board's
+     header position and component heights are unknown. This now matters twice: the probe and the
+     carry-height sensor.
+   - Measure these parts before printing `camera_bracket`, `phase0_top`, `head_foot` and
+     `carry_sensor_mount`.
+5. **[Certain, sourcing] The gate post's 6.2 mm laser hole is drawn for a 6 mm module**, and the only
+   Class 2 module found is 7 mm. Drill it to 7.2 mm (BUILD_GUIDE §5.9), or change the CAD.
+6. **[Certain, forum report] BTT has shipped Rodents with an old FluidNC build.** Reflash the
    current FluidNC release before loading `firmware/fluidnc/config.yaml`. Also check the Rodent's
    limit and motor connector types (XH or other) before buying crimp housings.
-8. **Resolved: the Phase 0 jig posts and the arm stub are in `cut_list.csv`.** The post length sets
-   the head-camera distance in the jig, so cut them square to 312.0 ± 0.5 mm.
-9. **[Certain, CAD ray cast] The head foot hides the face-down card window from the head camera.**
-   No line from the lens reaches the card window (0 of 75 sample points). The learned face-down
-   check therefore cannot work on this head; every slab without a back QR stops, as before. Fixing it
-   is a CAD change to `head_foot` plus a `checks.py` frustum check for the window, not a purchase.
-10. **[Likely] Two fastener lengths in the CAD have no margin.** The jig's M5×10 screws pass only
-    1.8–2.0 mm of printed wall and may bottom in the 2020 slot: use two washers under each head (or
-    M5×8). The probe board's M3×12 leave no thread once solder joints stand the board off the post:
-    use M3×16 [Certain, CAD: the longer tip clears every part by more than 20 mm].
+7. **[Likely] The head LED ring is not in the CAD.** At the full 20 mm buffer stroke the barb's top
+   is 0.75 mm under the ring seat: a ring thicker than 4 mm could touch it, but only past the normal
+   14.5 mm probe travel. Measure the ring's thickness.
 
 ## Main sources
 
+- **Sourcing run, 22 Oct 2026:** every product link in BOM.csv; the per-line notes say which pages
+  were opened ([Certain]) and which prices come from search text ([Likely]) or the old estimate.
 - **Raspberry Pi 2026 prices:** [Liliputing/Heise/TechSpot reports](https://www.techspot.com/news/111165-raspberry-pi-prices-soar-amid-ai-memory-shortage.html),
   [The Register (Feb 2026)](https://www.theregister.com/2026/02/02/raspberry_pi_ram_shortage_price_hike/)
 - **Rodent:** [BIQU product page](https://biqu.equipment/products/bigtreetech-rodent)
-- **LRS-150-24:** [TRC Electronics](https://www.trcelectronics.com/products/mean-well-lrs-150-24),
-  [Jameco](https://www.jameco.com/z/LRS-150-24-Mean-Well-156W-24V-6-5A-Single-Output-Switchable-Power-Supply_2257740.html)
-- **Pi 5 camera cable 500 mm:** [Adafruit 5820](https://www.adafruit.com/products/5820)
-- **Clippard EV-2-24:** [Wilson Co.](https://www.wilson-company.com/product/ev-2-24/2-way-wire-leads-side-radial-valve-ev-series),
-  [AHE](https://aheinfo.com/product/clippard-ev-2-24-elec-valve)
-- **SMC ZPT/ZP codes and prices:** [ZP25UU on Octopart](https://octopart.com/part/smc/ZP25UU),
-  [ZPT20CNJ20-B5-A10](https://automationdistribution.com/zpt20cnj20-b5-a10),
-  [ZPT25UFK20-N6-A10, $37.10 on 22 Oct 2026](https://automationdistribution.com/zpt25ufk20-n6-a10),
+- **LRS-150-24:** [TRC Electronics](https://www.trcelectronics.com/products/mean-well-lrs-150-24)
+- **Clippard EV-2-24:** [Clippard](https://www.clippard.com/part/EV-2-24)
+- **SMC ZPT/ZP codes and prices:** [ZPT25UUK20-B5-A10 at Proax](https://proax.ca/en/product/2087750/smczpt25uuk20b5a10),
+  [ZP25UU at automationdistribution](https://automationdistribution.com/zp25uu),
   [SMC USA ZPT (J,K) family page with configurator and CAD](https://www.smcusa.com/products/zpt-u-c-d-b-ut-ct(j-k)-suction-cups-vertical-entry-w-buffer~87420)
 - **SMC ZP catalog (stroke table, buffer dimensions):** [RS copy of the ZP catalog](https://docs.rs-online.com/f2e4/A700000013408341.pdf),
   pages 13-11-9 (Table 2) and 13-11-12
-- **SMC M-5ALU-4 barb elbow:** [automationdistribution, $2.09 on 22 Oct 2026](https://automationdistribution.com/m-5alu-4)
+- **SMC M-5ALU-4 barb elbow:** [automationdistribution](https://automationdistribution.com/m-5alu-4)
 - **TCST2103 drawing:** [Vishay doc 81147](https://www.vishay.com/doc?81147), drawing 6.550-5040.01-4
-- **E-stop contact blocks:** [Schneider ZBE102 at Steiner](https://steinerelectric.com/Catalog/MotorControlsCampaign/PilotDevices/Telemecanique-Harmony-XB4-XB5-Contact-Block22-mm1NC600-VAC-10-A-Contact-RatingSilver-Alloy-ContactBlack-Red-33094)
-- **Schmalz HT1 "non-marking":** [Schmalz SAB HT1](https://www.schmalz.com/en/vacuum-technology-for-automation/vacuum-components/vacuum-suction-cups/suction-cups-for-handling-glass/bellows-suction-cups-sab-ht1-1-5-folds)
-- **XGZP6847A100KPGN:** [Flux/LCSC listing](https://www.flux.ai/lcsc/gzp6847a001mpp50k.md)
-- **Baltic birch 12 × 60:** [Woodcraft](https://www.woodcraft.com/products/baltic-birch-plywood-18mm-3-4-x-12-x-60-nominal-finished-2-sides)
+- **VXB Z motor 3-pack:** [VXB](https://vxb.com/products/3-nema-17-stepper-motor-tr8x8-400mm-t8-lead-screw)
+- **XGZP6847A100KPGN:** [Digi-Key](https://www.digikey.com/en/products/detail/cfsensor/XGZP6847A100KPGN/22530765)
+- **E-stop set:** [AutomationDirect GCX1131](https://www.automationdirect.com/adc/shopping/catalog/pushbuttons_-z-_switches_-z-_indicators/emergency_stop_pushbuttons/gcx1131)
+- **Schmalz HT1:** [Schmalz PFG 25 HT1](https://www.schmalz.com/en-us/10.01.01.11164)
 - **HIWIN MGN12 price tier:** [DamenCNC MGNR12](https://www.damencnc.com/en/hiwin-profile-rails-narrow-type-mgnr-12-hm/a1945)
-- **Iverntech 400 mm Tr8x8 motor:** [Newegg listing](https://www.newegg.com/p/298-00MU-00184)
-- **VXB vacuum pump:** [VXB 10 L/min −81 kPa](https://vxb.com/products/tiny-10-liters-per-minute-dc-vacuum-pump-with-81-k)
 - **Laser receiver behaviour:** [Acxico KY-008 listing](https://woodartsupply.com/products/acxico-2sets-laser-sensor-module-for-arduino-avrky-008-laser-transmitter-laser-receiver-sensor-module-non-modulator-tube)
 - **D4184 module notes:** [ProtoSupplies](https://protosupplies.com/product/d4184-mosfet-control-module/)
 - **FluidNC on Rodent:** [V1E forum thread](https://forum.v1e.com/t/bigtreetech-rodent-cnc-controller-lr-4/46654)

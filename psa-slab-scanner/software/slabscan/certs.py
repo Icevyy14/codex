@@ -230,7 +230,8 @@ def face_from_above(reads: list, unparsed: list[str] | tuple = ()) -> tuple[str,
 
     * down: a back-label code, and no front-label code
     * up: a front-label code, and no back-label code
-    * neighbour: back and front codes together, or two different back labels: another slab's label is in view
+    * neighbour: back and front codes together, two different back labels, or two different certs among all the codes
+      (a back QR of one cert beside an ITF of another): another slab's label is in view
     * unknown: no proof either way (PSA ITF/Code128 sit on both sides; older PSA labels, CGC Authentic backs, BGS and
       SGC carry no back code)
     """
@@ -243,6 +244,10 @@ def face_from_above(reads: list, unparsed: list[str] | tuple = ()) -> tuple[str,
     certs = sorted({e.cert for e in backs if e.cert})
     if len(certs) > 1:
         return "neighbour", f"two different back labels are in view ({', '.join(certs)}): another slab's label is in view", backs
+    # One label carries one cert on every code (0 wrong-cert reads in 448 degraded real-label frames): two certs = two labels
+    every = sorted({r.cert for r in reads if r.source != "ocr" and r.cert})
+    if len(every) > 1:
+        return "neighbour", f"codes of two different certs are in view ({', '.join(every)}): another slab's label is in view", backs
     if backs:
         return "down", _words(backs), backs
     if fronts:

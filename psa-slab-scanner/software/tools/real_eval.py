@@ -11,7 +11,7 @@ Or --phase0 DIR: the captures of a Phase 0 run (DIR/phase0.csv and DIR/images/),
 Modes:
   native (default)  every image as it is: a phone photo, a scan, a Phase 0 frame.
   --machine         every image rescaled to what the machine's cameras would see: 0.055 mm/px for backs (head camera
-                    at 140 mm, plus a hover frame at 147 mm cropped to the pocket, as the runner does), 0.039 mm/px for
+                    at 140 mm, plus a hover frame at 147 mm, both cropped to the slab as the runner does), 0.039 mm/px for
                     fronts (station camera), with +/-2 mm offset, +/-1 deg, +/-10 % exposure, blur sigma 1 px, sensor
                     noise, and JPEG for the head camera. The scale comes from the slab's width (80.3 mm); an image
                     coarser than the camera (beyond --max-upscale) is skipped. --glare puts a hot spot on the label of
@@ -64,6 +64,7 @@ HEAD_MMPX = 0.055  # held slab, lens 140 mm from its back
 HOVER_MMPX = HEAD_MMPX * 147.0 / 140.0  # hover frame: lens 147 mm above the top slab (runner: lens + approach_gap 5 + 2)
 STA_MMPX = 0.039
 LABEL_CENTRE_MM = 15.0  # label centre below the slab's top edge (about, all graders)
+HEAD_CAM_DY = -5.0  # cad/layout.py HEAD_CAM_DY: the head camera's axis is 5 mm from the slab centre toward the label end
 STATUSES = ("ok", "needs_review", "conflict", "no_read", "other_grader")
 
 
@@ -147,9 +148,10 @@ def _seed(path: str, tag: str) -> int:
     return int(hashlib.sha256(f"{Path(path).name}|{tag}".encode()).hexdigest()[:8], 16)
 
 
-def synth(gray, bbox, mmpx, target, frame_wh, top_mm, rng, bg, jpeg=None, glare=False, blur=1.0, noise=3.0) -> np.ndarray:
-    """The slab (label end up) placed in a camera frame at ``target`` mm/px: centred, or with its top edge ``top_mm``
-    below the frame's top; +/-2 mm offset, +/-1 deg, +/-10 % exposure, blur, a glare spot on the label, noise, JPEG."""
+def synth(gray, bbox, mmpx, target, frame_wh, top_mm, rng, bg, jpeg=None, glare=False, blur=1.0, noise=3.0, centre_dy_mm=0.0) -> np.ndarray:
+    """The slab (label end up) placed in a camera frame at ``target`` mm/px: its centre ``centre_dy_mm`` below the frame's
+    centre, or its top edge ``top_mm`` below the frame's top; +/-2 mm offset, +/-1 deg, +/-10 % exposure, blur, a glare spot
+    on the label, noise, JPEG."""
     x0, y0, x1, y1 = bbox
     s = mmpx / target
     small = cv2.resize(gray[y0:y1, x0:x1], None, fx=s, fy=s, interpolation=cv2.INTER_AREA if s < 1 else cv2.INTER_CUBIC)
@@ -157,7 +159,7 @@ def synth(gray, bbox, mmpx, target, frame_wh, top_mm, rng, bg, jpeg=None, glare=
     W, H = frame_wh
     dx, dy = rng.uniform(-2.0, 2.0, 2) / target
     cx = W / 2 + dx
-    cy = (H / 2 if top_mm is None else top_mm / target + sh / 2) + dy
+    cy = (H / 2 + centre_dy_mm / target if top_mm is None else top_mm / target + sh / 2) + dy
     m = cv2.getRotationMatrix2D((sw / 2, sh / 2), rng.uniform(-1.0, 1.0), 1.0)
     m[0, 2] += cx - sw / 2
     m[1, 2] += cy - sh / 2
@@ -188,7 +190,7 @@ def machine_config(path: str | None = None):
 
 
 def head_roi(cfg, distance_mm: float):
-    """The runner's own crop of a head-camera frame to the pocket under the cup (Runner._head_roi)."""
+    """The runner's own crop of a head-camera frame to the slab under the cup (Runner._head_roi)."""
     from slabscan.runner import Runner
 
     f = types.SimpleNamespace(cfg=cfg, head_cam=object())
@@ -212,7 +214,9 @@ def frames_for(item: dict, img: np.ndarray, machine: bool, glare: bool, max_upsc
     out = []
 
     def add(name, cam, target_, wh, top, bg, jpeg, glare_, roi, pose_seed, extra_noise=None):
-        f = synth(gray, bbox, mm, target_, wh, top, np.random.default_rng(pose_seed), bg, jpeg=jpeg, glare=glare_)
+        # head frames: the slab centre lies -HEAD_CAM_DY from the camera axis, away from the label end (image down)
+        f = synth(gray, bbox, mm, target_, wh, top, np.random.default_rng(pose_seed), bg, jpeg=jpeg, glare=glare_,
+                  centre_dy_mm=-HEAD_CAM_DY if cam == "back" else 0.0)
         if extra_noise is not None:  # a second capture of the same pose: new sensor noise only
             f = np.clip(f.astype(np.int16) + np.random.default_rng(extra_noise).normal(0, 2.0, f.shape).astype(np.int16), 0, 255).astype(np.uint8)
         out.append((name, cam, f, roi))

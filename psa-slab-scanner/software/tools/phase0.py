@@ -9,8 +9,12 @@ an ITF that is not 8 digits, or a payload no rule knows, is listed there.
 Learned face-down check: every back image also gives a card-window descriptor (slabscan/facedown.py).
 The read-rate report is written as soon as you type 'q'. Then, with --face-up N (N >= 15 for a GO), a
 face-up pass scans N slabs FACE-UP with the head camera only (first slide the occluder mount 3 mm up its post,
-so the free cup clears the slab's front; include a plain and a full-art card). The report compares the backs with each other and with the face-up slabs. A
-back that matches none of the others (a Japanese card, another game, a CGC holder) is named and left out.
+so the free cup clears the slab's front; include a plain, a full-art and a blue Water-type card). Each face-up frame is
+also scored with GLARE_POSES ring-light reflections added on the card window in software: on real fronts a reflection
+RAISED the similarity to a card back, and a jig frame rarely catches one. The report compares the backs with each
+other and with the face-up slabs, by the machine's own rule: a similarity is the MATCH_K-th best match (the machine
+accepts a slab only when MATCH_K backs agree, facedown.MATCH_K). A back that matches none of the others (a Japanese
+card, another game, a CGC holder) is named and left out.
 GO for face_down_check = "learned" needs the lowest remaining back-to-back similarity at least
 FACE_DOWN_MARGIN above the highest face-up similarity; the threshold is the midpoint, never below
 the floor (facedown.THRESHOLD_FLOOR). The backs are written as the seed reference file
@@ -35,14 +39,16 @@ import numpy as np
 
 from slabscan.certs import TWO_D, ItfModel, consensus, parse_payload, side_evidence
 from slabscan.decode import decode_frame
-from slabscan.facedown import (FILE_NAME, MIN_TEXTURE, THRESHOLD_FLOOR, CardBackRefs, compare, describe, draw_window, frame_view_mm, image_rects,
-                               threshold_tag, window_area)
+from slabscan.facedown import (FILE_NAME, GLARE_QUERY_MAX, MATCH_K, MIN_TEXTURE, THRESHOLD_FLOOR, CardBackRefs, compare, describe, draw_window,
+                               frame_view_mm, image_rects, threshold_tag, window_area)
 
 SOFTWARE_DIR = Path(__file__).resolve().parents[1]
 FACE_DOWN_MARGIN = 0.10  # lowest back minus highest face-up similarity needed for GO [Guessing: a margin, not a measured rule]
 FACE_DOWN_MIN_BACKS = 10  # usable back images (outliers left out) needed before the separation means anything
 FACE_DOWN_MIN_UP = 15  # face-up slabs needed: 5 say little about the worst face-up case
 OUTLIER_GAP = 0.15  # a back whose best match is this far below the median back is another back design, not the rule
+GLARE_POSES = 4  # copies of each face-up frame with a reflection added on the card window [Guessing: the shape of a real ring-light reflection]
+GLARE_SIGMA_MM = 5.0  # the reflection: a saturated elliptical spot, this sigma across the slab and 1.6x along the row
 
 
 def open_cameras(args):
@@ -97,9 +103,35 @@ class FaceDown:
         self.rects = image_rects(cfg.face_down_window_mm, str(spec.get("row_axis", "x")))
         self.backs: list[tuple[int, object]] = []  # (slab n, descriptor or None)
         self.face_up: list[tuple[int, object]] = []
+        self.face_up_glare: list[tuple[int, object]] = []  # (face-up slab k, descriptor of a copy with a reflection added)
 
     def describe(self, img):
         return describe(img, self.rects, frame_view_mm(img.shape, self.distance, self.cfg.cam_head, self.cam))
+
+    def glare_variants(self, img, k: int) -> list:
+        """GLARE_POSES copies of face-up frame ``k`` with a saturated ring-light reflection added somewhere on the card
+        window, described. On real slabs a reflection there raised a blue front's similarity to a card back (0.56 to 0.62):
+        the glare mask drops the pixels that disagreed most."""
+        view = frame_view_mm(img.shape, self.distance, self.cfg.cam_head, self.cam)
+        h, w = img.shape[:2]
+        sx, sy = w / (view[2] - view[0]), h / (view[3] - view[1])
+        rng = np.random.default_rng(1000 + k)
+        out = []
+        for _ in range(GLARE_POSES):
+            x0, y0, x1, y1 = self.rects[int(rng.integers(len(self.rects)))]
+            px, py = (rng.uniform(x0, x1) - view[0]) * sx, (rng.uniform(y0, y1) - view[1]) * sy
+            gx, gy = 1.6 * GLARE_SIGMA_MM * sx, GLARE_SIGMA_MM * sy
+            a0, a1 = max(0, int(px - 4 * gx)), min(w, int(px + 4 * gx) + 1)
+            b0, b1 = max(0, int(py - 4 * gy)), min(h, int(py + 4 * gy) + 1)
+            f = img.copy()
+            if a1 > a0 and b1 > b0:
+                yy, xx = np.mgrid[b0:b1, a0:a1].astype(np.float32)
+                a = 0.95 * np.exp(-((xx - px) ** 2 / (2 * gx ** 2) + (yy - py) ** 2 / (2 * gy ** 2)))
+                if f.ndim == 3:
+                    a = a[..., None]
+                f[b0:b1, a0:a1] = np.clip(f[b0:b1, a0:a1].astype(np.float32) * (1 - a) + 255 * a, 0, 255).astype(np.uint8)
+            out.append(self.describe(f))
+        return out
 
     def window_picture(self, img, path: Path) -> None:
         """The frame with face_down_window_mm drawn on it: check that the boxes lie on the card, not on the label or the head."""
@@ -116,7 +148,7 @@ def main(argv=None) -> int:
     ap.add_argument("--save", action="store_true",
                     help="on a learned-check GO: merge the backs into config/card_backs.npz and write face_down_threshold and "
                          "face_down_threshold_sig to config/calibration.toml (with --sim: into OUT/config/ instead)")
-    ap.add_argument("--sim-head", choices=["cad", "open", "none"], default="cad", help="(--sim) head parts in the head camera's view (sim.HEADS)")
+    ap.add_argument("--sim-head", choices=["cad", "cad_r2", "open", "none"], default="cad", help="(--sim) head parts in the head camera's view (sim.HEADS)")
     ap.add_argument("--head-device", type=lambda v: int(v) if v.isdigit() else v, default="auto",
                     help="USB head camera: auto (first /dev/v4l/by-id/usb-*; on a Pi 5 /dev/video0 is the CSI pipeline), a number, or a path")
     ap.add_argument("--lens-position", type=float, default=7.1, help="Camera Module 3 dioptres; 1/0.14 m = 7.1")
@@ -200,8 +232,9 @@ def face_up_pass(a, head, fd: FaceDown, out: Path) -> None:
         print(f"\nFace-up pass: {a.face_up} slabs FACE-UP in the jig (label end toward you), for the learned face-down check. FIRST slide "
               "the occluder mount 3 mm UP its post (BUILD_GUIDE Phase 0): the free cup then hangs about 1 mm above the slab's front, so "
               "nothing touches it. Use junk or low-value slabs anyway, and change them with the cup pushed up no more than about 12 mm. "
-              "Use different cards, and include at least one plain card (one colour, little print) and one full-art card: they are the "
-              "hardest to tell from a card back. Afterwards slide the mount back down to 62.0 mm.")
+              "Use different cards, and include at least one plain card (one colour, little print), one full-art card and one blue "
+              "Water-type card: they are the hardest to tell from a card back (on real slabs a blue front came closest to the blue card "
+              "back). Afterwards slide the mount back down to 62.0 mm.")
     try:
         for k in range(1, a.face_up + 1):
             if a.sim:  # the first one is a plain card front: the hardest case
@@ -213,24 +246,34 @@ def face_up_pass(a, head, fd: FaceDown, out: Path) -> None:
             img = head.capture()
             cv2.imwrite(str(out / "images" / f"faceup_{k:02d}.jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, 90])
             fd.face_up.append((k, fd.describe(img)))
+            fd.face_up_glare += [(k, d) for d in fd.glare_variants(img, k)]
     except (KeyboardInterrupt, EOFError):  # = 's': the slabs scanned so far still count
         print(f"\nface-up pass ended after {len(fd.face_up)} slab(s)")
     if a.sim:
         head.face_up, head.front = False, "art"
 
 
+def kth_best(scores) -> float:
+    """The MATCH_K-th best score: the machine accepts a slab only when MATCH_K card backs match it (facedown.MATCH_K)."""
+    s = sorted(scores, reverse=True)
+    return s[MATCH_K - 1] if len(s) >= MATCH_K else 0.0
+
+
 def separation(fd: FaceDown, exclude: set | frozenset = frozenset()) -> dict:
     """Each usable back against all other backs (the machine's references are other slabs' backs), and each face-up slab
-    against all backs. A usable descriptor shows enough texture in the window. A back whose best match lies far below
-    the others' (OUTLIER_GAP below the median, or 4 robust sigmas) is another back design: it is listed in "outliers"
-    and left out of "main", so that one Japanese card or CGC holder cannot drag the threshold down to the face-up slabs.
+    (and its copies with a reflection added) against all backs, each by its MATCH_K-th best match as the machine scores
+    it. A usable descriptor shows enough texture in the window. A back whose BEST match lies far below the others'
+    (OUTLIER_GAP below the median, or 4 robust sigmas) is another back design: it is listed in "outliers" and left out
+    of "main", so that one Japanese card or CGC holder cannot drag the threshold down to the face-up slabs.
     ``exclude``: slabs that were face-up by mistake (a PSA back QR seen from below)."""
     backs = [(n, d) for n, d in fd.backs if d is not None and d.texture >= MIN_TEXTURE and n not in exclude]
-    ups = [(k, d) for k, d in fd.face_up if d is not None]
-    back_scores = []
+    ups = [(k, d, False) for k, d in fd.face_up if d is not None]
+    ups += [(k, d, True) for k, d in fd.face_up_glare if d is not None and d.glare <= GLARE_QUERY_MAX]  # more is never matched
+    back_scores, back_kth = [], {}
     for i, (n, d) in enumerate(backs):
-        others = [e for j, (_, e) in enumerate(backs) if j != i]
-        back_scores.append((max((compare(d, e).score for e in others), default=0.0), n))
+        sc = [compare(d, e).score for j, (_, e) in enumerate(backs) if j != i]
+        back_scores.append((max(sc, default=0.0), n))
+        back_kth[n] = kth_best(sc)
     outliers: list[tuple[float, int]] = []
     if len(back_scores) >= 3:
         v = np.array([x for x, _ in back_scores])
@@ -238,11 +281,11 @@ def separation(fd: FaceDown, exclude: set | frozenset = frozenset()) -> dict:
         mad = float(np.median(np.abs(v - med)))
         cut = med - max(OUTLIER_GAP, 4 * 1.4826 * mad)
         outliers = [(x, n) for x, n in back_scores if x < cut]
-    main = [(x, n) for x, n in back_scores if (x, n) not in outliers]
+    main = [(back_kth[n], n) for x, n in back_scores if (x, n) not in outliers]
     # against every usable back, outliers too: one may become a reference on the machine later
-    up_scores = [(max((compare(d, e).score for _, e in backs), default=0.0), k) for k, d in ups]
+    up_scores = [(kth_best(compare(d, e).score for _, e in backs), k, glare) for k, d, glare in ups]
     return {"backs": backs, "back_scores": back_scores, "main": main, "outliers": outliers, "up_scores": up_scores,
-            "n_backs": len(fd.backs), "n_up": len(fd.face_up)}
+            "n_backs": len(fd.backs), "n_up": len(fd.face_up), "n_up_used": len({k for k, _, _ in ups})}
 
 
 def face_down_report(fd: FaceDown, cfg, exclude: set | frozenset = frozenset()) -> tuple[list[str], float | None, set]:
@@ -252,7 +295,7 @@ def face_down_report(fd: FaceDown, cfg, exclude: set | frozenset = frozenset()) 
     area = window_area(cfg.face_down_window_mm)
     out = [f"learned face-down check: card window face_down_window_mm {[list(r) for r in cfg.face_down_window_mm]} = {area:.0f} mm2 "
            "(see window_check.jpg: the red boxes must lie on the card back, clear of the label and of the cup/foot)"]
-    nb, nu = len(sep["main"]), len(sep["up_scores"])
+    nb, nu = len(sep["main"]), sep["n_up_used"]
     out.append(f"  usable back images: {len(sep['backs'])} of {sep['n_backs']}" + ("" if len(sep["backs"]) == sep["n_backs"] else
                "  (the rest show nothing in the window - blank, dark or outside the frame - or were face-up: a PSA back QR read from below)"))
     for n in sorted(exclude):
@@ -263,12 +306,15 @@ def face_down_report(fd: FaceDown, cfg, exclude: set | frozenset = frozenset()) 
                    "three of your confirmations teach that back.")
     hold = []
     lo = hi = None
+    out.append(f"  (similarities are each slab's {MATCH_K}{'nd' if MATCH_K == 2 else 'th'}-best match: the machine accepts a slab only when "
+               f"{MATCH_K} card backs agree)")
     if sep["main"]:
         lo, lo_n = min(sep["main"])
         out.append(f"  lowest back-to-back similarity: {lo:.2f} (slab {lo_n})")
     if sep["up_scores"]:
-        hi, hi_k = max(sep["up_scores"])
-        out.append(f"  highest face-up similarity: {hi:.2f} (face-up slab {hi_k} of {nu})")
+        hi, hi_k, hi_glare = max(sep["up_scores"])
+        out.append(f"  highest face-up similarity: {hi:.2f} (face-up slab {hi_k} of {nu})" + (" with a reflection added" if hi_glare else "")
+                   + f"; {len(sep['up_scores']) - nu} of the face-up scores are copies with a reflection added on the card window")
     if area <= 0:
         hold.append("face_down_window_mm is empty")
     if nb < FACE_DOWN_MIN_BACKS:

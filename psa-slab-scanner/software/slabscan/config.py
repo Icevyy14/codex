@@ -40,7 +40,8 @@ class Config:
     feed_z: float = 6000.0
     feed_probe: float = 1200.0
     feed_peel: float = 1200.0
-    probe_window: float = 12.0  # must stay < buffer stroke (25)
+    probe_window: float = 12.0  # must stay < buffer_stroke
+    buffer_stroke: float = 20.0  # spring buffer stroke (SMC ZPT25UUK20-B5-A10: 20 mm; cad/layout.py BUFFER_STROKE)
     approach_gap: float = 5.0  # fast Z stops this far above the predicted contact
     max_surprise: float = 4.5  # |measured - predicted| above this aborts the stack
     # The probe trips with the spring buffer already compressed (BUILD_GUIDE 7.6: 2.0 +/- 0.5 mm), so the
@@ -78,11 +79,12 @@ class Config:
     face_down_threshold: float | None = None  # similarity a card window needs; Phase 0 measures it (phase0 --save writes it)
     face_down_threshold_sig: str | None = None  # facedown.threshold_tag() of the window and check it was measured for
     face_down_min_refs: int = 5  # references (QR- or operator-confirmed card backs) needed before a learned match counts
-    # Card-window rectangles [along the row, along the slab, ...] in mm on the slab plane from the head-camera axis,
+    # Card-window rectangles [along the row, along the slab, ...] in mm on the slab plane from the head-CAMERA axis,
     # label end negative. They must lie on the card (not the label) and be clear of the head's own cup, buffer and
-    # foot in the frame from above. [Guessing] card position in the slab; the CAD head foot of today hides this
-    # area (its shadow covers |x| < 34, y > -34 at the hover height), so the learned check refuses to use it.
-    face_down_window_mm: tuple = ((-28.0, -33.0, 28.0, -17.0),)
+    # foot in the frame from above. = cad/layout.py face_down_window_cam(): the CAD's FACE_DOWN_WINDOW_MM (from the cup
+    # axis) moved by HEAD_CAM_DY, because the lens sits 5 mm toward the label end. The CAD checks it against every head
+    # part at hover and held (nothing in view), and against the card top measured on 27 real PSA backs [Likely].
+    face_down_window_mm: tuple = ((-27.5, -22.5, 27.5, -11.0),)
     psa_cert_digits: tuple = ()  # PSA cert lengths seen in Phase 0, e.g. [8, 9]; an 'ok' of another length -> needs_review
     frames_per_read: int = 2
     custom_regex: str | None = None
@@ -95,6 +97,14 @@ class Config:
     gate_z: float = 214.0  # overfill light beam height (MAX line + 4); only valid with the head up
     overfill_gate: bool = True  # GPIO 5 beam receiver fitted
     lid_switch: bool = False  # optional lid/door switch on GPIO 25
+    # Carry-height sensor (Z stall guard, docs/WIRING.md): a slotted optical switch on the Z spine, read on GPIO 6 (pin 31)
+    # through a 10k/20k divider; HIGH = the Z carriage's flag is in its beam. The flag enters the beam at carry_sensor_c0,
+    # an s height like c_safe_empty (cad/layout.py CARRY_SENSOR_C0; you set it by sliding the sensor mount, BUILD_GUIDE 7.4a).
+    # The runner requires BLOCKED before every sideways move, before every move with a slab held at travel height and at a
+    # pause just above the trip on every held descent, and CLEAR whenever the head is well below that height (each pick):
+    # a dead emitter or a dirty slot reads blocked too.
+    carry_sensor: bool = True
+    carry_sensor_c0: float = 235.0
     light_settle_s: float = 0.3  # wait after an LED ring switches on, so auto exposure settles before a frame
     # paths
     out_dir: str = "batches"
@@ -104,6 +114,12 @@ class Config:
     # head-camera frames to the pocket under the cup: the 3.6 mm lens also sees the neighbouring pockets' labels.
     cam_head: dict = field(default_factory=lambda: {"type": "usb", "device": "auto", "width": 3264, "height": 2448, "hfov_deg": 64.0, "row_axis": "x",
                                                          "lens_to_label_mm": 140.0})
+    # Head-camera frames are cropped to +/- this along the row, on the plane of the slab under the cup: the slab's own
+    # footprint (cad/layout.py: SLAB_W / 2 minus its play in the pocket, 40.15 - 1.85). Beside the slab the lower stacks
+    # of the neighbouring pockets show through, smaller (farther away): with the crop at the pocket half-pitch (46 mm) a
+    # neighbour's back QR decoded there on composited real slabs. Every code on 64 real labels lies within 33.5 mm of
+    # the slab's centre line.
+    head_roi_half_mm: float = 38.3
     cam_station: dict = field(default_factory=lambda: {"type": "picamera", "index": 0, "lens_position": 7.1})
     serial_port: str = "/dev/ttyUSB0"  # if missing, /dev/serial/by-id, ttyUSB*, ttyACM* are tried
     # calibration: machine = bed + offset (bed coords come from the CAD layout)
@@ -130,6 +146,7 @@ class Config:
 
 _TUPLE_FIELDS = ("station_xy", "accepted_graders", "x_travel", "psa_cert_digits")
 FACE_DOWN_MODES = ("learned", "stop", "off")
+CARRY_BAND_MM = 1.0  # within this of carry_sensor_c0 the carry sensor may read either way (trip setting +/-0.5 mm, flag edge)
 FACE_DOWN_THRESHOLD_FLOOR = 0.55  # facedown.THRESHOLD_FLOOR: no threshold below it is used [Guessing: sim face-up scores reach 0.37 with a clear view, 0.52 with a head edge 1 mm inside the window]
 
 
@@ -183,6 +200,10 @@ def load(path: Path, calibration: Path | None = None) -> Config:
     if "face_down_window_mm" in raw:
         raw["face_down_window_mm"] = tuple(tuple(float(v) for v in r) for r in raw["face_down_window_mm"])
     check_face_down(raw)
+    h = raw.get("head_roi_half_mm", 38.3)
+    if isinstance(h, bool) or not isinstance(h, (int, float)) or not 36.0 <= float(h) <= 46.0:
+        raise ValueError(f"head_roi_half_mm must be a number from 36 (real codes reach 33.5 mm from the slab's centre, plus its play) to 46 "
+                         f"(the pocket half-pitch), not {h!r}")
     cfg = Config(pockets=pockets, **raw)
     # The travel heights assume the free cup hangs DESIGN_CUP_HANG below its trip height (cad/layout.py CUP_HANG).
     # A buffer measured to trip later hangs lower, so both travel heights go up by the difference.
@@ -193,7 +214,17 @@ def load(path: Path, calibration: Path | None = None) -> Config:
         if cfg.c_safe_loaded > cfg.c_max:
             raise ValueError(f"buffer_trip_mm = {cfg.buffer_trip_mm} puts loaded travel at {cfg.c_safe_loaded} mm, above c_max {cfg.c_max}: "
                              "set the probe flag to trip after 1.5-2.5 mm of buffer travel (BUILD_GUIDE 7.6) and measure again")
+    check_heights(cfg)
     return cfg
+
+
+def check_heights(cfg: Config) -> None:
+    """The probe window must fit in the buffer stroke, and the carry sensor must read blocked at both travel heights."""
+    if cfg.probe_window >= cfg.buffer_stroke:
+        raise ValueError(f"probe_window {cfg.probe_window} must be smaller than the buffer stroke {cfg.buffer_stroke}")
+    if cfg.carry_sensor and cfg.carry_sensor_c0 + CARRY_BAND_MM > min(cfg.c_safe_empty, cfg.c_safe_loaded):
+        raise ValueError(f"carry_sensor_c0 = {cfg.carry_sensor_c0}: the carry sensor must read blocked at the travel height "
+                         f"{min(cfg.c_safe_empty, cfg.c_safe_loaded)} mm, so it has to trip at least {CARRY_BAND_MM} mm below it")
 
 
 def from_layout() -> Config:
@@ -206,7 +237,7 @@ def from_layout() -> Config:
     import layout as L
 
     ps = L.pockets()
-    return Config(
+    cfg = Config(
         pockets=[PocketCfg(p.index, p.x, p.y, p.role) for p in ps],
         x_travel=(round(ps[0].x - 20.0, 3), round(ps[-1].x + 15.0, 3)),  # = firmware soft limits 22 .. 1253
         station_xy=L.station_xy(),
@@ -218,9 +249,15 @@ def from_layout() -> Config:
         stack_max=L.STACK_MAX,
         max_line=L.MAX_LINE,
         probe_window=L.PROBE_WINDOW,
+        buffer_stroke=L.BUFFER_STROKE,
         gate_z=L.GATE_Z,
-        **({"face_down_window_mm": tuple(tuple(float(v) for v in r) for r in L.FACE_DOWN_WINDOW_MM)} if hasattr(L, "FACE_DOWN_WINDOW_MM") else {}),
+        carry_sensor_c0=L.CARRY_SENSOR_C0,
+        # the CAD gives the window from the cup axis; the software measures it from the head-camera axis
+        face_down_window_mm=tuple(tuple(float(v) for v in r) for r in L.face_down_window_cam()),
+        head_roi_half_mm=round(L.SLAB_W / 2 - (L.POCKET_W - L.SLAB_W) / 2, 2),  # the slab's footprint wherever it lies in its pocket
     )
+    check_heights(cfg)
+    return cfg
 
 
 def toml_value(v) -> str:

@@ -52,6 +52,6 @@
  "FACE_DOWN_WINDOW_MM": [[-27.5, -27.5, 27.5, -16.0]],
  "face_down_window_mm_from_camera_axis": [[-27.5, -22.5, 27.5, -11.0]],
  "HEAD_CAM_DY": -5.0,
- "CARRY_SENSOR_C0": 235.0,
+ "CARRY_SENSOR_C0": 246.5,
  "card_top_from_label_edge_mm": {"min": 34.8, "median": 36.1, "max": 37.8}
 }

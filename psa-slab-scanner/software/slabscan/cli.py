@@ -1,6 +1,6 @@
 """Command line: ``python -m slabscan <command>`` (run it from the software/ folder).
 
-  selftest [-i] [--motion]        check every part (GPIO, vacuum, cameras, controller, beam gate)
+  selftest [-i] [--motion]        check every part (GPIO, vacuum, cameras, controller, beam gate, carry sensor)
   home                            home X and Z
   jog [--no-rods]                 move the head by hand (typed moves or arrow keys)
   calibrate z                     probe the bare pad of pocket 0 -> pad_trigger_c
@@ -47,8 +47,10 @@ T_HEAD_FRAME = 0.25  # [Guessing] USB UVC 8 MP MJPEG frame incl. dropped stale b
 T_STATION_FRAME = 0.35  # [Guessing] Camera Module 3 full-resolution still from a running stream
 T_SEAL = 0.15  # [Guessing] cup reaching the seal threshold
 # Learned face-down threshold the simulator uses when none is measured, picked on the simulator's own synthetic card
-# backs with the "open" head: `phase0 --sim 30 --face-up 5 --sim-head open` gave lowest back 0.88, highest face-up 0.24
-# (midpoint 0.56); 15 face-up slabs reached 0.38. Japanese backs against English references: up to 0.49. Never for a machine.
+# backs: with the round-2 window and the "open" head `phase0 --sim 30 --face-up 5 --sim-head open` gave lowest back 0.88,
+# highest face-up 0.24 (midpoint 0.56); 15 face-up slabs reached 0.38. With today's window (632 mm2, closer to the card top),
+# the card top spread over 34.8-37.8 mm and today's CAD head, `phase0 --sim 30 --face-up 15` gives lowest back 0.82, highest
+# face-up 0.46 (midpoint 0.64). Japanese backs against English references (round-2 window): up to 0.49. Never for a machine.
 SIM_FACE_DOWN_THRESHOLD = 0.6
 
 
@@ -158,7 +160,7 @@ def execute_batch(cfg: Config, hw, writer: BatchWriter, con: Console, resume: bo
     stop_flag = stop_flag or threading.Event()
     refs = CardBackRefs(refs_path, cfg.face_down_window_mm)
     runner = Runner(cfg, hw.motion, hw.vacuum, hw.lights, hw.head_cam, hw.station_cam, writer, lid=hw.lid, gate=hw.gate, log=con.say, should_stop=stop_flag.is_set,
-                    refs=refs, sim_operator=sim_operator)
+                    refs=refs, sim_operator=sim_operator, carry=getattr(hw, "carry", None))
     if on_runner is not None:
         on_runner(runner)
     try:
@@ -261,7 +263,7 @@ def cmd_focus(args, con):
 
     cfg, cal = load_config(args)
     cam_part = "head_cam" if args.camera == "head" else "station_cam"
-    parts = ("lights", cam_part) if args.no_motion else ("motion", "vacuum", "lights", cam_part)
+    parts = ("lights", cam_part) if args.no_motion else ("motion", "vacuum", "lights", cam_part, "carry")
     hw = _hw(args, cfg, parts, stacks=_one_slab_on_pocket0(cfg) if args.sim else None)
     if args.sim and args.camera == "station":
         hw.station_cam = SimLensCamera(hw.station_cam, lens_position=float(cfg.cam_station.get("lens_position") or 7.1))
@@ -369,7 +371,7 @@ def cmd_run(args, con):
                     "without stopping. A slab loaded face-up would get the cup on its front, so check every stack before you walk away.")
         if not con.confirm("Start the run?"):
             return 1
-    hw = _hw(args, cfg, ("motion", "vacuum", "lights", "head_cam", "station_cam", "gate", "lid"))
+    hw = _hw(args, cfg, ("motion", "vacuum", "lights", "head_cam", "station_cam", "gate", "lid", "carry"))
     writer = BatchWriter(Path(cfg.out_dir), new_batch_id(args.name, "sim-" if args.sim else ""))
     (writer.dir / "run.json").write_text(json.dumps({"name": args.name, "front_photo": cfg.front_photo, "face_down_check": cfg.face_down_check,
                                                      "started": time.strftime("%Y-%m-%dT%H:%M:%S"), "sim": bool(args.sim)}, indent=2))
@@ -437,7 +439,7 @@ def cmd_resume(args, con):
                                                "IS face-down. It confirms that one slab only." if args.face_down_ok else ""))
         if not con.confirm("Resume the run?"):
             return 1
-    hw = _hw(args, cfg, ("motion", "vacuum", "lights", "head_cam", "station_cam", "gate", "lid"))
+    hw = _hw(args, cfg, ("motion", "vacuum", "lights", "head_cam", "station_cam", "gate", "lid", "carry"))
     writer = BatchWriter.reopen(bdir)
     con.say(f"resuming {writer.batch_id}: {len(writer.rows)} slabs already done")
     return _execute_and_hand_off(cfg, hw, writer, con, resume=True, accept_heights=args.accept_heights, cal_path=cal, face_down_ok=args.face_down_ok,
@@ -527,7 +529,8 @@ def cmd_sim(args, con):
     if args.face_down_check and cfg.face_down_check == "learned" and cfg.face_down_threshold is None:
         cfg = dataclasses.replace(cfg, face_down_threshold=SIM_FACE_DOWN_THRESHOLD, face_down_threshold_sig=threshold_tag(cfg.face_down_window_mm))
         con.say(f"(sim: face_down_threshold {SIM_FACE_DOWN_THRESHOLD}, picked on the simulator's synthetic card backs; on the machine Phase 0 "
-                "measures it on yours. Head parts in view: " + ("today's CAD head" if args.sim_head == "cad" else f"'{args.sim_head}' (hypothetical)") + ")")
+                "measures it on yours. Head parts in view: " + {"cad": "today's CAD head", "cad_r2": "the round-2 CAD head"}.get(
+                    args.sim_head, f"'{args.sim_head}' (hypothetical)") + ")")
     hw = sim_hardware(cfg, stacks=stacks, head=args.sim_head)
 
     def look(src: int) -> bool:  # the simulated operator looks at the slab the check stopped on
@@ -644,9 +647,10 @@ def build_parser() -> argparse.ArgumentParser:
         parser.add_argument("--out", default=d(None), help="batches folder (default from config: batches)")
         parser.add_argument("--sim", action="store_true", default=d(False), help="use the simulator instead of hardware")
         parser.add_argument("--sim-slabs", type=int, default=d(22), help="slabs in the simulated machine (--sim)")
-        parser.add_argument("--sim-head", choices=["cad", "open", "none"], default=d("cad"),
-                            help="head parts in the simulated head camera's view: cad = today's CAD head (its foot hides the card window), "
-                                 "open = a hypothetical head that leaves face_down_window_mm clear")
+        parser.add_argument("--sim-head", choices=["cad", "cad_r2", "open", "none"], default=d("cad"),
+                            help="head parts in the simulated head camera's view: cad = today's CAD head (lens 5 mm toward the label; "
+                                 "it leaves face_down_window_mm clear), cad_r2 = the round-2 CAD head (its foot hides the card window), "
+                                 "open = a hypothetical narrow head")
         parser.add_argument("--sim-x-offset", type=float, default=d(None), help=argparse.SUPPRESS)
         parser.add_argument("--sim-z-offset", type=float, default=d(None), help=argparse.SUPPRESS)
 
@@ -658,9 +662,9 @@ def build_parser() -> argparse.ArgumentParser:
     _add = sub.add_parser
     sub.add_parser = lambda *a, **k: _add(*a, parents=[shared], **k)  # type: ignore[method-assign]
 
-    p = sub.add_parser("selftest", help="check GPIO, vacuum, cameras, controller, beam gate")
+    p = sub.add_parser("selftest", help="check GPIO, vacuum, cameras, controller, beam gate, carry-height sensor")
     p.add_argument("-i", "--interactive", action="store_true", help="also tests that need your hands (probe, seal, beam block, LED blink)")
-    p.add_argument("--motion", action="store_true", help="also home the machine")
+    p.add_argument("--motion", action="store_true", help="also home the machine and check where the carry-height sensor trips")
     p.add_argument("--images", default="selftest", help="folder for the test images")
     p.set_defaults(fn=cmd_selftest)
 

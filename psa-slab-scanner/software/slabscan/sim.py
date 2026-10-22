@@ -235,27 +235,61 @@ def _degrade(img: np.ndarray, deg: Degrade, rng, glare_spots=(), occluders=()) -
 
 
 # ---------------------------------------------------------------------- head camera: label end + card window
-# Where the card sits in the slab, measured from the slab's label-end edge. [Guessing: from photos, not calipers;
-# Phase 0 shows the real one (images/*_window.jpg).] The card is the standard 63.5 x 88.9 mm.
+# Where the card sits in the slab, measured from the slab's label-end edge: cad/layout.py CARD_TOP_FROM_EDGE [Likely,
+# measured on 27 real PSA backs: 34.8-37.8 mm, median 36.1]. Each simulated slab draws its own value from that range.
+# The card is the standard 63.5 x 88.9 mm.
 CARD_W_MM, CARD_H_MM = 63.5, 88.9
-CARD_TOP_MM = 32.0
+CARD_TOP_MM = 36.1  # median (card_top_mm() spreads each slab over CARD_TOP_RANGE_MM)
+CARD_TOP_RANGE_MM = (34.8, 37.8)
 CARD_PX_PER_MM = 4  # the card patterns are smooth: rendered coarse, scaled up
-# The head camera's synthetic view, in mm on the slab plane relative to the cup axis (= slab centre), image axes:
-# x along the pocket row, y along the slab, label end at the top (negative y). It covers the label end and the top
-# of the card window, where face_down_window_mm lies (the real lens sees the whole slab; nothing else is used).
-HEAD_VIEW_MM = (-(SLAB_W_MM + 10) / 2, -SLAB_H_MM / 2 - 2.0, (SLAB_W_MM + 10) / 2, -12.0)
+# The head camera's axis is not on the cup axis: cad/layout.py HEAD_CAM_DY puts the lens 5 mm toward the label end, so
+# the parts on the cup axis (elbow, flag tab, port hex, nut) throw their shadows away from the label-side card. Head kinds
+# whose lens sat elsewhere are listed in HEAD_LENS_DY (the round-2 CAD head had it on the cup axis).
+HEAD_CAM_DY = -5.0
+HEAD_LENS_DY = {"cad_r2": 0.0}
+# The head camera's synthetic view, in mm on the slab plane from the head-CAMERA axis (what facedown.frame_view_mm and
+# face_down_window_mm use), image axes: x along the pocket row, y along the slab, label end at the top (negative y). With
+# the lens 5 mm toward the label it covers, from the cup axis, the slab's label-end edge to 12 mm short of the axis: the
+# label and the label-side end of the card, where face_down_window_mm lies (the real lens sees the whole slab).
+HEAD_VIEW_MM = (-(SLAB_W_MM + 10) / 2, -SLAB_H_MM / 2 - 2.0 - HEAD_CAM_DY, (SLAB_W_MM + 10) / 2, -12.0 - HEAD_CAM_DY)
 HOVER_MM = 147.0  # lens to slab back at the hover frame (140 + approach_gap 5 + 2)
 CAM_ABOVE_CUP_MM = 140.0  # cad/model.py CAM_Z: head lens above the cup face
 
-# Parts of the head between the lens and the slab: (x0, y0, x1, y1, z0, z1, grey) in mm, x/y from the cup axis
-# (+y = toward the drop arm, away from the label), z above the cup face. "cad" = cad/model.py head_parts() and
-# head_foot() today; "open" = a hypothetical head whose foot stays out of the card window (narrower, and clear of the
-# label side of the buffer), used to test the learned face-down check; "none" = nothing in the way.
+# Parts of the head between the lens and the slab: (x0, y0, x1, y1, z0, z1, grey) in mm, x/y from the CUP axis
+# (+y = toward the drop arm, away from the label), z above the cup height c, cup free (buffer at rest). "cad" = the CAD
+# head of today: cad/model.py occluder_boxes(), exported to cad/out/heads_cad.json (one box per CAD solid; their shadow
+# covers the CAD's at hover and held, 0.5 % larger), with the lens HEAD_CAM_DY toward the label; it leaves
+# face_down_window_mm clear. "cad_r2" = the round-2 CAD head (lens on the cup axis, the wide foot under it), whose foot
+# hides the card window: kept to compare. "open" = a hypothetical head whose foot stays out of the window (narrower, and
+# clear of the label side of the buffer); "none" = nothing in the way.
 HEADS = {
     "cad": [
+        (-14.0, -14.0, 14.0, 14.0, -2.0, 2.0, 25),  # cup pad
+        (-7.0, -7.0, 7.0, 7.0, 2.0, 12.0, 30),  # cup hub
+        (-4.62, -4.62, 4.62, 4.62, 12.0, 21.0, 120),  # cup hex
+        (-3.0, -3.0, 3.0, 3.0, 21.0, 42.5, 170),  # buffer rod
+        (-8.08, -8.08, 8.08, 8.08, 59.0, 62.0, 150),  # buffer nut (under the foot)
+        (-5.0, -5.0, 5.0, 5.0, 42.5, 93.5, 120),  # buffer body
+        (-15.0, -9.0, 15.0, 45.0, 62.0, 75.0, 52),  # head_foot plate (PETG, matte black, lit by the ring above)
+        (15.0, -9.5, 30.5, 24.5, 62.0, 75.0, 52),  # head_foot extension to the sensor post
+        (-12.0, 23.0, 12.0, 47.0, 62.0, 93.0, 52),  # head_foot sleeve around the drop-arm end
+        (-8.08, -8.08, 8.08, 8.08, 75.0, 78.0, 150),  # buffer nut (on the foot)
+        (26.5, -9.5, 30.5, 24.5, 75.0, 107.5, 52),  # sensor post
+        (11.0, 4.05, 24.4, 10.95, 75.0, 91.25, 52),  # probe flag guide fins
+        (14.1, -9.0, 26.5, 24.0, 93.75, 104.25, 32),  # endstop board + TCST2103
+        (12.0, 7.0, 19.4, 8.0, 63.25, 97.0, 180),  # probe flag blade (aluminium)
+        (-5.0, 6.0, 19.4, 8.0, 91.0, 107.5, 180),  # probe flag neck + band
+        (-4.0, -4.0, 4.0, 4.0, 93.5, 101.5, 140),  # buffer neck
+        (-4.62, -4.62, 4.62, 4.62, 101.5, 106.5, 140),  # port hex
+        (-5.0, -4.6, 5.0, 7.0, 106.5, 107.5, 180),  # probe flag tab
+        (-4.04, -4.04, 4.04, 4.04, 107.5, 116.8, 140),  # M5 vacuum elbow
+        (-2.25, 0.0, 2.25, 12.0, 110.75, 115.25, 140),  # elbow barb + tube end (toward +y)
+        (-10.0, 25.0, 10.0, 45.0, 65.0, 140.0, 60),  # drop arm (cut at the lens)
+    ],
+    "cad_r2": [
         (-12.5, -12.5, 12.5, 12.5, 0.0, 8.0, 25),  # 25 mm cup
         (-8.0, -8.0, 8.0, 8.0, 20.0, 62.0, 120),  # M10 spring buffer body
-        (-15.0, -15.0, 15.0, 45.0, 62.0, 75.0, 52),  # head_foot body (PETG, matte black, lit by the ring above)
+        (-15.0, -15.0, 15.0, 45.0, 62.0, 75.0, 52),  # head_foot body
         (15.0, -16.5, 30.5, 16.5, 62.0, 75.0, 52),  # head_foot extension to the sensor post
         (-12.0, 23.0, 12.0, 47.0, 62.0, 93.0, 52),  # sleeve around the drop-arm end
         (-8.5, -8.5, 8.5, 8.5, 75.0, 83.0, 150),  # M10 nut on top of the foot
@@ -276,16 +310,24 @@ HEADS = {
 }
 
 
+def lens_dy(kind: str = "cad") -> float:
+    """The head camera's axis, y from the cup axis, for a head kind (HEAD_CAM_DY unless HEAD_LENS_DY says otherwise)."""
+    return HEAD_LENS_DY.get(kind, HEAD_CAM_DY)
+
+
 def head_shadow(kind: str = "cad", distance_mm: float = HOVER_MM) -> list[tuple[float, float, float, float, int]]:
-    """What each head part hides on the slab plane ``distance_mm`` below the lens: (x0, y0, x1, y1, grey), mm from
-    the cup axis, nearest part last. A part at height z above the cup face is (CAM_ABOVE_CUP_MM - z) from the lens,
-    so it is magnified by distance / (CAM_ABOVE_CUP_MM - z); the box over its height range is the bounding box."""
+    """What each head part hides on the slab plane ``distance_mm`` below the lens: (x0, y0, x1, y1, grey), mm from the
+    head-CAMERA axis (image axes, like HEAD_VIEW_MM), nearest part last. A point (x, y) at height z above the cup is
+    (CAM_ABOVE_CUP_MM - z) from the lens, so it lands at lens + ((x, y) - lens) * distance / (CAM_ABOVE_CUP_MM - z); the
+    box over a part's height range is the bounding box. A part reaching the lens plane is cut 1 mm below it."""
+    ly = lens_dy(kind)
     out = []
     for x0, y0, x1, y1, z0, z1, g in HEADS[kind]:
+        z1 = min(z1, CAM_ABOVE_CUP_MM - 1.0)
         s0, s1 = distance_mm / (CAM_ABOVE_CUP_MM - z0), distance_mm / (CAM_ABOVE_CUP_MM - z1)
         lo = lambda a: a * (s1 if a < 0 else s0)  # noqa: E731
         hi = lambda b: b * (s1 if b > 0 else s0)  # noqa: E731
-        out.append((lo(x0), lo(y0), hi(x1), hi(y1), g))
+        out.append((lo(x0), lo(y0 - ly), hi(x1), hi(y1 - ly), g))
     return out
 
 
@@ -380,22 +422,31 @@ def _card_layer(card: np.ndarray, rows_mm: float) -> np.ndarray:
     return cv2.resize(top, (int(round(top.shape[1] * k)), int(round(top.shape[0] * k))), interpolation=cv2.INTER_LINEAR)
 
 
+def card_top_mm(cert: str) -> float:
+    """The card's top edge from the slab's label-end edge for one slab: spread over CARD_TOP_RANGE_MM, the same for both
+    sides of a slab."""
+    lo, hi = CARD_TOP_RANGE_MM
+    return lo + (hi - lo) * (_stable_seed("card_top", cert) % 1001) / 1000
+
+
 def head_view(cert: str, side: str, deg: Degrade, era: str = "2017+", grader: str = "PSA", back: str = "pokemon_en",
               head: str = "cad", seed: int | None = None, front: str = "art") -> np.ndarray:
     """What the head camera sees of one slab from above: HEAD_VIEW_MM of it. ``side`` is the slab side facing up:
     'back' (face-down: the back label with what it carries for this grader and era, none on old PSA labels, and the
     card BACK in the card window) or 'front' (face-up: the front label and the card's own front). The slab lies up to
     +/-2 mm off centre and up to 1 deg off square in its pocket, the exposure differs by up to 12 %, and about a third of
-    the slabs carry a glare spot on the card window. The head's own parts (``head``, see HEADS) are drawn in front of
-    it. ``front``: "art" (card_front) or "plain" (plain_front)."""
+    the slabs carry a glare spot on the card window. The card sits card_top_mm(cert) from the slab's label-end edge.
+    The head's own parts (``head``, see HEADS) are drawn in front of it, and the slab lies where that head's lens sees
+    it (lens_dy). ``front``: "art" (card_front) or "plain" (plain_front)."""
     rng = np.random.default_rng(_stable_seed(cert, side, era, grader, back, head) if seed is None else seed)
     x0v, y0v, x1v, y1v = HEAD_VIEW_MM
     W, H = x1v - x0v, y1v - y0v
     dx, dy = rng.uniform(-2.0, 2.0, 2)
     canvas = np.full((int(round(H * PX_PER_MM_RENDER)), int(round(W * PX_PER_MM_RENDER))), 40, np.uint8)
-    sx, sy = -SLAB_W_MM / 2 - x0v + dx, -SLAB_H_MM / 2 - y0v + dy  # slab corner on the canvas (mm)
+    # slab corner on the canvas (mm): the cup axis (slab centre) is -lens_dy from the camera axis
+    sx, sy = -SLAB_W_MM / 2 - x0v + dx, -SLAB_H_MM / 2 - lens_dy(head) - y0v + dy
     cv2.rectangle(canvas, (int(sx * PX_PER_MM_RENDER), int(sy * PX_PER_MM_RENDER)), (int((sx + SLAB_W_MM) * PX_PER_MM_RENDER), canvas.shape[0]), 70, -1)
-    cx, cy = sx + (SLAB_W_MM - CARD_W_MM) / 2, sy + CARD_TOP_MM
+    cx, cy = sx + (SLAB_W_MM - CARD_W_MM) / 2, sy + card_top_mm(cert)
     card = card_back(back) if side == "back" else (plain_front(cert) if front == "plain" else card_front(cert))
     _paste_clip(canvas, _card_layer(card, H - cy + 1), cx, cy)
     lx, ly = sx + (SLAB_W_MM - LABEL_W_MM) / 2, sy + LABEL_TOP_MM

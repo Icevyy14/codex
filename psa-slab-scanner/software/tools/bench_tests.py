@@ -137,7 +137,9 @@ def _pad_height(r: Runner, cfg: Config) -> float:
 def lifts(r: Runner, cfg: Config, n: int, src: int, con: Console) -> dict:
     """Z stall check (BOM Z motor line, BUILD_GUIDE 7.8): a stall while lifting a slab leaves the head lower
     than the software thinks. Probe the bare pad, do n full-height lifts at feed_z with a slab held, put it
-    back, probe the pad again without homing. A difference means lost steps."""
+    back, probe the pad again without homing. A difference means lost steps. A stall big enough to leave the
+    head below the carry-height sensor's trip stops the test at once (the runner reads the sensor before every
+    move with a slab held), with the slab lowered straight back onto its stack."""
     _start(r)
     top0 = r._find_top(cfg.pocket(0))
     if top0 is None or top0 > cfg.t_min / 2:
@@ -243,7 +245,7 @@ def main(argv=None, console: Console | None = None, hw=None) -> int:
             kw["stacks"] = {**{p.index: [] for p in cfg.pockets}, a.src: [SimSlab(str(148069831 + 7919 * i), 6.6) for i in range(3)]}
         hw = open_hardware(cfg, sim=a.sim, **kw)
     w = BenchWriter(Path(a.out or cfg.out_dir), f"bench-{a.test}-" + time.strftime("%Y%m%d-%H%M%S"))
-    r = Runner(cfg, hw.motion, hw.vacuum, hw.lights, hw.head_cam, hw.station_cam, w, lid=hw.lid, gate=hw.gate, log=con.say)
+    r = Runner(cfg, hw.motion, hw.vacuum, hw.lights, hw.head_cam, hw.station_cam, w, lid=hw.lid, gate=hw.gate, log=con.say, carry=getattr(hw, "carry", None))
     sim = bool(getattr(hw, "sim", False))
     tests = {
         "cycles": lambda: cycles(r, cfg, int(a.n), a.src, con),

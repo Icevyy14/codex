@@ -64,7 +64,7 @@ All commands are `python -m slabscan <command>`. Add `--sim` to use the simulato
 
 | Command | Does |
 |---|---|
-| `selftest [-i] [--motion]` | Checks the controller, the probe pin (a cut wire reads TRIGGERED because the wiring is fail-safe), the vacuum sensor, pump, valves (and, with `-i`, seal, leak and vent), the LED rings, both cameras (saves an image of each), the overfill beam, the lid switch, tesseract and disk space. Exit code 1 if anything fails. |
+| `selftest [-i] [--motion]` | Checks the controller, the probe pin (a cut wire reads TRIGGERED because the wiring is fail-safe), the vacuum sensor, pump, valves (and, with `-i`, seal, leak and vent), the LED rings, both cameras (saves an image of each), the overfill beam, the lid switch, the carry-height sensor (GPIO 6; with `--motion` it homes, steps the head down past `carry_sensor_c0` over pocket 0 and reports where the sensor trips), tesseract and disk space. Exit code 1 if anything fails. |
 | `home` | Homes both axes and prints the position. |
 | `jog [--no-rods]` | Typed moves, `x 300`, `x +2`, `z -1`, `p 3`, `station`, `up`, `probe`, plus `keys` for arrow keys. `help` lists everything. |
 | `calibrate z` / `calibrate x` | See above. |
@@ -72,7 +72,7 @@ All commands are `python -m slabscan <command>`. Add `--sim` to use the simulato
 | `mark [--only 0,12] [--dry-run]` | Drill-template walk (above). `--dry-run` prints the order and positions. |
 | `run [--name NAME] [--front-photo always\|fallback] [--all-face-down] [--yes]` | One batch. It refuses to start before `calibrate z` and `calibrate x` have been run. `--yes` skips the start question. `--all-face-down` turns the face-down check off for this batch (below). |
 | `resume BATCH_DIR [--accept-heights] [--face-down-ok]` | Continues a stopped batch (below). `--face-down-ok`: you checked the slab the face-down check stopped on. It is refused unless the last stop was that face-down stop, and it confirms that one slab only. |
-| `sim [--slabs N] [--face-down-check] [--jp-rate R] [--sim-head cad\|open\|none]` | Full simulated batch. Prints the summary and a time estimate. `--face-down-check` keeps the check on and counts the slabs it would stop at (a simulated operator confirms each). `--jp-rate` gives that share of cards the Japanese back. `--sim-head open` draws a hypothetical head that leaves the card window clear; `cad` (the default) is today's head. |
+| `sim [--slabs N] [--face-down-check] [--jp-rate R] [--sim-head cad\|cad_r2\|open\|none]` | Full simulated batch. Prints the summary and a time estimate. `--face-down-check` keeps the check on and counts the slabs it would stop at (a simulated operator confirms each). `--jp-rate` gives that share of cards the Japanese back. `--sim-head`: `cad` (the default) is today's head (lens 5 mm toward the label, card window clear), `cad_r2` the round-2 head whose foot hides the card window, `open` a hypothetical narrow head. |
 | `web [--port 8080]` | Phone page (below). |
 | `phase0 [--sim N] [--out DIR] [--face-up N] [--save]` | The Phase 0 camera test (same as `python -m tools.phase0`): reads 30-50 of your slabs in the Phase 0 jig before you buy any motion parts. The read-rate report is written as soon as you type `q`. The face-up pass is off unless you ask for it (`--face-up` defaults to 0); a GO for the learned face-down check needs 15 face-up slabs. `--save` writes its threshold on a GO. |
 | `refs [--drop CERT \| --drop-operator]` | Lists the learned face-down check's card-back references, with the batch, position and cert each came from. `--drop CERT` deletes one slab's reference, for example after a wrong confirmation; `--drop-operator` deletes every reference you confirmed and keeps the back-QR ones. |
@@ -99,9 +99,10 @@ Loading rules:
 **Face-down check** (`face_down_check` in the config). Before the cup touches a slab, the frame from
 above must prove the slab is face-down. Otherwise the run stops with nothing touched, and you
 confirm it with `resume --face-down-ok`.
-- `"stop"`: only a PSA back-label QR proves it. Older labels and CGC stop every time.
-- `"learned"` (the default): a back QR, or a card window that matches the card backs of earlier
-  QR- or operator-confirmed slabs (`slabscan/facedown.py`). The references live in
+- `"stop"`: only a back-label code proves it (a PSA back QR, a graded CGC back QR, the CGC 2020-23
+  back barcode). Older PSA labels, CGC Authentic, BGS and SGC stop every time.
+- `"learned"` (the default): a back-label code, or a card window that matches the card backs of earlier
+  code- or operator-confirmed slabs (`slabscan/facedown.py`). The references live in
   `config/card_backs.npz` (not in git; `refs` lists them, `refs --drop CERT` deletes one, and
   deleting the file starts over). It only becomes active when all of these hold:
   - Phase 0 wrote `face_down_threshold` and `face_down_threshold_sig` (`phase0 --face-up 15 --save`
@@ -110,13 +111,18 @@ confirm it with `resume --face-down-ok`.
   - 5 references exist, and 5 slabs proven face-down on this machine showed the card window clear:
     at most 10% of it may look the same on every slab as over an empty pocket.
   - Until then it acts like `"stop"`.
-  - **With today's CAD head it never becomes active** [Certain, in the CAD and the simulator]: the
-    head foot hides the card window from the head camera, and the check detects that and refuses.
-    It also refuses a head that hides only part of the window [Certain, sim: a foot edge 3 mm or more
-    inside it; an edge 1 mm inside is not seen, and it lifts face-up scores from 0.37 to 0.52].
-  - A back design known only from your confirmations (no back-QR slab) is used once three of
-    your confirmations agree. A confirmed slab is learned from only after it was placed, and not at
-    all if the read station saw a PSA back-label QR from below (it was face-up after all).
+  - Today's CAD head (lens 5 mm toward the label, trimmed foot) leaves the card window clear
+    [Certain, in the CAD and the simulator]. A head that hides the window (the round-2 head) is
+    detected and refused, and so is one that hides only part of it [Certain, sim: a foot edge 3 mm or
+    more inside it; an edge 1 mm inside is not seen, and it lifts face-up scores from 0.37 to 0.52].
+  - A slab is accepted only when **two** references (two different slabs) of one back design match it,
+    not just the best one [Certain, 64 real slabs: one odd back, a card sitting low in its holder,
+    matched a blue Water-type front at 0.56-0.62; no second back came above 0.44]. Blue Water-type
+    fronts are the closest real match to a card back: put one in Phase 0's face-up pass.
+  - A back design known only from your confirmations (no back-code slab) is used once three of
+    your confirmations agree. A code-proven or confirmed slab is learned from only after it was placed:
+    not if the read station saw a back-label code from below (it was face-up after all), and a code
+    proof only with an 'ok' read of that same cert (a neighbour's back QR in view gives another cert).
 - `"off"` (or `run --all-face-down`): no check. A face-up slab gets the cup on its front.
 
 The machine:
@@ -226,7 +232,7 @@ Motion uses a trapezoid acceleration model. Camera frame times and the Pi's deco
 | `runner.py` | The batch: survey, transfer one slab, stop/secure, resume (State rebuilt from the journal). |
 | `certs.py`, `decode.py` | Payload parsing, multi-read consensus, zxing and OCR decoding. |
 | `motion.py` | G-code sender for FluidNC (`G38.3` probing, status parsing). |
-| `hw.py`, `camera.py` | Pi GPIO (vacuum, valves, LEDs, beam, lid), ADS1115, USB and Pi cameras. |
+| `hw.py`, `camera.py` | Pi GPIO (vacuum, valves, LEDs, beam, lid, carry-height sensor), ADS1115, USB and Pi cameras. |
 | `factory.py` | Builds real or simulated backends from the config. |
 | `ops.py` | jog, calibrate, focus, mark, selftest. |
 | `cli.py`, `web.py` | Command line and web page. |

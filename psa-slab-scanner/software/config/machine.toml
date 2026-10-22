@@ -3,7 +3,7 @@
 
 station_xy = [686.0, 0.0]
 station_read_c = 171.6
-c_safe_empty = 236.5
+c_safe_empty = 248.0
 c_safe_loaded = 248.0
 c_max = 250.0
 post_h = 218.0
@@ -18,6 +18,7 @@ feed_z = 6000.0
 feed_probe = 1200.0
 feed_peel = 1200.0
 probe_window = 12.0
+buffer_stroke = 20.0
 approach_gap = 5.0
 max_surprise = 4.5
 peel_slow_mm = 1.0
@@ -36,7 +37,7 @@ needs_review_to = "output"
 hover_check = true
 face_down_check = "learned"
 face_down_min_refs = 5
-face_down_window_mm = [[-28.0, -33.0, 28.0, -17.0]]
+face_down_window_mm = [[-27.5, -22.5, 27.5, -11.0]]
 psa_cert_digits = []
 frames_per_read = 2
 accepted_graders = ["PSA", "CGC"]
@@ -47,9 +48,12 @@ z_min = -8.0
 gate_z = 214.0
 overfill_gate = true
 lid_switch = false
+carry_sensor = true
+carry_sensor_c0 = 246.5
 light_settle_s = 0.3
 out_dir = "batches"
 cam_head = { type = "usb", device = "auto", width = 3264, height = 2448, hfov_deg = 64.0, row_axis = "x", lens_to_label_mm = 140.0 }
+head_roi_half_mm = 38.3
 cam_station = { type = "picamera", index = 0, lens_position = 7.1 }
 serial_port = "/dev/ttyUSB0"
 

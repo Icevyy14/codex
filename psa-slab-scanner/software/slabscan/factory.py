@@ -9,6 +9,7 @@ never care which one they got:
   lights   head(on) station(on)
   cameras  capture() -> BGR or gray ndarray   (+ set_lens_position / lens_range on the Pi camera)
   gate     clear() -> bool      lid  closed() -> bool
+  carry    blocked() -> bool    (carry-height sensor: True = the Z carriage's flag is in its beam)
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ import numpy as np
 
 from .config import Config
 
-ALL_PARTS = ("motion", "vacuum", "lights", "head_cam", "station_cam", "gate", "lid")
+ALL_PARTS = ("motion", "vacuum", "lights", "head_cam", "station_cam", "gate", "lid", "carry")
 
 
 class MachineBusy(RuntimeError):
@@ -92,6 +93,7 @@ class Hardware:
     station_cam: Any = None
     gate: Any = None
     lid: Any = None
+    carry: Any = None  # carry-height sensor (Z stall guard); None when cfg.carry_sensor is off
     world: Any = None  # SimWorld when simulated
     sim: bool = False
     notes: list[str] = field(default_factory=list)
@@ -100,7 +102,7 @@ class Hardware:
     def close(self) -> None:
         # Vacuum last and with close() (valves shut, no vent). Callers hand a held slab to the operator
         # BEFORE this (cli.hand_off_slab): closed valves alone hold it only for a short while.
-        for part in ("head_cam", "station_cam", "lights", "motion", "vacuum"):
+        for part in ("head_cam", "station_cam", "lights", "carry", "motion", "vacuum"):
             dev = getattr(self, part)
             if dev is not None and hasattr(dev, "close"):
                 try:
@@ -162,6 +164,10 @@ def make_part(cfg: Config, part: str):
         from .hw import PiLid
 
         return PiLid() if cfg.lid_switch else None
+    if part == "carry":
+        from .hw import PiCarry
+
+        return PiCarry() if cfg.carry_sensor else None
     raise ValueError(part)
 
 
@@ -220,7 +226,7 @@ def sim_hardware(cfg: Config, slabs: int = 22, seed: int = 7, world=None, stacks
     """Simulated machine. Calibration offsets in cfg become the simulator's built-in offsets, so a
     calibrated config drives the simulated machine exactly as it would drive the real one. ``head``: the head
     parts the head camera looks past (sim.HEADS; "cad" = today's CAD head)."""
-    from .simworld import SimCamera, SimGate, SimLights, SimMotion, SimVacuum, SimWorld
+    from .simworld import SimCamera, SimCarry, SimGate, SimLights, SimMotion, SimVacuum, SimWorld
 
     if world is None:
         if stacks is None:
@@ -235,6 +241,7 @@ def sim_hardware(cfg: Config, slabs: int = 22, seed: int = 7, world=None, stacks
         station_cam=SimCamera(world, "station"),
         gate=SimGate(world) if cfg.overfill_gate else None,
         lid=SimLid() if cfg.lid_switch else None,
+        carry=SimCarry(world) if cfg.carry_sensor else None,
         world=world,
         sim=True,
     )

@@ -26,9 +26,14 @@ Descriptor (``describe``). It has to be cheap and to survive what differs betwee
 
 Safety rules (``CardBackRefs``, ``learned_ready`` and ``learned_match``):
   * References come only from QR-confirmed or operator-confirmed slabs (and the Phase 0 seed). A slab accepted by
-    the learned match never becomes one, so the check cannot teach itself a wrong appearance. A back design known
-    only from operator confirmations is matched once OPERATOR_PROTO_MIN slabs confirm it (one wrong confirmation
-    alone teaches nothing).
+    the learned match never becomes one, so the check cannot teach itself a wrong appearance. The runner learns from a
+    proven slab only once it was placed and its read agrees (Runner._settle_reference): a back-label code from another
+    slab's label in view, or a back code seen from below, teaches nothing. A back design known only from operator
+    confirmations is matched once OPERATOR_PROTO_MIN slabs confirm it (one wrong confirmation alone teaches nothing).
+  * A match needs MATCH_K references (different slabs) of ONE back design at the threshold, not just the best one. On
+    64 real slabs one odd back (a card sitting low in its holder: only blue swirl in the window) matched a blue
+    Water-type front at 0.56-0.62 against a 0.55 floor; the second-best back never came above 0.44. So one odd or one
+    wrong reference cannot let a front through, and a new back design is matched only once a second slab joins it.
   * A window with too little texture (blank, dark, washed out) or too much glare neither matches nor becomes a
     reference. A match also needs at least TEXTURE_RATIO of the matched back design's own texture: a plain card
     front with a glare spot has some texture, but far less than a card back.
@@ -77,6 +82,9 @@ STATIC_USE = 12
 STATIC_VOTE = 0.8  # a pixel moves with the camera if it does so on this fraction of those slabs
 STATIC_LOG_TOL = 0.08  # +/-8 % around the frame's common exposure ratio
 OPERATOR_PROTO_MIN = 3  # a back design known only from operator confirmations is matched once this many confirm it
+MATCH_K = 2  # a match needs this many references (different slabs) of one back design at the threshold [Certain, real slabs at the
+# machine's scale, 332 face-up frames with and without glare: k=1 accepted 3 at 0.55 (max 0.62), k=2 none (max 0.44); backs of other
+# slabs accepted 223 of 252 instead of 239]
 CLUSTER_DEFAULT = 0.8  # similarity that joins a reference to a prototype while no threshold is measured
 MAX_PROTOS = 6  # English back, Japanese back, and room for a few others (other games, holder types)
 PER_PROTO = 8  # newest references kept per prototype (they follow the light as it drifts)
@@ -234,9 +242,11 @@ def compare(q: Descriptor, r: Descriptor) -> Match:
         return Match()
     m = int(round(SEARCH_MM * WINDOW_PX_PER_MM))
     acc, wsum = None, 0.0
-    # Glare pixels are 0 in both patches: they count as "no pattern here", which lowers a score, never raises it. (A
-    # correlation over only the pixels valid in both would be fairer to glare frames, but in the simulator it lifted
-    # face-up fronts with glare from 0.39 to 0.48: fewer pixels match by chance more easily.)
+    # Glare pixels are 0 in both patches: they count as "no pattern here". That does NOT only lower a score: it also
+    # drops the pixels that disagreed most, and the colour term loses them too, so a score can rise. On a real blue
+    # Water-type front a glare spot raised 0.56 to 0.62 and 0.43 to 0.55 (MATCH_K is what keeps those out). A
+    # correlation over only the pixels valid in both lifts glare frames further: in the simulator face-up fronts with
+    # glare went from 0.39 to 0.48.
     for qp, rp in zip(q.patches, r.patches):
         if qp.shape != rp.shape:
             return Match()
@@ -314,15 +324,27 @@ class CardBackRefs:
         t = [r.desc.texture for r in self.refs if r.proto == proto]
         return float(np.median(t)) if t else 0.0
 
-    def best(self, d: Descriptor, usable_only: bool = False) -> Match:
-        best = Match()
+    def ranked(self, d: Descriptor, usable_only: bool = False) -> dict[int, list[Match]]:
+        """Per prototype: the matches of ``d`` with its references, best first, one per slab (its cert; the same slab
+        scanned twice is one slab)."""
         ok = {p: self.usable(p) for p in self.protos()} if usable_only else {}
-        for r in self.refs:
+        per: dict[int, dict[str, Match]] = {}
+        for i, r in enumerate(self.refs):
             if usable_only and not ok[r.proto]:
                 continue
             m = compare(d, r.desc)
-            if m.score > best.score:
-                best = Match(m.score, m.ncc, m.hist, r.proto, r.source)
+            key = str(r.meta.get("cert") or "") or f"#{i}"
+            got = per.setdefault(r.proto, {})
+            if key not in got or m.score > got[key].score:
+                got[key] = Match(m.score, m.ncc, m.hist, r.proto, r.source)
+        return {p: sorted(v.values(), key=lambda x: -x.score) for p, v in per.items()}
+
+    def best(self, d: Descriptor, usable_only: bool = False, k: int = 1) -> Match:
+        """The prototype whose k-th best slab matches best, and that match (k = 1: the single best reference)."""
+        best = Match()
+        for ms in self.ranked(d, usable_only).values():
+            if len(ms) >= k and ms[k - 1].score > best.score:
+                best = ms[k - 1]
         return best
 
     def baseline_score(self, d: Descriptor) -> float:
@@ -380,7 +402,7 @@ class CardBackRefs:
         m = self.best(d)
         if m.proto >= 0 and m.score >= cluster:
             proto = m.proto
-        else:
+        else:  # a new back design (or an odd slab): it holds one slab, so it matches nothing until a second joins (MATCH_K)
             proto = self._next_proto
             self._next_proto += 1
             if len(self.protos()) >= MAX_PROTOS:  # evict the prototype used least recently
@@ -517,14 +539,24 @@ def learned_match(refs: CardBackRefs, d: Descriptor | None, threshold: float | N
     why = learned_ready(refs, threshold, min_refs, rects, tag)
     if why:
         return False, why, Match()
-    m = refs.best(d, usable_only=True)
+    ranked = refs.ranked(d, usable_only=True)
+    m = Match()  # the design whose MATCH_K-th best slab matches best
+    for ms in ranked.values():
+        if len(ms) >= MATCH_K and ms[MATCH_K - 1].score > m.score:
+            m = ms[MATCH_K - 1]
     if m.score < threshold:
         everything = refs.best(d)
         if everything.score >= threshold and not refs.usable(everything.proto):
             n = refs.protos().get(everything.proto, 0)
             return False, (f"learned check: it matches a card back ({everything.score:.2f}) known only from {n} of your confirmations; "
                            f"it is used once {OPERATOR_PROTO_MIN} confirm it"), everything
-        return False, f"learned check: best match with a known card back {m.score:.2f} < threshold {threshold:.2f}", m
+        one = max((ms[0] for ms in ranked.values()), key=lambda x: x.score, default=Match())
+        if one.score >= threshold:
+            n = sum(x.score >= threshold for x in ranked[one.proto])
+            return False, (f"learned check: only {n} known card back(s) of one design match it ({one.score:.2f}); a match needs "
+                           f"{MATCH_K} slabs of that design at the threshold {threshold:.2f} (one odd reference, or a card front that "
+                           "looks like one, is not enough)"), one
+        return False, f"learned check: best match with a known card back {one.score:.2f} < threshold {threshold:.2f}", one
     tex = refs.proto_texture(m.proto)
     if d.texture < TEXTURE_RATIO * tex:
         return False, (f"learned check: the card window shows far less pattern (texture {d.texture:.1f}) than that card back "

@@ -197,7 +197,7 @@ def carry_closeup(dest: Path) -> None:
 
     tiles = []
     c0 = L.CARRY_SENSOR_C0
-    for c, text in ((c0 - 2.0, f"c = {c0 - 2:.0f}: flag 2 mm below the beam, slot clear"), (L.C_HARD_TOP, f"c = {L.C_HARD_TOP:.0f} (top stop): flag still in the beam")):
+    for c, text in ((c0 - 2.0, f"c = {c0 - 2:g}: flag 2 mm below the beam, slot clear"), (L.C_HARD_TOP, f"c = {L.C_HARD_TOP:.0f} (top stop): flag still in the beam")):
         d = build.OUT / "renders" / f"stl_carry_{c:.0f}"
         d.mkdir(parents=True, exist_ok=True)
         lines = []

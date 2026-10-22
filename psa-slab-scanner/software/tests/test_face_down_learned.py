@@ -1,8 +1,10 @@
 """The learned face-down check (slabscan/facedown.py, Runner._check_face_down in "learned" mode), in the simulator.
 
 A slab without a back-label code (PSA or CGC back QR, CGC 2020-23 back barcode) may be picked only when its card window
-matches the card backs of proven face-down slabs (back-label code seen, or confirmed by the operator). Most tests use the hypothetical "open" head (sim.HEADS), whose
-foot leaves face_down_window_mm clear; with today's CAD head the foot hides the window, and the check must refuse.
+matches the card backs of proven face-down slabs (back-label code seen, or confirmed by the operator). Most tests use the
+hypothetical "open" head (sim.HEADS), whose foot leaves face_down_window_mm clear. Today's CAD head (lens 5 mm toward the
+label, trimmed foot) leaves it clear too; with the round-2 CAD head ("cad_r2") the foot hides the window, and the check
+must refuse.
 """
 
 import csv
@@ -20,7 +22,8 @@ from slabscan.facedown import CardBackRefs, compare, describe, frame_view_mm
 from slabscan.results import BatchWriter
 from slabscan.runner import Runner, Stop, last_face_down_stop, read_journal, rebuild_state
 from slabscan.sim import HEAD_VIEW_MM, Degrade, head_view
-from slabscan.simworld import SimCamera, SimGate, SimLights, SimMotion, SimSlab, SimVacuum, SimWorld
+from slabscan import simworld
+from slabscan.simworld import Crash, SimCamera, SimCarry, SimGate, SimLights, SimMotion, SimSlab, SimVacuum, SimWorld
 
 THRESHOLD = 0.6  # cli.SIM_FACE_DOWN_THRESHOLD: picked on the simulator's synthetic backs
 # Test slabs 24..31 (``_slab`` numbering) show no glare spot on the card window, so every QR one becomes a reference;
@@ -58,7 +61,8 @@ def _world(cfg, picks: list[str], head: str = "open", start: int = 0) -> SimWorl
 def _runner(cfg, world, tmp_path, refs=None, batch="b", writer=None):
     writer = writer or BatchWriter(tmp_path, batch)
     return Runner(cfg, SimMotion(world), SimVacuum(world), SimLights(), SimCamera(world, "head"), SimCamera(world, "station"), writer,
-                  gate=SimGate(world), log=lambda *_: None, refs=refs if refs is not None else CardBackRefs(None, cfg.face_down_window_mm))
+                  gate=SimGate(world), log=lambda *_: None, refs=refs if refs is not None else CardBackRefs(None, cfg.face_down_window_mm),
+                  carry=SimCarry(world))
 
 
 def _resume(cfg, world, tmp_path, refs, batch="b", **kw):
@@ -211,14 +215,112 @@ def test_a_back_qr_seen_from_below_vetoes_an_operator_reference(tmp_path):
     d = r.refs.refs[0].desc  # a good card-back descriptor
     r.refs = CardBackRefs(None, cfg.face_down_window_mm)
     v = Verdict("ok", "150000007", ("front_qr",))
-    r._pending_ref = (d, 1, "operator")
+    r._pending_ref = (d, 1, "operator", {})
     r._settle_reference(1, v, [CodeRead("150000007", "front_qr", "QRCode", "https://www.psacard.com/cert/150000007", "front")], "images/0001_back.jpg")
     assert r.refs.n_refs == 0 and r._pending_ref is None
-    r._pending_ref = (d, 1, "operator")
+    r._pending_ref = (d, 1, "operator", {})
     r._settle_reference(2, v, [CodeRead("150000007", "front_barcode", "ITF", "0150000007", "front")], "images/0002_back.jpg")
     assert r.refs.n_refs == 1 and r.refs.refs[0].meta["cert"] == "150000007"
-    results = [e["result"] for e in read_journal(r.journal) if "face_down_reference" in e]
+    results = [e["result"] for e in read_journal(r.journal) if "face_down_reference" in e][-2:]  # (the run's own QR slab came first)
     assert "FACE-UP" in results[0] and results[1].startswith("reference 1")
+
+
+def test_a_code_proof_is_learned_only_when_the_slabs_own_read_agrees(tmp_path):
+    """A back-label code seen from above is learned from after the placement, and only with an 'ok' read of that same cert."""
+    cfg = _cfg()
+    r = _runner(cfg, _world(cfg, ["qr"], start=CLEAN), tmp_path)
+    r.run()
+    d = r.refs.refs[0].desc
+    r.refs = CardBackRefs(None, cfg.face_down_window_mm)
+    proof = {"proof": "psa_qr", "proof_cert": "150000007"}
+    cases = [(Verdict("ok", "150000007", ("back_qr",)), {**proof, "proof_cert": "27720238"}),  # a neighbour's QR proved it
+             (Verdict("conflict", None, ("back_qr", "front_barcode")), proof),  # its own read disagrees
+             (Verdict("ok", "150000007", ("back_qr",)), proof)]
+    for pos, (v, pr) in enumerate(cases, start=1):
+        r._pending_ref = (d, 1, "qr", pr)
+        r._settle_reference(pos, v, [], f"images/{pos:04d}_back.jpg")
+    results = [e["result"] for e in read_journal(r.journal) if "face_down_reference" in e][-3:]
+    assert "is not this slab's cert" in results[0] and "not 'ok'" in results[1] and results[2].startswith("reference 1")
+    meta = r.refs.refs[0].meta
+    assert r.refs.n_refs == 1 and (meta["cert"], meta["proof"], meta["position"], meta["image_back"]) == ("150000007", "psa_qr", 3, "images/0003_back.jpg")
+
+
+@pytest.mark.parametrize("hover_check", [True, False])
+def test_a_neighbours_back_qr_over_a_face_up_slab_teaches_nothing(tmp_path, monkeypatch, hover_check):
+    """One false code proof: a neighbour's back QR is the only code read from above a face-UP slab, so it 'proves' the slab
+    face-down and the cup takes it by its front. Its card window must not become a reference (it used to, at once, and
+    every later face-up copy of that card then passed the learned check): a code proof is learned from only after the
+    placement, with an 'ok' read of the same cert. The slab goes to the exception pocket, and the next face-up copy
+    of the same card still stops untouched."""
+    cfg = _cfg(hover_check=hover_check)
+    refs = CardBackRefs(None, cfg.face_down_window_mm)
+    same = _slab(CLEAN + 60, "up").cert
+    real_front = sim.card_front
+    monkeypatch.setattr(sim, "card_front", lambda cert: real_front(same))  # every face-up slab shows the same card's front
+    monkeypatch.setattr(simworld, "_VIEW_CACHE", {})
+    touched = []
+    real_hold = SimVacuum.hold
+
+    def hold(self):  # the machine grips the front (the damage this test is about); the simulator would stop on a Crash
+        try:
+            real_hold(self)
+        except Crash as e:
+            touched.append(str(e))
+            self.w.gripping = True
+
+    monkeypatch.setattr(SimVacuum, "hold", hold)
+    world = _world(cfg, ["qr"] * 12 + ["up"], start=CLEAN)
+    neighbour = CodeRead("27720238", "back_qr", "QRCode", "http://psacard.com/cert/27720238", "back", "PSA")
+    real_read = Runner._read
+
+    def read(self, frames, camera, distance_mm=None):
+        reads, unparsed = real_read(self, frames, camera, distance_mm)
+        top = world.stacks[1][-1] if world.stacks[1] else None
+        hover = camera == "back" and distance_mm and distance_mm > float(cfg.cam_head["lens_to_label_mm"]) + 1
+        if hover and top is not None and not top.face_down:
+            return [dataclasses.replace(neighbour, frame=f"back{self._frame_seq}")], []
+        return reads, unparsed
+
+    monkeypatch.setattr(Runner, "_read", read)
+    r = _runner(cfg, world, tmp_path, refs=refs)
+    r.run()
+    up = _rows(tmp_path)[-1]
+    # (the simulator reads nothing of this face-up front label from above; without hover_check nothing is read at all)
+    assert len(touched) == 1 and up["face_down"] == "qr" and up["out_pocket"] == str(cfg.exceptions.index)
+    assert (up["status"], "cert 27720238" in up["note"]) == (("conflict", True) if hover_check else ("no_read", False))
+    assert len(refs.protos()) == 1 and not any(x.meta.get("cert") in (_slab(CLEAN + 12, "up").cert, "27720238") for x in refs.refs)
+    ref = [e for e in read_journal(r.journal) if "face_down_reference" in e][-1]
+    assert ref["position"] == 13 and ref["result"].startswith("not used as a reference")
+    world2 = _world(cfg, ["up"], start=CLEAN + 30)
+    with pytest.raises(Stop, match="could not be confirmed FACE-DOWN"):
+        _runner(cfg, world2, tmp_path, refs=refs, batch="b2").run()
+    assert len(touched) == 1 and not world2.gripping
+
+
+def test_one_odd_reference_does_not_let_a_front_through(tmp_path, monkeypatch):
+    """A match needs MATCH_K slabs of one back design (on real slabs one odd back matched a blue front at 0.62, the
+    second-best never above 0.44). Here a card FRONT is a reference (a false proof): the next copy of that card matches
+    it far above the threshold, but no second slab agrees, so it is not accepted; the same slab twice is one slab."""
+    cfg = _cfg()
+    refs = CardBackRefs(None, cfg.face_down_window_mm)
+    _runner(cfg, _world(cfg, ["qr"] * 6, start=CLEAN), tmp_path, refs=refs).run()
+    same = _slab(CLEAN + 60, "up").cert
+    real_front = sim.card_front
+    monkeypatch.setattr(sim, "card_front", lambda cert: real_front(same))
+    rects, w, tag = facedown.image_rects(cfg.face_down_window_mm), cfg.face_down_window_mm, cfg.face_down_threshold_sig
+    deg = Degrade(mm_per_px=0.05, blur_px=1.0)
+    # two copies of the card face-up; the first one without a glare spot on the window, so that it can become a reference
+    fronts = [facedown.describe(head_view(_slab(CLEAN + 60 + i, "up").cert, "front", deg, era="old", head="open"), rects, HEAD_VIEW_MM)
+              for i in range(12)]
+    front = next(d for d in fronts if d.glare == 0.0)
+    copy = next(d for d in fronts if d is not front)
+    for _ in range(2):  # the same slab learned twice
+        proto, _ = refs.add(front, "qr", {"cert": same}, cluster=THRESHOLD)
+    assert proto == 1 and refs.usable(1) and refs.protos()[1] == 2 and compare(copy, front).score > THRESHOLD + 0.1
+    ok, why, m = facedown.learned_match(refs, copy, THRESHOLD, 5, w, tag)
+    assert not ok and "only 1 known card back(s) of one design match it" in why and m.proto == 1
+    monkeypatch.setattr(facedown, "MATCH_K", 1)  # the old rule: the single best reference
+    assert facedown.learned_match(refs, copy, THRESHOLD, 5, w, tag)[0]
 
 
 def test_a_japanese_back_stops_until_three_confirmations_teach_it(tmp_path):
@@ -233,7 +335,9 @@ def test_a_japanese_back_stops_until_three_confirmations_teach_it(tmp_path):
             _, summary = _resume(cfg, world, tmp_path, refs, face_down_ok=True)
             break
         except Stop as e:
-            assert "known only from" in str(e)  # it matches the Japanese back, but not enough confirmations yet
+            # it matches the Japanese back, but not enough confirmations yet; or, once they are enough, only one of them
+            # (facedown.MATCH_K: here the slab lies a few mm off where two of the three references lay)
+            assert "known only from" in str(e) or "only 1 known card back(s) of one design" in str(e)
     assert summary["slabs_visited"] == 11
     jp = [p for p in refs.protos() if p != 0]
     assert len(jp) == 1 and refs.sources()["operator"] >= facedown.OPERATOR_PROTO_MIN and refs.usable(jp[0])
@@ -257,11 +361,25 @@ def test_the_reference_file_persists_across_runner_instances(tmp_path):
     assert other.n_refs == 0 and "another card window" in other.note
 
 
-def test_with_todays_cad_head_the_learned_check_refuses(tmp_path):
-    """The CAD head foot hides face_down_window_mm: every frame shows the same foot, so a face-up slab would 'match'.
-    The empty-pocket baseline catches it: no references are collected and nothing is accepted."""
+def test_with_todays_cad_head_the_learned_check_works(tmp_path):
+    """Today's CAD head (cad/out/heads_cad.json, lens 5 mm toward the label) leaves face_down_window_mm clear: the QR
+    slabs become references, old labels are accepted by the card-back match, and a face-up slab still stops untouched."""
     cfg = _cfg()
-    world = _world(cfg, ["qr"] * 6 + ["old"], head="cad")
+    world = _world(cfg, ["qr"] * 10 + ["old", "old", "up"], head="cad", start=CLEAN)  # (CLEAN is glare-free for the open head only)
+    r = _runner(cfg, world, tmp_path)
+    with pytest.raises(Stop, match=r"could not be confirmed FACE-DOWN .*best match with a known card back 0\.\d\d < threshold 0\.60"):
+        r.run()
+    assert _kinds(tmp_path) == ["qr"] * 10 + ["learned"] * 2
+    assert r.refs.n_refs >= cfg.face_down_min_refs and r.refs.static_fraction()[0] < 0.02  # nothing of the head in the window
+    assert not world.gripping and not world.held and world.stacks[1][-1].face_down is False
+
+
+def test_with_the_round2_cad_head_the_learned_check_refuses(tmp_path):
+    """The round-2 CAD head (lens on the cup axis, the wide foot) hides face_down_window_mm: every frame shows the same
+    foot, so a face-up slab would 'match'. The empty-pocket baseline catches it: no references are collected and nothing
+    is accepted."""
+    cfg = _cfg()
+    world = _world(cfg, ["qr"] * 6 + ["old"], head="cad_r2")
     r = _runner(cfg, world, tmp_path)
     with pytest.raises(Stop, match="looks like the view over an empty pocket .* the head hides it") as e:
         r.run()
@@ -271,7 +389,8 @@ def test_with_todays_cad_head_the_learned_check_refuses(tmp_path):
 
 
 def _foot(y0: float, grey: int = 52):
-    """sim.HEADS "open" with the foot's label-side edge at y0 (mm from the cup axis, 62-75 mm above the cup face)."""
+    """sim.HEADS "open" with the foot's label-side edge at y0 (mm from the cup axis, 62-75 mm above the cup face). Seen
+    from the lens (5 mm toward the label), y0 -12.35 hides 47 % of face_down_window_mm and -13.75 hides 73 %."""
     parts = [list(p) for p in sim.HEADS["open"]]
     parts[2] = [-11.0, y0, 11.0, 45.0, 62.0, 75.0, grey]
     parts[3] = [11.0, y0, 30.5, -y0, 62.0, 75.0, grey]
@@ -279,15 +398,15 @@ def _foot(y0: float, grey: int = 52):
 
 
 @pytest.mark.parametrize("name, parts, refused", [
-    # the foot hides about 40 % of the window: its edge looks unlike the empty view's (the card is brighter than the foot,
+    # the foot hides about 45 % of the window: its edge looks unlike the empty view's (the card is brighter than the foot,
     # the pocket darker), so only the level check sees it
-    ("foot_y-11", _foot(-11.0), r"of the card window shows the same thing on every proven slab as over an empty pocket"),
+    ("foot_y-12.35", _foot(-12.35), r"of the card window shows the same thing on every proven slab as over an empty pocket"),
     # the same foot as dark as the empty pocket: no edge in the empty view at all
-    ("foot_y-11_black", _foot(-11.0, grey=30), r"of the card window shows the same thing on every proven slab as over an empty pocket"),
+    ("foot_y-12.35_black", _foot(-12.35, grey=30), r"of the card window shows the same thing on every proven slab as over an empty pocket"),
     # 75 % hidden: the pattern guard sees it on every slab
-    ("foot_y-13", _foot(-13.0), r"looks like the (view over an empty pocket|empty-pocket view)"),
-    # today's CAD head without the M10 nut and rod end: a plain foot fills the window
-    ("cad_no_nut", [p for p in sim.HEADS["cad"] if p[6] not in (150, 170)], r"nothing visible in the card window"),
+    ("foot_y-13.75", _foot(-13.75), r"looks like the (view over an empty pocket|empty-pocket view)"),
+    # the round-2 CAD head without the M10 nut and rod end: a plain foot fills the window
+    ("cad_r2_no_nut", [p for p in sim.HEADS["cad_r2"] if p[6] not in (150, 170)], r"nothing visible in the card window"),
 ])
 def test_a_head_that_hides_part_of_the_window_is_refused(tmp_path, monkeypatch, name, parts, refused):
     monkeypatch.setitem(sim.HEADS, name, parts)
@@ -412,8 +531,9 @@ def test_glare_is_masked_and_keeps_a_frame_out_of_the_references():
     assert clean.glare == 0.0
     x0, y0, x1, y1 = HEAD_VIEW_MM
     px = img.shape[1] / (x1 - x0)
-    shiny = img.copy()  # a saturated reflection, 10 x 5 mm, on the card window
-    cv2.ellipse(shiny, (int((0 - x0) * px), int((-25 - y0) * px)), (int(5 * px), int(2.5 * px)), 0, 0, 360, 255, -1)
+    (wx0, wy0, wx1, wy1), = cfg.face_down_window_mm
+    shiny = img.copy()  # a saturated reflection, 10 x 5 mm, in the middle of the card window
+    cv2.ellipse(shiny, (int(((wx0 + wx1) / 2 - x0) * px), int(((wy0 + wy1) / 2 - y0) * px)), (int(5 * px), int(2.5 * px)), 0, 0, 360, 255, -1)
     d = _desc(shiny)
     assert 0.05 < d.glare < 0.3
     assert compare(d, clean).score > 0.8  # the rest of the window still matches
@@ -495,11 +615,14 @@ def test_phase0_sim_reports_the_separation(tmp_path):
     assert (tmp_path / "open" / "card_backs.npz").exists() and (tmp_path / "open" / "window_check.jpg").exists()
     cal = (tmp_path / "open" / "config" / "calibration.toml").read_text()  # --sim never writes the real config/
     assert "face_down_threshold =" in cal and f'face_down_threshold_sig = "{facedown.threshold_tag(from_layout().face_down_window_mm)}"' in cal
-    # today's CAD head: the foot is in the window, face-up slabs match as well as the backs
-    assert phase0.main(["--sim", "12", "--face-up", "15", "--out", str(tmp_path / "cad"), "--save"]) == 0
-    rep = (tmp_path / "cad" / "phase0_report.txt").read_text()
+    # the round-2 CAD head: the foot is in the window, face-up slabs match as well as the backs
+    assert phase0.main(["--sim", "12", "--face-up", "15", "--sim-head", "cad_r2", "--out", str(tmp_path / "cad_r2"), "--save"]) == 0
+    rep = (tmp_path / "cad_r2" / "phase0_report.txt").read_text()
     assert "HOLD for the learned check" in rep and "face-up slabs match the backs" in rep and 'Keep face_down_check = "stop"' in rep
-    assert not (tmp_path / "cad" / "config").exists()
+    assert not (tmp_path / "cad_r2" / "config").exists()
+    # today's CAD head leaves the window clear: the same GO as the open head
+    assert phase0.main(["--sim", "12", "--face-up", "15", "--out", str(tmp_path / "cad"), "--save"]) == 0
+    assert 'GO for face_down_check = "learned": recommended face_down_threshold' in (tmp_path / "cad" / "phase0_report.txt").read_text()
     # five face-up slabs are not enough for a GO, and the pass is opt-in
     assert phase0.main(["--sim", "12", "--face-up", "5", "--sim-head", "open", "--out", str(tmp_path / "five")]) == 0
     assert "only 5 face-up slabs (needs 15" in (tmp_path / "five" / "phase0_report.txt").read_text()
@@ -528,7 +651,8 @@ def test_phase0_leaves_an_outlier_back_out_of_the_threshold(tmp_path):
     text = "\n".join(lines)
     assert outliers == {15} and "slab 15 matches none of the other backs" in text
     lo = float(text.split("lowest back-to-back similarity: ")[1][:4])
-    assert lo > 0.8 and threshold is not None and threshold >= max(0.5, lo - 0.3)  # midpoint of the English backs, not of the outlier
+    # midpoint of the English backs (each one's 2nd-best match, facedown.MATCH_K), not of the outlier
+    assert lo > 0.7 and threshold is not None and threshold >= max(0.5, lo - 0.3)
     seed = phase0.save_seed(fd, cfg, tmp_path / "seed.npz", outliers)
     assert all(r.meta["phase0_slab"] != 15 for r in seed.refs)
 

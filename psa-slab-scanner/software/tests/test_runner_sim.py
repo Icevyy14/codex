@@ -13,7 +13,7 @@ import pytest
 from slabscan.config import from_layout
 from slabscan.results import BatchWriter
 from slabscan.runner import Runner, Stop
-from slabscan.simworld import SimCamera, SimGate, SimLights, SimMotion, SimVacuum, SimWorld, make_batch
+from slabscan.simworld import SimCamera, SimCarry, SimGate, SimLights, SimMotion, SimVacuum, SimWorld, make_batch
 
 
 def _cfg(**kw):
@@ -23,7 +23,8 @@ def _cfg(**kw):
 
 def _run(tmp_path, cfg, stacks):
     w = SimWorld(cfg, stacks={k: list(v) for k, v in stacks.items()})
-    r = Runner(cfg, SimMotion(w), SimVacuum(w), SimLights(), SimCamera(w, "head"), SimCamera(w, "station"), BatchWriter(tmp_path), gate=SimGate(w), log=lambda *_: None)
+    r = Runner(cfg, SimMotion(w), SimVacuum(w), SimLights(), SimCamera(w, "head"), SimCamera(w, "station"), BatchWriter(tmp_path), gate=SimGate(w), log=lambda *_: None,
+               carry=SimCarry(w))
     return w, r, r.run()
 
 
@@ -195,7 +196,8 @@ def test_unexpected_error_with_slab_in_cup_puts_it_back(tmp_path):
     n_before = {k: len(v) for k, v in stacks.items()}
     w = SimWorld(cfg, stacks={k: list(v) for k, v in stacks.items()})
     # frame 1 = hover of the first slab, frames 2-3 = back read after lifting -> fail while held
-    r = Runner(cfg, SimMotion(w), SimVacuum(w), SimLights(), _FlakyCamera(w, 2), SimCamera(w, "station"), BatchWriter(tmp_path), gate=SimGate(w), log=lambda *_: None)
+    r = Runner(cfg, SimMotion(w), SimVacuum(w), SimLights(), _FlakyCamera(w, 2), SimCamera(w, "station"), BatchWriter(tmp_path), gate=SimGate(w), log=lambda *_: None,
+               carry=SimCarry(w))
     with pytest.raises(Stop, match="Unexpected error.*put back"):
         r.run()
     assert not w.held, "slab left hanging on the cup"

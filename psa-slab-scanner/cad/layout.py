@@ -50,8 +50,12 @@ STATION_READ_C = STATION_LENS_Z + CAM_TO_SLAB + SLAB_T + CUP_HANG  # cup height 
 # ---- Motion envelope -----------------------------------------------------------
 CLEAR = 10.0  # vertical clearance over rod tops while moving
 CARRY_CLEAR = 5.0  # the simulator's rule: the lowest held slab face stays >= POST_H + 5 on XY moves
-C_SAFE_EMPTY = POST_H + SLAB_T_THICK_MAX + CARRY_CLEAR + CUP_HANG  # 236.5: empty travel; even a thick holder that clings after the vent clears the rods by 5 mm
 C_SAFE_LOADED = POST_H + 2 * SLAB_T_THICK_MAX + CARRY_CLEAR + CUP_HANG  # 248: a double pick of two thick holders (2 x 11.5) still clears the rods by 5 mm
+# Empty travel runs at the same height. The carry sensor has ONE edge (CARRY_SENSOR_C0), which must sit just under the
+# lowest travel height; with empty travel at 236.5 (enough for a thick holder clinging to the 'empty' cup) a head that
+# stalled anywhere from 235 up to 248 still read blocked and carried a double pick sideways below the rod tops. With the
+# edge just under 248, any loss over ~2.5 mm reads clear before every sideways move. Costs ~0.2 s a slab (simulator).
+C_SAFE_EMPTY = C_SAFE_LOADED  # 248
 C_MAX = 250.0  # top of Z travel the software uses (cup face)
 C_MIN = -12.0  # lowest cup height the design allows (firmware soft limit -8; probing the bare pad trips near -2)
 C_HARD_BOTTOM = C_MIN - 2.0  # -14: Z carriage skirts land on the z_end_cap lips (hard stop; the buffer would bottom on the bare pad only at -18)
@@ -207,7 +211,10 @@ def window_area() -> float:
 # The spare TCST2103 endstop board sits on the Z spine (fixed to the X carriage), a flag on the z_plate (moves with Z): the
 # beam is blocked for every cup height from CARRY_SENSOR_C0 up to the Z hard top stop and clear below it. The software
 # reads it before every sideways move, so a Z stall while lifting stops the run instead of dragging a slab over the rods.
-CARRY_SENSOR_C0 = C_SAFE_EMPTY - 1.5  # 235.0: lowest cup height with the beam blocked (the flag's top edge on the beam)
+# Within CARRY_BAND of the trip it may read either way, so a head as low as CARRY_SENSOR_C0 - CARRY_BAND (245.5) may still
+# move sideways: there even a double pick of two thick holders clears the rod tops by 2.5 mm.
+CARRY_BAND = 1.0  # = software CARRY_BAND_MM (trip setting +/-0.5 mm, flag edge); the selftest allows the same
+CARRY_SENSOR_C0 = C_SAFE_LOADED - 1.5  # 246.5: lowest cup height with the beam blocked (the flag's top edge on the beam)
 
 
 def check() -> list[str]:
@@ -278,8 +285,12 @@ def check() -> list[str]:
             problems.append("face-down window reaches off the card for a slab at the edge of its pocket play")
         if y0 < edge + LABEL_BAND + WINDOW_PLACE_TOL:
             problems.append("face-down window reaches the label band")
-    if not C_SAFE_EMPTY - 2.0 <= CARRY_SENSOR_C0 < C_SAFE_EMPTY:
-        problems.append("carry sensor must trip just below C_SAFE_EMPTY")
+    if CARRY_SENSOR_C0 + CARRY_BAND > min(C_SAFE_EMPTY, C_SAFE_LOADED):
+        problems.append("the carry sensor must read blocked at both travel heights: trip at least CARRY_BAND below them")
+    # the highest stall the sensor may miss: a double thick pick there must still pass over the rod tops (2 mm covers the
+    # rods' cut length and a buffer measured to trip up to 0.5 mm late)
+    if CARRY_SENSOR_C0 - CARRY_BAND - CUP_HANG - 2 * SLAB_T_THICK_MAX < POST_H + 2.0:
+        problems.append("a Z stall the carry sensor cannot see leaves a double pick less than 2 mm over the rod tops")
     return problems
 
 

@@ -8,6 +8,11 @@ SAFETY MONITOR: any move that would crash the head or a held slab into rods/stac
 drop a slab, drive the cup past its buffer stroke, seal the cup on a slab's FRONT, or tear
 a gripped slab off its stack faster than the slow peel raises ``Crash``.
 
+It also models the carry-height sensor (``SimCarry``: blocked for every head height from
+cfg.carry_sensor_c0 up) and can inject faults into it (stuck blocked, stuck clear) and into Z
+(``SimWorld.z_lost_steps``: a lift with a slab held ends short, while the controller still
+reports the commanded height - a stalled Z motor).
+
 Machine Z (``z``) is the head height at which the probe trips on a surface, as the real
 calibration defines it. At the trip the spring buffer is already compressed by
 ``trigger_compression`` (2 mm), so a gripped slab only leaves its stack once the head has
@@ -23,9 +28,8 @@ import numpy as np
 
 from .config import Config
 from .motion import SafetyViolation
-from .sim import HEAD_VIEW_MM, Degrade, empty_head_view, has_back_code, head_view, slab_view
+from .sim import HEAD_VIEW_MM, Degrade, _stable_seed, empty_head_view, has_back_code, head_view, slab_view
 
-BUFFER_STROKE = 25.0
 TRIGGER_COMPRESSION = 2.0  # buffer compression at which the optical sensor trips
 HEAD_SIDE_CLEAR = 7.0  # (pocket 84 - head envelope 70) / 2: an empty head may shift this far inside a pocket below the rod tops
 PEEL_SLOW_MIN_MM = 0.5  # after the cup leaves the slab the slow peel must go on at least this far
@@ -68,9 +72,15 @@ class SimWorld:
     # onto its own stack during the peel dwell; "transit" = drops off at the end of the first sideways move.
     cling_drop: str | None = None
     peels: list[tuple[float, float]] = field(default_factory=list)  # (feed, slow mm after separation) of every pick
-    # the head parts between the head camera and the slab (sim.HEADS): "cad" = the CAD head of today, whose foot hides
-    # the card window; "open" = a hypothetical head that leaves face_down_window_mm clear
+    # the head parts between the head camera and the slab (sim.HEADS): "cad" = the CAD head of today (lens 5 mm toward
+    # the label; it leaves face_down_window_mm clear), "cad_r2" = the round-2 head, whose foot hides the card window,
+    # "open" = a hypothetical narrow head
     head: str = "cad"
+    # FAULT INJECTION, Z stall: the z_lost_steps_at-th upward Z move of more than 20 mm with a slab held (the lift to
+    # travel height) ends z_lost_steps mm short of its target, and the controller still reports the target (SimMotion)
+    z_lost_steps: float = 0.0
+    z_lost_steps_at: int = 1
+    held_lifts: int = 0  # upward Z moves of more than 20 mm with a slab held, so far
 
     # ---- geometry helpers
     def pocket_at(self, x, y, tol=3.0):
@@ -159,10 +169,12 @@ class SimMotion:
         self.travel_mm = 0.0
         self.homed = False
         self.probe_targets: list[float] = []  # machine Z of every G38.3 target (tests check the soft-limit clamp)
+        self.z_slip = 0.0  # mm the Z motor fell short of where the controller thinks it is (z_lost_steps); homing clears it
 
     def home(self):
         self.w.z = 250.0
         self.w.x, self.w.y = self.w.cfg.x_travel[0] - self.x_offset, 0.0  # FluidNC: X = 22 after homing (mpos_mm)
+        self.z_slip = 0.0
         self.homed = True
 
     def halt(self):
@@ -185,7 +197,7 @@ class SimMotion:
 
     def position(self) -> tuple[float, float]:
         """Machine (x, z), like the controller's status report."""
-        return self.w.x + self.x_offset, self.w.z + self.z_offset
+        return self.w.x + self.x_offset, self.w.z + self.z_offset + self.z_slip
 
     def pins(self) -> str:
         """Active input pins like FluidNC's Pn: field ('P' = probe triggered)."""
@@ -200,7 +212,7 @@ class SimMotion:
         w = self.w
         x = None if x is None else x - self.x_offset
         y = None if y is None else y
-        z = None if z is None else z - self.z_offset
+        z = None if z is None else z - self.z_offset - self.z_slip
         if len(w.held) > 1 and w.cling_drop == "peel":
             self._drop_cling("peel")  # an air-film cling lets go right after the separation, still over its own stack
         if z is not None and z != w.z:
@@ -210,6 +222,12 @@ class SimMotion:
             w.z = z
             if z > z0:
                 self._lift(z0, feed)
+                if w.held and z - z0 > 20.0:
+                    w.held_lifts += 1
+                    if w.z_lost_steps > 0 and w.held_lifts == w.z_lost_steps_at:  # the Z motor stalls: the head stops short
+                        w.z -= w.z_lost_steps
+                        self.z_slip += w.z_lost_steps
+                        w.events.append(f"Z lost {w.z_lost_steps:g} mm of steps lifting {w.held[0].cert} (the head is at {w.z:.1f}, the controller says {z:.1f})")
         if x is not None or y is not None:
             x1 = w.x if x is None else x
             y1 = w.y if y is None else y
@@ -229,7 +247,7 @@ class SimMotion:
         w = self.w
         surf = w.surface_below()
         self.log.append(f"G38.3 Z{z_target:.2f}")
-        z_target = z_target - self.z_offset
+        z_target = z_target - self.z_offset - self.z_slip
         if surf is None:
             raise Crash("probing with nothing below")
         w.check_descent_xy(z_target, tol=1.5 if w.held else HEAD_SIDE_CLEAR - 2.0)
@@ -242,9 +260,9 @@ class SimMotion:
         if trip >= z_target:
             self._account(w.z - trip, feed, "z")
             w.z = trip
-            return trip + self.z_offset
+            return trip + self.z_offset + self.z_slip
         # no trigger before z_target: if we passed the surface, the buffer compresses
-        if z_target < contact - BUFFER_STROKE + 0.01:
+        if z_target < contact + w.trigger_compression - w.cfg.buffer_stroke + 0.01:  # the cup first touches trigger_compression above the trip
             raise Crash("probe drove the cup past the buffer stroke")
         self._account(w.z - z_target, feed, "z")
         w.z = z_target
@@ -353,6 +371,26 @@ class SimGate:
         return tallest < w.cfg.gate_z
 
 
+class SimCarry:
+    """The carry-height sensor: a slotted optical switch on the Z spine and a flag on the Z carriage, blocked for every
+    head height from cfg.carry_sensor_c0 up (it follows the real head height, so it sees a Z stall). ``stuck``: None =
+    working, "blocked" = always blocked (dead emitter, dirt or a card in the slot), "clear" = always clear (cut lead).
+    ``trip``: the head height at which it really trips (a mount set wrong), default cfg.carry_sensor_c0. Every read is
+    logged with the head position it was taken at (``log``: (x, z, blocked))."""
+
+    def __init__(self, world: SimWorld, stuck: str | None = None, trip: float | None = None):
+        self.w = world
+        self.stuck = stuck
+        self.trip = trip
+        self.log: list[tuple[float, float, bool]] = []
+
+    def blocked(self) -> bool:
+        w = self.w
+        b = self.stuck == "blocked" if self.stuck is not None else w.z >= (w.cfg.carry_sensor_c0 if self.trip is None else self.trip) - 1e-9
+        self.log.append((w.x, w.z, b))
+        return b
+
+
 class SimLights:
     def head(self, on):
         pass
@@ -378,7 +416,8 @@ class SimCamera:
         return (x1 - x0) / 2, (y1 - y0) / 2
 
     def view_rect_mm(self, distance_mm: float) -> tuple[float, float, float, float]:
-        """The view's extent on the slab plane in mm from the camera axis (image axes; facedown.frame_view_mm)."""
+        """The view's extent on the slab plane in mm from the camera axis (image axes; facedown.frame_view_mm). The head
+        camera's axis is sim.lens_dy() from the cup axis: head_view draws the slab there."""
         from .sim import SLAB_W_MM
 
         if self.role == "head":
@@ -424,7 +463,8 @@ def _cached_view(cert, era, grader, side, role, deg, back="pokemon_en", head="ca
         if role == "head":
             _VIEW_CACHE[key] = head_view(cert, side, deg, era=era, grader=grader, back=back, head=head, front=front)
         else:
-            _VIEW_CACHE[key] = render_slab_side(SimSlab(cert, era=era, grader=grader), side, deg, seed=hash(key) & 0xFFFF)
+            # a stable seed: hash() of a str tuple changes with every process (PYTHONHASHSEED), so runs were not repeatable
+            _VIEW_CACHE[key] = render_slab_side(SimSlab(cert, era=era, grader=grader), side, deg, seed=_stable_seed(*key) & 0xFFFF)
     return _VIEW_CACHE[key]
 
 

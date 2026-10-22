@@ -15,7 +15,7 @@ from slabscan.results import BatchWriter, SlabResult
 from slabscan.runner import Runner, State, Stop, read_journal, rebuild_state
 from slabscan.certs import Verdict
 from slabscan.motion import ControllerLost, Z_FLOOR
-from slabscan.simworld import SimCamera, SimGate, SimLights, SimMotion, SimSlab, SimVacuum, SimWorld, make_batch
+from slabscan.simworld import SimCamera, SimCarry, SimGate, SimLights, SimMotion, SimSlab, SimVacuum, SimWorld, make_batch
 
 
 def _stacks(cfg, per_pocket=2, sources=3, seed=21):
@@ -50,7 +50,7 @@ class FaultyVacuum:
 def _runner(cfg, world, writer, vacuum=None, should_stop=None):
     m = SimMotion(world, x_offset=cfg.offset_x, z_offset=cfg.pad_trigger_c)
     return Runner(cfg, m, vacuum or SimVacuum(world), SimLights(), SimCamera(world, "head"), SimCamera(world, "station"), writer,
-                  gate=SimGate(world), log=lambda *_: None, should_stop=should_stop)
+                  gate=SimGate(world), log=lambda *_: None, should_stop=should_stop, carry=SimCarry(world))
 
 
 def _check_complete(cfg, world, original, batch_dir, summary):
@@ -220,7 +220,7 @@ def test_estop_with_a_slab_in_the_cup_stops_cleanly_and_resume_rehomes(tmp_path)
     writer = BatchWriter(tmp_path, "b6")
     motion = EStopMotion(SimMotion(world), when=lambda: bool(world.held) and len(writer.rows) == 2)
     r1 = Runner(cfg, motion, SimVacuum(world), SimLights(), SimCamera(world, "head"), SimCamera(world, "station"), writer,
-                gate=SimGate(world), log=lambda *_: None)
+                gate=SimGate(world), log=lambda *_: None, carry=SimCarry(world))
     with pytest.raises(Stop, match="lost power") as e:
         r1.run()
     assert "pocket 2" in str(e.value) and "homes first" in str(e.value)
@@ -236,7 +236,7 @@ def test_estop_with_a_slab_in_the_cup_stops_cleanly_and_resume_rehomes(tmp_path)
     world.held, world.gripping = [], False
     SimVacuum(world).release()
     r2 = Runner(cfg, motion, SimVacuum(world), SimLights(), SimCamera(world, "head"), SimCamera(world, "station"),
-                BatchWriter.reopen(tmp_path / "b6"), gate=SimGate(world), log=lambda *_: None)
+                BatchWriter.reopen(tmp_path / "b6"), gate=SimGate(world), log=lambda *_: None, carry=SimCarry(world))
     summary = r2.resume()  # SimMotion raises Crash on any move before homing, so this proves resume homes first
     _check_complete(cfg, world, original, tmp_path / "b6", summary)
 

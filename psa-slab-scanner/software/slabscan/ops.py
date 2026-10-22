@@ -94,7 +94,7 @@ def _scratch_runner(cfg: Config, hw, out_dir: Path):
 
     out_dir.mkdir(parents=True, exist_ok=True)
     writer = SimpleNamespace(dir=out_dir, batch_id="tools")
-    return Runner(cfg, hw.motion, hw.vacuum, hw.lights, hw.head_cam, hw.station_cam, writer, log=lambda *_: None)
+    return Runner(cfg, hw.motion, hw.vacuum, hw.lights, hw.head_cam, hw.station_cam, writer, log=lambda *_: None, carry=getattr(hw, "carry", None))
 
 
 def walk_down(m, z_from: float, floor: float, window: float, feed: float, vac=None, seal_kpa: float | None = None) -> float | None:
@@ -779,6 +779,56 @@ class SelfTest:
         return any(s == "FAIL" for _, s, _ in self.results)
 
 
+CARRY_SWEEP_MM = 3.0  # selftest --motion: the carry sensor is read from carry_sensor_c0 + this down to carry_sensor_c0 - this
+CARRY_SWEEP_STEP = 0.25
+
+
+def carry_sweep(cfg: Config, m, carry, t: SelfTest) -> float | None:
+    """Selftest of the carry-height sensor, with the machine homed (head at the top): it must read blocked there; then,
+    over pocket 0, the head steps down from carry_sensor_c0 + 3 mm to carry_sensor_c0 - 3 mm in probe moves (they stop
+    on any contact) and the trip height is where it turns clear. It must read blocked from carry_sensor_c0 + CARRY_BAND_MM
+    up and clear from carry_sensor_c0 - CARRY_BAND_MM down (the run's rule). The head goes back up to where homing left
+    it. Returns the measured trip height (s, mm), or None."""
+    from .config import CARRY_BAND_MM
+
+    c0, pad = cfg.carry_sensor_c0, cfg.pad_trigger_c
+    x_top, z_top = m.position()
+    if not carry.blocked():
+        t.rec("carry sensor", "FAIL", f"reads CLEAR with the head at the top (Z {z_top:.1f}): its flag must block the beam there. Cut or "
+                                      "unplugged lead (GPIO 6, WIRING.md), flag missing or bent, or the sensor mount slid down")
+        return None
+    p0 = cfg.pocket(0)
+    m.move(cfg.feed_xy, x=machine_x(cfg, p0.x, p0.y))  # at the top: nothing on the bed reaches up here
+    m.wait_idle()
+    readings: list[tuple[float, bool]] = []
+    h = c0 + CARRY_SWEEP_MM
+    try:
+        while h >= c0 - CARRY_SWEEP_MM - 1e-9:
+            hit = m.probe(h + pad, cfg.feed_probe)
+            if hit is not None:
+                t.rec("carry sensor", "FAIL", f"the cup touched something at {hit - pad:.1f} mm over pocket 0 while stepping down: clear the bed")
+                return None
+            readings.append((round(h, 3), bool(carry.blocked())))
+            h -= CARRY_SWEEP_STEP
+    finally:
+        m.move(cfg.feed_z, z=z_top)
+        m.wait_idle()
+        m.move(cfg.feed_xy, x=x_top)
+        m.wait_idle()
+    bad = [(hh, b) for hh, b in readings if (hh >= c0 + CARRY_BAND_MM and not b) or (hh <= c0 - CARRY_BAND_MM and b)]
+    lowest_blocked = min((hh for hh, b in readings if b), default=None)
+    trip = None if lowest_blocked is None else round(lowest_blocked - CARRY_SWEEP_STEP / 2, 2)
+    seen = "; ".join(f"{hh:.2f} {'B' if b else 'c'}" for hh, b in readings[:: max(1, len(readings) // 8)])
+    if bad:
+        t.rec("carry sensor", "FAIL", f"must read blocked from {c0 + CARRY_BAND_MM:.1f} mm up and clear from {c0 - CARRY_BAND_MM:.1f} mm down; "
+                                      f"it read {'BLOCKED' if bad[0][1] else 'CLEAR'} at {bad[0][0]:.2f} mm (trip near {trip} mm). Slide the "
+                                      f"sensor mount along its slot until it just reads blocked at {c0:.1f} mm (BUILD_GUIDE 7.4a); if it never "
+                                      "changes, clean the slot and check the emitter. Readings (B = blocked): " + seen)
+        return trip
+    t.rec("carry sensor", "PASS", f"blocked at the top, trips at about {trip} mm (set {c0:.1f}, allowed +/-{CARRY_BAND_MM:g}); clear below")
+    return trip
+
+
 def selftest(cfg: Config, con: Console, hw=None, sim: bool = False, interactive: bool = False, do_motion: bool = False, out_dir: Path = Path("selftest"),
              cal_path: Path | None = None) -> int:
     """Check every part on its own; a failing part does not stop the others. Exit code 1 if anything FAILs.
@@ -943,6 +993,19 @@ def selftest(cfg: Config, con: Console, hw=None, sim: bool = False, interactive:
         lid = part("lid")
         if lid:
             t.rec("lid switch", "PASS" if lid.closed() else "WARN", "closed" if lid.closed() else "reads OPEN")
+
+    # carry-height sensor (Z stall guard)
+    if cfg.carry_sensor:
+        carry = part("carry")
+        if carry:
+            try:
+                if do_motion and m and getattr(m, "homed", True):
+                    carry_sweep(cfg, m, carry, t)
+                else:
+                    t.rec("carry sensor", "PASS", f"reads {'BLOCKED' if carry.blocked() else 'CLEAR'} on GPIO 6; selftest --motion checks that it "
+                                                  f"trips at carry_sensor_c0 = {cfg.carry_sensor_c0:.1f} mm")
+            except Exception as e:  # noqa: BLE001
+                t.rec("carry sensor", "FAIL", str(e))
 
     # disk
     du = shutil.disk_usage(Path(cfg.out_dir) if Path(cfg.out_dir).exists() else Path.cwd())

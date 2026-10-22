@@ -7,6 +7,7 @@ simulator raises Crash for unsafe motion, so "no Crash" means the recovery motio
 import csv
 import dataclasses
 
+import cv2
 import numpy as np
 import pytest
 
@@ -16,7 +17,7 @@ from slabscan.hw import SensorFault
 from slabscan.motion import MotionError
 from slabscan.results import BatchWriter, SlabResult
 from slabscan.runner import HardStop, Runner, Stop, read_journal
-from slabscan.simworld import Crash, SimCamera, SimGate, SimLights, SimMotion, SimSlab, SimVacuum, SimWorld, _cached_view, make_batch
+from slabscan.simworld import Crash, SimCamera, SimCarry, SimGate, SimLights, SimMotion, SimSlab, SimVacuum, SimWorld, _cached_view, make_batch
 
 
 def _cfg(**kw):
@@ -29,10 +30,10 @@ def _world(cfg, per_pocket=2, sources=1, seed=31, eras=(1.0, 0.0, 0.0)):
     return SimWorld(cfg, stacks={k: list(v) for k, v in stacks.items()}), stacks
 
 
-def _runner(cfg, world, tmp_path, motion=None, vacuum=None, head=None, gate="sim", log=None, batch="b"):
+def _runner(cfg, world, tmp_path, motion=None, vacuum=None, head=None, gate="sim", log=None, batch="b", carry="sim"):
     return Runner(cfg, motion or SimMotion(world), vacuum or SimVacuum(world), SimLights(), head or SimCamera(world, "head"),
                   SimCamera(world, "station"), BatchWriter(tmp_path, batch), gate=SimGate(world) if gate == "sim" else gate,
-                  log=log or (lambda *_: None))
+                  log=log or (lambda *_: None), carry=SimCarry(world) if carry == "sim" else carry)
 
 
 class HookMotion(SimMotion):
@@ -684,7 +685,8 @@ def test_the_neighbour_pockets_label_is_cropped_out_of_head_frames(tmp_path):
     old.era = "old"  # no back code: before the crop the neighbour's QR became this slab's 'ok' cert
     neighbour = world.stacks[2][-1].cert
     r = _runner(cfg, world, tmp_path, head=WideHeadCamera(world, "head"))
-    assert r._head_roi(145.0) == pytest.approx((0.25, 0.0, 0.75, 1.0))
+    f = cfg.head_roi_half_mm / WideHeadCamera.HALF_ROW_MM  # the slab's own footprint, not the pocket half-pitch (46 mm)
+    assert cfg.head_roi_half_mm == pytest.approx(38.3) and r._head_roi(145.0) == pytest.approx((0.5 - f / 2, 0.0, 0.5 + f / 2, 1.0))
     r.run()
     rows = list(csv.DictReader((tmp_path / "b" / "certs.csv").open()))
     first = rows[0]
@@ -700,6 +702,68 @@ def test_a_neighbours_qr_does_not_confirm_a_slab_face_down(tmp_path):
     world.stacks[1][-1].era = "old"
     with pytest.raises(Stop, match="FACE-DOWN"):
         _runner(cfg, world, tmp_path, head=WideHeadCamera(world, "head")).run()
+
+
+class LowerNeighbourHead(WideHeadCamera):
+    """WideHeadCamera, but the next pocket's stack is lower, so it looks smaller from the lens: part of its label shows in
+    the band between this slab's edge and the wall line. Its back QR (cert NB, 0.5x) is drawn there, 38.5-45.5 mm
+    off-axis, and this slab lies 1.85 mm (its play) toward the other wall. As on composited real slabs (a neighbour
+    75-230 mm farther down), before the crop was cut to the slab's footprint."""
+
+    NB = "27720238"
+
+    def capture(self):
+        from slabscan import sim
+
+        w = self.w
+        self.n += 1
+        mm = self.MM_PER_PX
+        width = int(2 * self.HALF_ROW_MM / mm)
+        canvas = np.full((900, width), 30, np.uint8)
+        q = sim._symbol(f"http://psacard.com/cert/{self.NB}", "QRCode", 0.21)  # quiet zone included
+        q = cv2.resize(q, None, fx=1 / (sim.PX_PER_MM_RENDER * mm), fy=1 / (sim.PX_PER_MM_RENDER * mm), interpolation=cv2.INTER_AREA)
+        x0, y0 = int(width / 2 + 38.5 / mm), 200
+        canvas[y0:y0 + q.shape[0], x0:x0 + q.shape[1]] = q
+        p = w.pocket_at(w.x, w.y)
+        own = w.held[0] if w.held else (w.stacks[p.index][-1] if p is not None and w.stacks.get(p.index) else None)
+        if own is not None:  # the slab itself hides everything below it: its footprint, +/-40.15 mm around its centre
+            img = _cached_view(own.cert, own.era, own.grader, "back" if own.face_down else "front", "head", self.deg)
+            h, wd = img.shape
+            cx = width / 2 - 1.85 / mm
+            half = int(40.15 / mm)
+            a, b = int(cx) - half, int(cx) + half
+            canvas[:min(h, 900), a:b] = img[:min(h, 900), wd // 2 - half:wd // 2 + half]
+        return canvas
+
+
+@pytest.mark.parametrize("half", [46.0, None])
+def test_a_lower_neighbours_back_qr_beside_the_slab_is_cropped_out(tmp_path, half):
+    """A slab with no back code of its own (an older PSA label) under the cup, a lower neighbour's back QR beside it. With the
+    crop at the pocket half-pitch (46 mm) that QR 'proved' the slab face-down and became its 'ok' cert; cut to the slab's
+    footprint (head_roi_half_mm, 38.3 mm) nothing proves it, so the run stops before touching it."""
+    cfg = _cfg(face_down_check="stop", **({"head_roi_half_mm": half} if half else {}))
+    world, _ = _world(cfg, per_pocket=2, sources=2, seed=41)
+    world.stacks[1][-1].era = "old"
+    r = _runner(cfg, world, tmp_path, head=LowerNeighbourHead(world, "head"))
+    with pytest.raises(Stop, match="FACE-DOWN") as e:
+        r.run()
+    rows = list(csv.DictReader((tmp_path / "b" / "certs.csv").open())) if (tmp_path / "b" / "certs.csv").exists() else []
+    if half:  # the old crop: the neighbour's QR was read as this slab's, and the next slab stopped on two back labels
+        assert rows[0]["cert"] == LowerNeighbourHead.NB and rows[0]["status"] == "ok" and "two different back labels" in str(e.value)
+    else:
+        assert not rows and "no back-label code was seen from above" in str(e.value) and not world.gripping
+
+
+def test_codes_of_two_certs_in_one_frame_from_above_mean_a_neighbour(tmp_path):
+    """A back QR of one cert beside an ITF (printed on both sides) of another: two labels are in view, not a proof."""
+    from slabscan.certs import face_from_above
+
+    qr = CodeRead("26275088", "back_qr", "QRCode", "http://psacard.com/cert/26275088/", "back")
+    itf = CodeRead("27720238", "barcode", "ITF", "27720238", "back")
+    assert face_from_above([qr])[0] == "down" and face_from_above([qr, dataclasses.replace(itf, cert="26275088", raw="26275088")])[0] == "down"
+    face, why, _ = face_from_above([qr, itf])
+    assert face == "neighbour" and "two different certs" in why
+    assert face_from_above([itf, dataclasses.replace(itf, cert="16870121", raw="16870121")])[0] == "neighbour"
 
 
 def test_a_cert_already_recorded_in_the_batch_becomes_a_conflict(tmp_path):

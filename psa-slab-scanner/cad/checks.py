@@ -11,9 +11,11 @@ Builds the machine at every critical pose and measures exact minimum distances
   * the held slab against every part above it at every lift height up to the Z hard top stop,
   * reading at the upward-camera station, camera line-of-sight to the label (head and station),
   * the head camera's view of the face-down card window (layout.FACE_DOWN_WINDOW_MM): nothing in it at hover over a low,
-    half and full stack or with the slab held at both carry heights, and the window on the card, clear of the label,
-  * the carry-height sensor (Z stall guard): trip height, beam clear below / blocked up to the hard top stop, flag and arm
-    clear of the carriage over the whole Z travel, and a path for its lead,
+    half and full stack or with the slab held at travel height, the window on the card, clear of the label, and how far
+    the head camera may be off its nominal aim before that stops being true,
+  * the carry-height sensor (Z stall guard): trip height, beam clear below / blocked up to the hard top stop, the highest
+    Z stall it cannot see (a double pick there still over the rods), flag and arm clear of the carriage over the whole Z
+    travel, and a path for its lead,
   * X / Z hard stops (bumpers, Z end cap, top stop) and carriage-on-rail margins,
   * the contact probe over the whole 20 mm buffer stroke: trip travel, beam fully blocked after the trip, flag
     clear of the sensor and of its anti-rotation guide (also turned against the guide, for a rotating buffer),
@@ -340,8 +342,8 @@ def check_face_down_window() -> None:
     """The software's face-down check compares the card back seen through FACE_DOWN_WINDOW_MM (layout.py) with earlier
     face-down slabs: the head camera must see all of it, and only card. Exact frustums from the lens (CAM_DY toward the label
     from the cup axis) to each rectangle, against every part except the camera and the slab looked at, at hover (free cup
-    HOVER_GAP above the top slab, over a stack of 1, 15 and 30) and with the slab held (it hangs CUP_HANG below c) at both carry
-    heights. Then where the window lies on the slab: area, card top, card sides, label band."""
+    HOVER_GAP above the top slab, over a stack of 1, 15 and 30) and with the slab held (it hangs CUP_HANG below c) at travel
+    height. Then where the window lies on the slab: area, card top, card sides, label band."""
     p = P[4]
     worst = (-1.0, 1e9, "", "")
     for n in (1, 15, L.STACK_MAX):
@@ -353,7 +355,7 @@ def check_face_down_window() -> None:
                larger_is_better=False)
         worst = min(worst, (gap, n, who), key=lambda w: w[0] if w[0] >= 0 else 1e9)
     record("face-down window at hover: nearest part to the view, all stack heights (clearance mm)", worst[0], 0.5, f"{worst[2]}, stack of {worst[1]}")
-    for c in (L.C_SAFE_EMPTY, L.C_SAFE_LOADED):
+    for c in sorted({L.C_SAFE_EMPTY, L.C_SAFE_LOADED}):  # the travel heights (one since the carry sensor moved up)
         parts = _free_machine(p.x, c, FULL)
         z0 = c - L.CUP_HANG - SLAB_T
         parts.append(M.Part("held_slab", M.slab(p.x, L.Y_ROW, z0), M.SLAB, "slab", "head"))
@@ -371,6 +373,74 @@ def check_face_down_window() -> None:
            min(r[1] for r in w) - card_top, 0.0, f"median card top: {min(r[1] for r in w) - (edge + L.CARD_TOP_FROM_EDGE[1]):.1f} mm inside, slab centred")
     record("face-down window inside the card's side edges, slab at the end of its X play (mm)", side - max(max(abs(r[0]), abs(r[2])) for r in w), 0.0)
     record("face-down window clear of the label band, slab at the end of its play (mm)", min(r[1] for r in w) - (edge + L.LABEL_BAND + L.WINDOW_PLACE_TOL), 3.0)
+
+
+AIM_SEARCH = 4.0  # deg: aim errors searched. [Guessing] an M12 lens off its board's sensor centre plus a printed bracket: 0.5-2 deg
+AIM_FLOOR = 0.5  # deg: a floor that keeps head or window changes from eating the margin. A real camera can be further off, so
+# the software has to find where the head parts and the card top fall in its own frames; this is no build tolerance.
+AIM_DIRS = {"toward the cup (+Y)": ((1, 0, 0), 1), "toward the label (-Y)": ((1, 0, 0), -1), "+X": ((0, 1, 0), -1), "-X": ((0, 1, 0), 1)}
+
+
+def _aim_turn(v, axis, deg: float) -> tuple[float, float, float]:
+    """Vector v turned by deg about a unit axis (right hand, as cq.Shape.rotate)."""
+    a, (kx, ky, kz), (x, y, z) = math.radians(deg), axis, v
+    c, s, d = math.cos(a), math.sin(a), (kx * x + ky * y + kz * z) * (1 - math.cos(a))
+    return (x * c + (ky * z - kz * y) * s + kx * d, y * c + (kz * x - kx * z) * s + ky * d, z * c + (kx * y - ky * x) * s + kz * d)
+
+
+def check_camera_aim() -> None:
+    """How far the head camera may be off its nominal aim before the face-down window stops showing only card. The software
+    places the window in pixels from a nominal camera (image centre on the optical axis, square to the slab, mapped at the
+    hover distance), so an aim error turns every ray of the window about the lens. Head parts: the exact frustums of
+    check_face_down_window turned about the lens, nearest-part test, bisection (the head's own parts sit at fixed angles from
+    the lens, so one hover pose holds for every stack and for a held slab). Card edges: the window's corners turned the
+    same way onto the slab plane, for a median card on a centred slab and for the worst-case slab (as above)."""
+    p, n = P[4], 15
+    top = n * SLAB_T
+    c = top + HOVER_GAP
+    parts = [q for q in _free_machine(p.x, c, {**FULL, p.index: n})
+             if q.name not in ("head_camera", f"stack_{p.index}", f"labels_{p.index}") and not q.name.startswith(("pad_", "bed_"))]
+    lens = cq.Vector(p.x, p.y + M.CAM_DY, c + M.CAM_Z)
+    win = L.face_down_window_cam()  # camera-axis mm at the hover distance, as the software has it
+    fr = [frustum((lens.x, lens.y, lens.z - 0.5), (lens.x + x0, lens.y + y0, top + 0.5), (lens.x + x1, lens.y + y1, top + 0.5)) for x0, y0, x1, y1 in win]
+
+    def hit(axis, deg: float) -> str:
+        for f in fr:
+            g = f.rotate(lens, lens + cq.Vector(*axis), deg) if deg else f
+            for q in parts:
+                s = q.shape.val()
+                if _near(g, s, 1.0) and g.distance(s) < 1e-6:
+                    return q.name
+        return ""
+
+    head = {}
+    for k, (axis, sg) in AIM_DIRS.items():
+        if not hit(axis, sg * AIM_SEARCH):
+            head[k] = (AIM_SEARCH, "")
+            continue
+        d = _bisect(lambda a: bool(hit(axis, sg * a)), 0.0, AIM_SEARCH, 12)
+        head[k] = (d, hit(axis, sg * (d + 0.01)))  # the part that comes into view first
+    k = min(head, key=lambda j: head[j][0])
+    record(f"head camera aim error before a head part is in the face-down window, worst direction (deg; searched to {AIM_SEARCH:.0f})", round(head[k][0], 2),
+           AIM_FLOOR, f"{head[k][1]} first; " + ", ".join(f"{j} {v[0]:.2f}" + ("" if v[1] else "+") for j, v in head.items()))
+    dist = M.CAM_Z + HOVER_GAP
+    edge = -SLAB_H / 2
+    slabs = {"median card, slab centred": (edge + L.CARD_TOP_FROM_EDGE[1], L.CARD_W / 2, AIM_FLOOR),
+             "worst-case slab (latest card top, end of its play)": (edge + L.CARD_TOP_FROM_EDGE[2] + L.WINDOW_PLACE_TOL, L.CARD_W / 2 - 1.85 - L.XY_CAL_RESIDUAL - 1.0, 0.0)}
+    for name, (card_top, side, floor) in slabs.items():
+        def on_card(axis, deg: float) -> bool:
+            for x0, y0, x1, y1 in win:
+                for x, y in ((x0, y0), (x1, y0), (x1, y1), (x0, y1)):
+                    vx, vy, vz = _aim_turn((x, y, -dist), axis, deg)
+                    px, py = vx * dist / -vz, vy * dist / -vz + L.HEAD_CAM_DY  # on the slab plane, from the cup axis
+                    if py < card_top or abs(px) > side:
+                        return False
+            return True
+        tol = {k: (_bisect(lambda d: not on_card(axis, sg * d), 0.0, AIM_SEARCH, 16) if not on_card(axis, sg * AIM_SEARCH) else AIM_SEARCH)
+               for k, (axis, sg) in AIM_DIRS.items()}
+        k = min(tol, key=tol.get)
+        record(f"head camera aim error before the face-down window leaves the card, {name}, worst direction (deg)", round(tol[k], 2), floor,
+               f"{k}; " + ", ".join(f"{j} {v:.2f}" + ("+" if v >= AIM_SEARCH else "") for j, v in tol.items()))
 
 
 CARRY_STEPS = sorted({L.C_HARD_BOTTOM, *range(-10, 262, 4), L.CARRY_SENSOR_C0 - 0.5, L.CARRY_SENSOR_C0, L.CARRY_SENSOR_C0 + 0.5, L.C_SAFE_EMPTY,
@@ -399,7 +469,12 @@ def check_carry_sensor() -> None:
     worst_hi = min(above, key=frac)
     record(f"carry sensor: beam fully blocked from c = {above[0]:.1f} to the hard top stop {L.C_HARD_TOP:.0f} (min blocked share)", frac(worst_hi), 0.999,
            f"lowest at c = {worst_hi:.1f}; {M.CF_LEN - (L.C_HARD_TOP - c0) - M.TCST_AP / 2:.1f} mm of flag left below the beam at the top stop")
-    record(f"carry sensor: margin between its trip and C_SAFE_EMPTY = {L.C_SAFE_EMPTY} (mm)", L.C_SAFE_EMPTY - trip, 1.0)
+    travel = min(L.C_SAFE_EMPTY, L.C_SAFE_LOADED)
+    record(f"carry sensor: margin between its trip and the lowest travel height {travel} (mm, software needs CARRY_BAND)", travel - trip, L.CARRY_BAND)
+    # one edge: a head that stalled on the way up still reads blocked down to the trip less the band, and moves sideways
+    low = trip - L.CARRY_BAND
+    record("carry sensor: a double pick of two thick holders on a head stalled just above where it reads clear, over the rod tops (mm)",
+           low - L.CUP_HANG - 2 * L.SLAB_T_THICK_MAX - L.POST_H, 2.0, f"head at c = {low:.1f}: a Z loss over {L.C_SAFE_LOADED - low:.1f} mm reads clear before any sideways move")
     sensor = fixed["carry_sensor"]
     others = {n: s for n, s in fixed.items() if n != "carry_sensor"}
     dflag, dall = (1e9, 0.0, ""), (1e9, 0.0, "")
@@ -731,6 +806,7 @@ def main() -> int:
     check_station()
     check_head_camera()
     check_face_down_window()
+    check_camera_aim()
     check_probe()
     check_carry_sensor()
     check_extremes()

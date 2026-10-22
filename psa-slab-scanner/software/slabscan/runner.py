@@ -21,6 +21,15 @@ the pump, and the operator takes it off (cli.hand_off_slab / the web page's Vent
 ``resume`` rebuilds the State from journal.jsonl (+ certs.csv), re-surveys every pocket,
 and continues.
 
+Z stall guard: the carry-height sensor (a slotted optical switch on the Z spine, cfg.carry_sensor)
+must read BLOCKED before every sideways move and before every move with a slab held at travel
+height, and CLEAR whenever the head is well below its trip height (every pick: a dead emitter
+reads blocked too). A Z motor that lost steps while lifting leaves the head lower than the
+controller thinks; the run then stops before anything moves sideways, and a held slab goes
+straight back down onto its own stack if the head is still over it, else it stays held. A held
+descent also pauses just above the trip height, where the sensor must still read blocked: a loss
+too small to take the loaded head below the trip is seen there, before the slab goes down.
+
 Every downward move is a probing move (G38.3): FluidNC only watches the contact sensor
 during G38.x, so a plain G1 would drive into anything unexpected below the head.
 """
@@ -39,7 +48,7 @@ from typing import Callable
 import cv2
 
 from .certs import TWO_D, CodeRead, ItfModel, Verdict, consensus, face_from_above, side_evidence
-from .config import Config
+from .config import CARRY_BAND_MM, Config
 from .decode import _to_gray as to_gray
 from .decode import decode_frame, label_band, ocr_digits
 from .facedown import BASELINE_MAX, GLARE_REF_MAX, MIN_TEXTURE, CardBackRefs, describe, draw_window, frame_view_mm, image_rects, learned_match, learned_ready
@@ -65,6 +74,15 @@ class Stop(Exception):
 
 class HardStop(Stop):
     """Ctrl-C twice: the motors were halted at once and nothing moved afterwards."""
+
+
+class CarryStop(Stop):
+    """The carry-height sensor disagrees with the height the controller reports. ``kind``: "stall" (it reads clear with
+    the head at travel height: Z lost steps, or a cut lead) or "stuck" (it reads blocked far below its trip height)."""
+
+    def __init__(self, msg: str, kind: str):
+        super().__init__(msg)
+        self.kind = kind
 
 
 class FaceDownStop(Stop):
@@ -180,7 +198,7 @@ def rebuild_state(events: list[dict], rows: list[SlabResult], cfg: Config) -> tu
 class Runner:
     def __init__(self, cfg: Config, motion, vacuum, lights, head_cam, station_cam, writer: BatchWriter, lid=None, gate=None, log=print,
                  should_stop: Callable[[], bool] | None = None, sleep: Callable[[float], None] | None = None,
-                 refs: CardBackRefs | None = None, sim_operator: Callable[[int], bool] | None = None):
+                 refs: CardBackRefs | None = None, sim_operator: Callable[[int], bool] | None = None, carry=None):
         self.cfg = cfg
         self.m = motion
         self.vac = vacuum
@@ -190,6 +208,9 @@ class Runner:
         self.w = writer
         self.lid = lid
         self.gate = gate  # overfill light beam; .clear() is True when nothing is above the MAX line
+        # carry-height sensor; .blocked() is True when the Z carriage's flag is in its beam (head at least carry_sensor_c0 high)
+        self.carry = carry if cfg.carry_sensor else None
+        self.carry_fault: str | None = None  # "stall" | "stuck" once a CarryStop was raised: the Z height (or the sensor) is not trusted
         self.log = log
         self.should_stop = should_stop  # polled between slabs (web Stop button, Ctrl-C)
         self.st = State()
@@ -208,7 +229,9 @@ class Runner:
         # resume --face-down-ok: the pocket whose top slab the face-down check stopped on, which the operator checked.
         # It confirms that slab only: the first face-down check after the resume, and only if it is that pocket.
         self.face_down_ok_pocket: int | None = None
-        self._pending_ref = None  # (descriptor, pocket, source): an operator-confirmed slab, learned only once it was placed
+        # (descriptor, pocket, source, proof): a code-proven or operator-confirmed slab, learned only once it was placed
+        self._pending_ref = None
+        self._proof_cert: str | None = None  # the cert of the back-label code that proved the slab in the cup face-down
         # learned face-down check: card-back references (a file under config/ on the machine; in memory by default)
         self.refs = refs if refs is not None else CardBackRefs(None, cfg.face_down_window_mm)
         self._refs_dirty = 0
@@ -278,6 +301,8 @@ class Runner:
             for target, f in self._descent_plan(self.z, c, feed):
                 self._down(target, f)
             return
+        if self.holding:
+            self._carry_check(f"before a Z move with a slab in the cup {self._where()}")
         self.z = None
         self.m.move(feed, z=c)
         self.m.wait_idle()
@@ -286,17 +311,23 @@ class Runner:
     def _descent_plan(self, z0: float, c_to: float, feed: float) -> list[tuple[float, float]]:
         """A held slab passes the rod tops slowly (feed_rod_band) from 5 mm above them (thickest slab) to
         10 mm below them (thinnest): it rides on the cup at whatever offset it had in its source pocket,
-        so it may meet a domed rod top with no play left."""
+        so it may meet a domed rod top with no play left. With the carry sensor the descent also pauses just above its
+        trip height, where _down() requires it to read blocked: one trip height cannot tell the loaded travel height
+        from a head that lost up to ~12 mm on the way up, but this pause sees any loss over 1.25 mm before the slab
+        goes down onto a stack (or to the read station)."""
         if not self.holding:
             return [(c_to, feed)]
         cfg = self.cfg
         top = self.c(cfg.post_h + 5 + cfg.t_thick_max)
         bot = self.c(cfg.post_h - 10 + cfg.t_min)
+        chk = self.c(cfg.carry_sensor_c0 + CARRY_BAND_MM + 0.25) if self.carry is not None and not self.carry_fault else None
         slow = min(cfg.feed_rod_band, feed)
-        pts = [z0] + [e for e in (top, bot) if c_to < e < z0] + [c_to]
+        pts = [z0] + sorted((e for e in (chk, top, bot) if e is not None and c_to < e < z0), reverse=True) + [c_to]
         return [(b, slow if bot - 1e-6 <= (a + b) / 2 <= top + 1e-6 else feed) for a, b in zip(pts, pts[1:])]
 
     def _down(self, c: float, feed: float) -> None:
+        if self.holding:
+            self._carry_check(f"before a Z move with a slab in the cup {self._where()}")
         self.z = None
         hit = self.m.probe(c, feed)
         if hit is not None:
@@ -312,6 +343,8 @@ class Runner:
         safe = self.c(self.cfg.c_safe_loaded if self.holding else self.cfg.c_safe_empty)
         if self.z is None or self.z < safe - 0.01:
             self._z(safe)
+        if self.at != (x, y):  # a move to where the head already is moves nothing sideways
+            self._carry_check(f"before moving sideways {self._where()}" + (" with a slab in the cup" if self.holding else ""))
         mx, my = self.xy(x, y)
         if "Y" in self.cfg.axes:
             self.m.move(feed or self.cfg.feed_xy, x=mx, y=my)
@@ -326,16 +359,78 @@ class Runner:
         """Guarded descent to c_from, then probe down to c_to at probe speed. Returns trigger Z or None.
 
         Callers choose c_to so the cup can never be driven more than probe_window past the
-        surface it is looking for - well inside the 25 mm spring-buffer stroke.
+        surface it is looking for - well inside the spring-buffer stroke (cfg.buffer_stroke, 20 mm).
         """
         c_to = max(c_to, self.z_floor)  # never ask for a probe target past the Z soft limit
         self._z(c_from)
         if c_to >= self.z - 0.05:  # already at the floor: nothing left to probe
             return None
+        if self.holding:
+            self._carry_check(f"before a probe move with a slab in the cup {self._where()}")
         self.z = None
         hit = self.m.probe(c_to, self.cfg.feed_probe)
         self.z = hit if hit is not None else c_to
         return hit
+
+    # ------------------------------------------------------------------ carry-height sensor (Z stall guard)
+    def _carry_check(self, where: str) -> None:
+        """The carry-height sensor must agree with the head height the controller reports: BLOCKED from
+        carry_sensor_c0 + CARRY_BAND_MM up (every travel height), CLEAR from carry_sensor_c0 - CARRY_BAND_MM down
+        (every pick, hover and read height). In between it may read either way. Once it disagreed (carry_fault),
+        it is not asked again in this run: secure() then handles the slab without it."""
+        if self.carry is None or self.z is None or self.carry_fault:
+            return
+        cfg = self.cfg
+        h, c0 = self.s(self.z), cfg.carry_sensor_c0
+        blocked = bool(self.carry.blocked())
+        if h >= c0 + CARRY_BAND_MM and not blocked:
+            self.carry_fault = "stall"
+            cause = ("Right after homing this is most likely the sensor itself: a cut or unplugged lead (GPIO 6, WIRING.md), a missing or bent "
+                     "flag, or the sensor mount slid down its slot." if self.at is None else
+                     "The Z motor has probably lost steps while lifting (a bind, a heavy pull, too little motor current), so the head is lower "
+                     "than the controller thinks. (A cut or unplugged sensor lead reads the same.)")
+            raise CarryStop(f"Z stall suspected {where}: the carry-height sensor (GPIO 6) reads CLEAR, but the controller has the head at "
+                            f"{h:.1f} mm, where the flag on the Z carriage must block its beam (from {c0:.1f} mm up). Nothing moved "
+                            f"sideways. {cause} Before resuming: move the head up and down by hand with the power off and feel for a bind, "
+                            "check the Z motor current and run `python -m tools.bench_tests lifts 20` (BUILD_GUIDE 7.8), then "
+                            "`selftest --motion`. Resume homes first.", "stall")
+        if h <= c0 - CARRY_BAND_MM and blocked:
+            self.carry_fault = "stuck"
+            raise CarryStop(f"Carry-height sensor fault {where}: it reads BLOCKED with the head at {h:.1f} mm, far below its trip height "
+                            f"({c0:.1f} mm). Dirt or a card in its slot, a dead emitter LED or a bent flag reads like this, and then a Z stall "
+                            "could not be seen. Clean the slot and check the flag, then run `selftest --motion` (it must read clear below "
+                            f"{c0 - CARRY_BAND_MM:.0f} mm and blocked above {c0 + CARRY_BAND_MM:.0f} mm) and resume.", "stuck")
+
+    def _set_down_after_stall(self) -> str:
+        """After a Z stall with a slab in the cup: the head is lower than the controller thinks, by an unknown amount. Over
+        the slab's own pocket it goes straight down in one probe move (the probe stops on the contact whatever the real
+        height is) and the slab is vented there. Anywhere else nothing moves: the pump keeps holding the slab."""
+        cfg = self.cfg
+        src, s_pick = self.held_from
+        p = cfg.pocket(src)
+        try:
+            self.vac.hold()
+        except SafetyViolation:
+            raise
+        except Exception:  # noqa: BLE001
+            pass
+        if self.at != (p.x, p.y) or self.z is None:
+            self.freeze = "hold"
+            return (f"The slab from pocket {src} is still on the cup {self._where()}. The head may be lower than the controller thinks, so it "
+                    "was not carried anywhere: nothing moves, and the pump keeps holding it. Hold the slab, vent the cup (the command line "
+                    f"asks you; the web page has a Vent button) and put it face-down on top of pocket {src}; it is read again on resume.")
+        # the real head is lower than self.z: a probe from here to below the pick height meets the stack on the way down
+        hit = self._probe(self.z, self.c(s_pick - cfg.t_thick_max - 2))
+        if hit is None:
+            self.freeze = "hold"
+            return (f"The slab from pocket {src} was lowered straight down over its pocket but met nothing: it may have fallen. The pump keeps "
+                    f"holding whatever is on the cup and nothing moves. Look at the cup and pocket {src} before touching anything.")
+        self._vent(f"on top of pocket {src}")
+        self.holding = False
+        self.held_from = None
+        self._lift_off(hit, f"on top of pocket {src}")
+        self._journal({"stall_set_down": src, "t": round(time.time(), 1)})
+        return f"The slab that was in the cup was lowered straight down onto pocket {src}, where it came from; it is read again on resume."
 
     # ------------------------------------------------------------------ vacuum
     def _kpa(self) -> float:
@@ -453,12 +548,16 @@ class Runner:
             getattr(self.lights, light)(False)
 
     def _row_half_mm(self) -> float:
+        """Half-width of the head-camera crop along the row, on the plane of the slab under the cup: the slab's own
+        footprint (cfg.head_roi_half_mm), never more than the pocket centre to the wall line."""
         xs = sorted(p.x for p in self.cfg.pockets)
-        return min(b - a for a, b in zip(xs, xs[1:])) / 2  # pocket centre to the wall line
+        return min(float(self.cfg.head_roi_half_mm), min(b - a for a, b in zip(xs, xs[1:])) / 2)
 
     def _head_roi(self, distance_mm: float) -> tuple[float, float, float, float] | None:
-        """Crop of a head-camera frame to the pocket under the cup. The 3.6 mm lens sees the neighbouring
-        pockets' labels too (they start ~57 mm off-axis); only the slab under the cup may be read."""
+        """Crop of a head-camera frame to the slab under the cup. The 3.6 mm lens sees the neighbouring pockets'
+        labels (from ~57 mm off-axis), and beside the slab the lower neighbour stacks, which look smaller from up here:
+        in the 6-8 mm band between the slab's edge and the wall line, a neighbour's back QR 75-230 mm farther down
+        decoded on composited real slabs. Only the slab under the cup may be read."""
         spec = self.cfg.cam_head or {}
         cam = self.head_cam
         if hasattr(cam, "view_half_mm"):
@@ -582,13 +681,13 @@ class Runner:
         label (certs.SIDE_PROOFS, rules that held on every real label: a PSA QR, a graded CGC QR, the CGC 2020-23 back
         barcode), or - in "learned" mode - a card window that matches the card backs of earlier proven slabs. A code
         printed only on the FRONT label (a CGC Authentic QR with grade 0_0, the CGC 10/13-digit barcode) means the slab
-        is FACE-UP. Back and front codes together, or two different back labels, mean another slab's label is in view.
+        is FACE-UP. Back and front codes together, two different back labels, or codes of two certs mean another slab's label is in view.
         Those, and a slab with no proof that matches no card back (PSA ITF/Code128 sit on both sides; older PSA labels,
         CGC Authentic backs, BGS and SGC carry no back code), stop the run untouched until the operator confirms.
         ``unparsed``: the payloads decode_frame could not read a cert from (a CGC QR without a cert is a hint there).
         Returns how the slab was proven face-down: qr | code | operator | learned(score) | off."""
         cfg = self.cfg
-        self._pending_ref = None
+        self._pending_ref = self._proof_cert = None
         if cfg.face_down_check == "off":
             return "off"
         learned = cfg.face_down_check == "learned"
@@ -606,8 +705,9 @@ class Runner:
             self._journal({"face_down_confirmed": src, "by": "operator", **({"reference": note} if note else {}), "t": round(time.time(), 1)})
             return "operator"
         if face == "down":
-            if learned:  # any back-label proof teaches the learned check, as a PSA back QR always did
-                self._learn(desc, "qr", src, {"cert": backs[0].cert or "", "proof": backs[0].kind})
+            self._proof_cert = backs[0].cert
+            if learned:  # a back-label proof teaches the learned check, but only once the slab's own read agrees (_settle_reference)
+                self._defer_reference(desc, src, "qr", {"proof": backs[0].kind, "proof_cert": backs[0].cert or ""})
             return "qr" if any(e.kind.endswith("_qr") for e in backs) else "code"
         why_learned = ""
         if learned and face == "unknown":
@@ -640,23 +740,32 @@ class Runner:
                            f"slab's front, so nothing touched it. Look at the top slab of pocket {src}: if it is face-up, turn it face-down. If it "
                            f"is face-down (older PSA labels, CGC Authentic, BGS and SGC slabs have no back-label code), {confirm}", src, why)
 
-    def _defer_reference(self, desc, src: int, source: str) -> str:
-        """An operator-confirmed slab is learned from only after it was placed (``_settle_reference``): its cert and back
-        photo then go with it, and a back-label code seen from BELOW (the slab was face-up after all) vetoes it."""
-        self._pending_ref = (desc, src, source)
+    def _defer_reference(self, desc, src: int, source: str, proof: dict | None = None) -> str:
+        """A code-proven ("qr") or operator-confirmed slab is learned from only after it was placed (``_settle_reference``):
+        its cert and back photo then go with it, and a back-label code seen from BELOW (the slab was face-up after all)
+        vetoes it. A code proof also needs an 'ok' read of the SAME cert: a neighbour's back QR in the frame from above
+        gives another cert (a conflict), and one such frame must not teach the check a card front for good.
+        ``proof``: {"proof": kind, "proof_cert": cert} of the back-label code."""
+        self._pending_ref = (desc, src, source, dict(proof or {}))
         return "pending: learned once the slab is placed"
 
     def _settle_reference(self, pos: int, verdict: Verdict, reads: list[CodeRead], image_back: str) -> None:
         if self._pending_ref is None:
             return
-        desc, src, source = self._pending_ref
+        desc, src, source, proof = self._pending_ref
         self._pending_ref = None
         below = [e for e in side_evidence([r for r in reads if r.camera == "front"]) if e.certain and e.side == "back"]
         if below:
             note = f"not used as a reference: the read station saw {below[0].what} from below, so this slab was FACE-UP"
             self.log(f"#{pos}: {note}. The cup touched its front: check it.")
+        elif source == "qr" and verdict.status != "ok":
+            note = f"not used as a reference: its read is '{verdict.status}', not 'ok', so the back-label code seen from above may not be its own"
+        elif source == "qr" and verdict.cert != proof.get("proof_cert"):
+            note = (f"not used as a reference: the back-label code seen from above (cert {proof.get('proof_cert') or '?'}) is not this "
+                    f"slab's cert ({verdict.cert}): another slab's label was in view")
         else:
-            note = self._learn(desc, source, src, {"cert": verdict.cert or "", "image_back": image_back})
+            note = self._learn(desc, source, src, {"cert": verdict.cert or "", "image_back": image_back, "position": pos,  # (already counted)
+                                                   **({"proof": proof["proof"]} if proof.get("proof") else {})})
         self._journal({"face_down_reference": src, "by": source, "position": pos, "cert": verdict.cert, "image_back": image_back,
                        "result": note, "t": round(time.time(), 1)})
 
@@ -677,6 +786,7 @@ class Runner:
     def _home(self) -> None:
         self.m.home()
         self.homed = True
+        self.carry_fault = None  # homing finds the real Z again
         self.z = None
         self.at = None
         self._z(self.c(self.cfg.c_safe_empty), guard=False)  # straight down from the top, at the home end off the bed
@@ -812,6 +922,7 @@ class Runner:
         """Move the top slab of src to dst (or exceptions). Returns False when src is empty."""
         cfg = self.cfg
         t0 = time.monotonic()
+        self._pending_ref = self._proof_cert = None  # (set again by _check_face_down, for this slab only)
         ps, pex = cfg.pocket(src), cfg.exceptions
         self._go(ps.x, ps.y)
         s_pred = self.st.tops[src]
@@ -844,7 +955,8 @@ class Runner:
             self.st.tops[src] = 0.0
             self._z(self.c(cfg.c_safe_empty))
             return False
-        # grip
+        # grip (the cup is on the slab, far below the carry sensor: it must read clear, or it could not see a Z stall)
+        self._carry_check(f"before gripping the top slab of pocket {src}")
         self._atmosphere(f"before gripping the top slab of pocket {src}")
         self.vac.hold()
         if not self._wait_seal():
@@ -892,6 +1004,18 @@ class Runner:
                     reads += o
                     held_reads += o
                     verdict = self._decide(reads, held_reads)
+        # The back-label code that proved it face-down must be this slab's own: a read of the slab in the cup (held
+        # frames, station, OCR) must show that cert, and none may name another. (With hover_check the proof is in the
+        # reads, so a second machine-read cert already makes a conflict, but a QR beats OCR there and a proof read only
+        # from above is just needs_review; without hover_check the proof is not in the reads at all.)
+        proof = self._proof_cert
+        support = {r.cert for r in held_reads if r.cert}
+        own = sorted(support - {proof}) if proof else []
+        if proof and verdict.status in ("ok", "needs_review") and (verdict.cert != proof or own or proof not in support):
+            seen = f"this slab itself reads {', '.join(own)}" if own else "no read of the slab in the cup shows that cert"
+            verdict = Verdict("conflict", None, verdict.sources, f"the back-label code that proved it face-down before the pick was cert {proof}, but "
+                              f"{seen}: it may have been another slab's label in view, so this slab may have been FACE-UP and the cup may "
+                              "have touched its front - check it by hand", verdict.grader, verdict.raw)
         # needs_review with no grader evidence (OCR only, a bare number) never goes to the output: it may not even be PSA or CGC
         to_output = verdict.status == "ok" or (verdict.status == "needs_review" and cfg.needs_review_to == "output" and verdict.grader != "unknown")
         target = cfg.pocket(dst) if to_output else pex
@@ -968,6 +1092,7 @@ class Runner:
         if hit is None:
             self._z(self.c(cfg.c_safe_empty))
             raise Stop(f"Pocket {pocket}: lost the slab between two probes. Check the contact sensor.")
+        self._carry_check(f"before gripping the slab in pocket {pocket}")
         self._atmosphere(f"before gripping the slab in pocket {pocket}")
         self.vac.hold()
         if not self._wait_seal():
@@ -1043,6 +1168,8 @@ class Runner:
             self._resync()
             if self.holding and self.held_from is not None:
                 src = self.held_from[0]
+                if self.carry_fault == "stall":  # the head is lower than the controller thinks: never sideways
+                    return self._set_down_after_stall()
                 k = self._kpa()
                 if k > self.cfg.vac_transit_alarm_kpa:
                     return self._set_down_weak(k)
@@ -1221,6 +1348,8 @@ class Runner:
         except Stop as e:
             note = self.secure()
             fd = {"face_down_stop": e.pocket, "why": e.why} if isinstance(e, FaceDownStop) else {}
+            if isinstance(e, CarryStop):
+                fd["carry_fault"] = e.kind
             self._journal({"stop": str(e), **fd, "secured": note, "t": round(time.time(), 1)})
             self.phase = "stopped"
             raise Stop(f"{e} {note}".strip()) from None

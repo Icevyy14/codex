@@ -1,4 +1,4 @@
-"""Raspberry Pi I/O: vacuum pump + valves, LED rings, vacuum sensor.
+"""Raspberry Pi I/O: vacuum pump + valves, LED rings, vacuum sensor, beam gate, lid, carry-height sensor.
 
 Wiring (see docs/WIRING.md): each load is switched by a logic-level MOSFET module from a Pi GPIO.
 The vacuum sensor (XGZP6847A, -100..0 kPa, 0.5-4.5 V out at 5 V supply) feeds an ADS1115 ADC
@@ -28,6 +28,7 @@ PIN_LED_HEAD = 23
 PIN_LED_STATION = 24
 PIN_LID = 25  # lid interlock switch (closed = lid shut), input with pull-up
 PIN_GATE = 5  # overfill light-beam receiver: HIGH = beam received (nothing above the MAX line)
+PIN_CARRY = 6  # carry-height sensor (TCST2103 board on the Z spine) through a 10k/20k divider: HIGH = flag in the beam = head at travel height
 
 class SensorFault(RuntimeError):
     """The vacuum sensor reading is physically impossible (broken wire, lost supply, bad divider)."""
@@ -134,3 +135,30 @@ class PiGate:
 
     def clear(self) -> bool:
         return bool(self._rx.value)
+
+
+class PiCarry:
+    """Carry-height sensor: the spare TCST2103 endstop board on the Z spine's left face, a flag on the z_plate. Its OUT
+    reaches GPIO 6 (pin 31) through the I/O board's 10k series / 20k to GND divider (5 V board, 3.3 V input).
+    HIGH = the flag is in the beam = the head is at least carry_sensor_c0 high. A cut lead reads LOW (the 20k pulls it
+    down): sideways moves are refused, which is safe. A dead emitter or dirt in the slot reads HIGH, which is not: the
+    runner therefore also requires LOW whenever the head is well below the trip height (every pick)."""
+
+    SAMPLES = 3
+
+    def __init__(self):
+        from gpiozero import DigitalInputDevice
+
+        self._rx = DigitalInputDevice(PIN_CARRY, pull_up=False)
+
+    def blocked(self) -> bool:
+        """Majority of three reads 1 ms apart: one noise spike on the 0.2 m lead must not stop (or pass) a check."""
+        n = 0
+        for i in range(self.SAMPLES):
+            if i:
+                time.sleep(0.001)
+            n += bool(self._rx.value)
+        return n * 2 > self.SAMPLES
+
+    def close(self) -> None:
+        self._rx.close()
