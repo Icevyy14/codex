@@ -66,9 +66,10 @@ class Config:
     needs_review_to: str = "output"  # output | exceptions
     hover_check: bool = True  # use the frame taken from above the top slab as an extra read of its back label
     # Before the cup touches a slab, the frame from above must prove it is face-down:
-    # "stop": only a PSA back-label QR proves it; otherwise the run stops untouched and the operator confirms
-    #         (resume --face-down-ok).
-    # "learned": a PSA back QR, or a card window that matches the card backs of earlier QR- or operator-confirmed
+    # "stop": only a back-label code proves it (a PSA back QR, a CGC back QR, the CGC 2020-23 back barcode;
+    #         certs.SIDE_PROOFS); otherwise the run stops untouched and the operator confirms (resume --face-down-ok).
+    #         A front-label code seen from above (CGC Authentic QR, CGC front barcode) stops it as FACE-UP.
+    # "learned": a back-label code, or a card window that matches the card backs of earlier code- or operator-confirmed
     #         slabs (slabscan/facedown.py). Active only once face_down_threshold is measured (phase0 --save writes
     #         it with face_down_threshold_sig, the card window it was measured for), face_down_min_refs references
     #         exist and the head's view of the window is checked on this machine; until then it behaves like "stop".

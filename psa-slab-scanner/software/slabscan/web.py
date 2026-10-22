@@ -417,7 +417,7 @@ a{color:var(--accent)}pre{white-space:pre-wrap;font-size:12px;color:var(--mute);
 <div class="card" id="controls">
   <div class="row"><input id="name" placeholder="batch name (optional)" maxlength="40">
   <select id="fp"><option value="fallback">front photo: only when needed</option><option value="always">front photo: every slab (+3 s)</option></select></div>
-  <label class="mute"><input type="checkbox" id="allfd" style="min-height:0"> I loaded every slab face-down: don't stop at slabs the face-down check can't confirm (no back QR, no match with a known card back)</label>
+  <label class="mute"><input type="checkbox" id="allfd" style="min-height:0"> I loaded every slab face-down: don't stop at slabs the face-down check can't confirm (no back-label code, no match with a known card back)</label>
   <div class="row"><button class="go" id="start">Start run</button><button class="stop" id="stop">Stop after this slab</button></div>
   <div class="row"><select id="resumeSel"></select><button id="resume">Resume</button></div>
   <label class="mute"><input type="checkbox" id="accept" style="min-height:0"> accept changed stack heights on resume</label>

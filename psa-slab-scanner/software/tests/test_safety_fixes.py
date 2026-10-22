@@ -528,8 +528,33 @@ def test_a_face_up_cgc_slab_shows_its_front_code_and_stops(tmp_path):
     world, _ = _world(cfg)
     top = world.stacks[1][-1]
     top.grader, top.cert, top.face_down = "CGC", "4123456001", False
-    with pytest.raises(Stop, match="CGC code is visible from above, and those sit on the FRONT label"):
+    with pytest.raises(Stop, match=r"the top slab is FACE-UP \(a CGC front-label barcode \(4123456001\) is visible from above"):
         _runner(cfg, world, tmp_path).run()
+    assert not world.gripping and not world.held
+
+
+def test_a_face_up_cgc_authentic_slab_shows_its_front_qr_and_stops(tmp_path):
+    cfg = _cfg()
+    world, _ = _world(cfg)
+    top = world.stacks[1][-1]
+    top.grader, top.era, top.cert, top.face_down = "CGC", "authentic", "6182652005", False
+    with pytest.raises(Stop, match=r"FACE-UP \(a CGC Authentic front-label QR \(grade 0_0\)"):
+        _runner(cfg, world, tmp_path).run()
+
+
+@pytest.mark.parametrize("era,cert,proof", [("2023+", "6003997046", "qr"), ("og", "3750599206", "qr")])
+def test_a_face_down_cgc_slab_is_proven_by_its_back_code(tmp_path, era, cert, proof):
+    """Regression: every face-down CGC slab stopped ('a CGC code is visible from above, and those sit on the FRONT
+    label'), because its back QR is a CGC code. Real CGC backs carry a QR with the grade (cgccards.com, or cgccomics.com
+    plus a 26-28 digit barcode on 2020-23 labels)."""
+    cfg = _cfg()
+    world, _ = _world(cfg, per_pocket=1)
+    top = world.stacks[1][-1]
+    top.grader, top.era, top.cert, top.thickness = "CGC", era, cert, 7.5
+    r = _runner(cfg, world, tmp_path)
+    r.run()
+    row = r.w.rows[0]
+    assert row.face_down == proof and row.verdict.status == "ok" and row.verdict.cert == cert and row.verdict.grader == "CGC"
 
 
 def test_an_old_label_stops_until_the_operator_confirms_it_face_down(tmp_path):
@@ -537,7 +562,7 @@ def test_an_old_label_stops_until_the_operator_confirms_it_face_down(tmp_path):
     world, stacks = _world(cfg, per_pocket=2)
     world.stacks[1][-1].era = "old"  # no back code at all
     r1 = _runner(cfg, world, tmp_path)
-    with pytest.raises(Stop, match="no PSA back-label QR"):
+    with pytest.raises(Stop, match="no back-label code was seen from above"):
         r1.run()
     r2 = _runner(cfg, world, tmp_path)
     r2.w = BatchWriter.reopen(tmp_path / "b")
@@ -638,7 +663,7 @@ class WideHeadCamera(SimCamera):
         own = w.held[0] if w.held else (w.stacks[p.index][-1] if p is not None and w.stacks.get(p.index) else None)
 
         def paste(slab, cx):
-            img = _cached_view(slab.cert, slab.era, slab.grader, "back" if slab.face_down else "front", "head", w.itf_payload, self.deg)
+            img = _cached_view(slab.cert, slab.era, slab.grader, "back" if slab.face_down else "front", "head", self.deg)
             h, wd = img.shape
             x0 = int(round(cx - wd / 2))
             a, b = max(0, x0), min(width, x0 + wd)
@@ -695,7 +720,7 @@ def test_one_frame_counts_each_code_once(tmp_path, monkeypatch):
     """software-4: the overlapping tile pass decoded one ITF twice in one frame, meeting min_itf_reads alone."""
     import slabscan.runner as runner_mod
 
-    itf = CodeRead("148069831", "front_barcode", "ITF", "0148069831")
+    itf = CodeRead("26275088", "front_barcode", "ITF", "26275088")
     monkeypatch.setattr(runner_mod, "decode_frame", lambda *a, **k: ([itf, itf], []))
     cfg = _cfg()
     world, _ = _world(cfg)
@@ -715,9 +740,9 @@ def test_the_head_camera_is_never_ocr_d(tmp_path, monkeypatch):
     seen = []
     real = runner_mod.ocr_digits
 
-    def front_only(gray, camera=""):
+    def front_only(gray, camera="", band=None):
         seen.append(camera)
-        return real(gray, camera)
+        return real(gray, camera, band)
 
     def never(*a, **k):
         raise AssertionError("decode_frame ran OCR")

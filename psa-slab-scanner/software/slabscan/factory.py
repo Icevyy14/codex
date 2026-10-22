@@ -199,15 +199,16 @@ class SimLensCamera:
         pass
 
 
-def sim_stacks(cfg: Config, slabs: int, seed: int = 7, eras=(0.85, 0.1, 0.05), clingy_rate: float = 0.0, thick_rate: float = 0.0,
-               jp_rate: float = 0.0):
-    """``slabs`` simulated slabs spread as evenly as possible over the source pockets."""
+def sim_stacks(cfg: Config, slabs: int, seed: int = 7, eras=None, clingy_rate: float = 0.0, thick_rate: float = 0.0,
+               jp_rate: float = 0.0, mix: dict[str, float] | None = None):
+    """``slabs`` simulated slabs spread as evenly as possible over the source pockets. ``mix`` / ``eras``: see
+    simworld.make_batch (default: simworld.DEFAULT_MIX, mostly PSA, some CGC)."""
     from .simworld import make_batch
 
     n_src = len(cfg.sources)
     if slabs > cfg.capacity:
         raise ValueError(f"{slabs} slabs > capacity {cfg.capacity}")
-    full = make_batch(cfg, per_pocket=cfg.stack_max, seed=seed, eras=eras, clingy_rate=clingy_rate, thick_rate=thick_rate, jp_rate=jp_rate)
+    full = make_batch(cfg, per_pocket=cfg.stack_max, seed=seed, eras=eras, clingy_rate=clingy_rate, thick_rate=thick_rate, jp_rate=jp_rate, mix=mix)
     stacks = {}
     for i, p in enumerate(cfg.sources):
         k = slabs // n_src + (1 if i < slabs % n_src else 0)

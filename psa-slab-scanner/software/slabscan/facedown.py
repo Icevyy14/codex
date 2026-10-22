@@ -1,9 +1,9 @@
 """Learned face-down check: does the card seen through the top of the slab show its BACK?
 
 Every English Pokemon card has the same back (Japanese cards have another one), and the head camera sees the card
-through the clear slab. Slabs whose face-down state is proven - a PSA back-label QR seen from above, or the
-operator's confirmation - show what a face-down card looks like. A slab without a back QR whose card window looks
-like one of them is face-down; a face-up slab shows its own card front instead.
+through the clear slab. Slabs whose face-down state is proven - a back-label code seen from above (a PSA or CGC back QR,
+the CGC 2020-23 back barcode), or the operator's confirmation - show what a face-down card looks like. A slab without a
+back-label code whose card window looks like one of them is face-down; a face-up slab shows its own card front instead.
 
 Descriptor (``describe``). It has to be cheap and to survive what differs between two slabs with the same back:
   * Only ``face_down_window_mm``: rectangles on the slab plane, in mm from the head-camera axis, that lie on the
@@ -490,7 +490,7 @@ def learned_ready(refs: CardBackRefs, threshold: float | None, min_refs: int, re
     frac, n = refs.static_fraction()
     if frac is None:
         return (f"learned check not active yet: the head's view of the card window is checked on {STATIC_REFS} slabs proven face-down "
-                f"on this machine (back QR or your confirmation), {n} so far")
+                f"on this machine (back-label code or your confirmation), {n} so far")
     if frac > STATIC_MAX:
         return (f"learned check not active: {100 * frac:.0f}% of the card window shows the same thing on every proven slab as over an empty "
                 f"pocket (allowed {100 * STATIC_MAX:.0f}%): a part of the head is in the way. Compare images/face_down_window.jpg with "

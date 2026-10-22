@@ -1,4 +1,5 @@
-"""Export printable parts (STL + STEP), the assembly (STEP), a cut list, the probe-flag drawing, and PNG renders.
+"""Export printable parts (STL + STEP), the assembly (STEP), a cut list, the probe-flag drawing, the head occluders for the
+simulator (heads_cad.json), and PNG renders.
 
 Run from the cad/ folder:  python build.py            (everything)
                            python build.py --renders  (renders only)
@@ -234,6 +235,40 @@ def export_flag_drawing(png: Path | None = None) -> Path:
     return path
 
 
+def export_heads(path: Path | None = None) -> Path:
+    """The head as the head camera sees it, for software/slabscan/sim.py HEADS (model.occluder_boxes), plus the camera offset,
+    the face-down card window and the carry-sensor trip height the software needs."""
+    path = path or OUT / "heads_cad.json"
+    rows = M.occluder_boxes(0.0)
+    doc = {
+        "about": "Head occluders for the simulator, from cad/model.py occluder_boxes(). Boxes (x0, y0, x1, y1, z0, z1, grey): mm, "
+                 "X along the row, Y along the slab (label end negative), from the CUP axis; z above the cup height c. "
+                 "Pose: cup FREE (buffer at rest), as in the hover frame and with a slab held. Each box bounds one CAD solid "
+                 "(their shadow covers the CAD's exactly at hover and held, 0.5 % larger). The lens is NOT on the cup axis: "
+                 "project a point (x, y, z) to the slab plane D below the lens as lens_xy + ((x, y) - lens_xy) * D / (lens_z - z).",
+        "lens": {"x": 0.0, "y": M.CAM_DY, "z": M.CAM_Z},
+        "hover_lens_to_slab_mm": M.CAM_Z + 7.0,
+        "held_lens_to_slab_mm": M.CAM_Z + L.CUP_HANG,
+        "HEADS": [[*b, g] for _, b, g in rows],
+        "names": [n for n, _, _ in rows],
+        "FACE_DOWN_WINDOW_MM": L.FACE_DOWN_WINDOW_MM,
+        "face_down_window_mm_from_camera_axis": L.face_down_window_cam(),
+        "HEAD_CAM_DY": L.HEAD_CAM_DY,
+        "CARRY_SENSOR_C0": L.CARRY_SENSOR_C0,
+        "card_top_from_label_edge_mm": {"min": L.CARD_TOP_FROM_EDGE[0], "median": L.CARD_TOP_FROM_EDGE[1], "max": L.CARD_TOP_FROM_EDGE[2]},
+    }
+    lines = []
+    for k, v in doc.items():  # one HEADS row (and its name) per line, so it diffs and pastes
+        if k in ("HEADS", "names"):
+            lines.append(f' "{k}": [\n' + ",\n".join("  " + json.dumps(r) for r in v) + "\n ]")
+        else:
+            lines.append(f' "{k}": {json.dumps(v)}')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{\n" + ",\n".join(lines) + "\n}\n")
+    json.loads(path.read_text())
+    return path
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--renders", action="store_true")
@@ -242,6 +277,7 @@ if __name__ == "__main__":
         print(json.dumps(export_printed(), indent=1))
         write_cut_list()
         print("flag drawing", export_flag_drawing())
+        print("head occluders", export_heads())
         for pose in POSES:
             print("assembly", export_assembly(pose))
     for pose in POSES:

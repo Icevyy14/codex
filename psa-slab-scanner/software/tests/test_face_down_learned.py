@@ -1,7 +1,7 @@
 """The learned face-down check (slabscan/facedown.py, Runner._check_face_down in "learned" mode), in the simulator.
 
-A slab without a PSA back QR may be picked only when its card window matches the card backs of proven face-down
-slabs (back QR seen, or confirmed by the operator). Most tests use the hypothetical "open" head (sim.HEADS), whose
+A slab without a back-label code (PSA or CGC back QR, CGC 2020-23 back barcode) may be picked only when its card window
+matches the card backs of proven face-down slabs (back-label code seen, or confirmed by the operator). Most tests use the hypothetical "open" head (sim.HEADS), whose
 foot leaves face_down_window_mm clear; with today's CAD head the foot hides the window, and the check must refuse.
 """
 
@@ -325,14 +325,18 @@ def test_a_plain_face_up_card_front_with_glare_is_not_accepted(tmp_path):
     assert not world.gripping
 
 
-def test_another_graders_code_still_stops_and_a_face_down_cgc_slab_is_learned(tmp_path):
+def test_a_face_down_cgc_slab_is_proven_by_its_back_qr_and_a_face_up_one_stops(tmp_path):
+    """Regression: a CGC code seen from above always stopped the run ('those sit on the FRONT label'), and in learned
+    mode it also blocked the card-window match. Real CGC backs carry a QR with the grade: it proves the slab face-down
+    and teaches the learned check like a PSA back QR. A face-up CGC slab shows its front barcode: FACE-UP stop."""
     cfg = _cfg()
     refs = CardBackRefs(None, cfg.face_down_window_mm)
     world = _world(cfg, ["qr"] * 5 + ["cgc", "cgc_up"], start=CLEAN)
-    with pytest.raises(Stop, match="CGC code is visible from above, and those sit on the FRONT label"):
+    with pytest.raises(Stop, match="the top slab is FACE-UP"):
         _runner(cfg, world, tmp_path, refs=refs).run()
     rows = _rows(tmp_path)
-    assert rows[5]["grader"] == "CGC" and rows[5]["face_down"].startswith("learned(")  # no back QR, but a known card back
+    assert rows[5]["grader"] == "CGC" and rows[5]["status"] == "ok" and rows[5]["face_down"] == "qr"
+    assert any(r.meta.get("proof") == "cgc_qr" for r in refs.refs)  # a reference, as a PSA back-QR slab is
     assert not world.gripping and world.stacks[1][-1].face_down is False
 
 
@@ -373,7 +377,7 @@ def test_stop_mode_ignores_the_references_and_off_mode_is_recorded(tmp_path):
     _runner(cfg, _world(cfg, ["qr"] * 6, start=CLEAN), tmp_path, refs=refs, batch="b1").run()
     assert refs.n_refs == 6
     stop = _cfg(face_down_check="stop")
-    with pytest.raises(Stop, match=r"no PSA back-label QR was seen from above\)"):  # no learned reason: QR only
+    with pytest.raises(Stop, match=r"no back-label code was seen from above \(a PSA QR, a CGC QR or the CGC 2020-23 back barcode\)\)"):  # no learned reason: codes only
         _runner(stop, _world(stop, ["old"], start=40), tmp_path, refs=refs, batch="b2").run()
     off = _cfg(face_down_check="off")
     _runner(off, _world(off, ["old"], start=60), tmp_path, refs=refs, batch="b3").run()

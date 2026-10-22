@@ -16,7 +16,7 @@ from pathlib import Path
 from .certs import Verdict
 
 COLUMNS = ["batch_id", "position", "source_pocket", "source_index", "out_pocket", "out_index", "cert", "grader", "status", "sources", "raw_payload", "note", "image_front", "image_back", "scanned_at",
-           "face_down"]  # how the slab was proven face-down before the cup touched it: qr | operator | learned(score) | off
+           "face_down"]  # how the slab was proven face-down before the cup touched it: qr | code | operator | learned(score) | off
 
 
 @dataclass
@@ -30,7 +30,7 @@ class SlabResult:
     image_front: str = ""
     image_back: str = ""
     scanned_at: float = field(default_factory=time.time)
-    face_down: str = ""  # qr | operator | learned(0.93) | off ("" = not known, e.g. an unread slab under a double pick)
+    face_down: str = ""  # qr | code | operator | learned(0.93) | off ("" = not known, e.g. an unread slab under a double pick)
 
 
 def _row_values(batch_id: str, r: SlabResult) -> list:
@@ -150,7 +150,8 @@ class BatchWriter:
         return (f"<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>Batch {h.escape(self.batch_id)}</title>"
                 f"<style>{css}</style><h1>Batch {h.escape(self.batch_id)}</h1><p>{summary.get('slabs_visited', 0)} slabs. {h.escape(counts)}</p>"
                 "<p>Output position: P = pocket, # = position counted from the bottom of that stack. Face-down: how the slab was proven "
-                "face-down before the cup touched it (qr = back-label QR, operator = you confirmed it, learned = its card window matched "
+                "face-down before the cup touched it (qr = back-label QR, code = the CGC 2020-23 back-label barcode, operator = you confirmed "
+                "it, learned = its card window matched "
                 "the card backs of proven slabs, with the score; off = no check).</p>"
                 "<table><tr><th>#</th><th>Where</th><th>Cert</th><th>Grader</th><th>Status</th><th>Note</th><th>Face-down</th><th>Label</th></tr>"
                 + "".join(rows) + "</table>")

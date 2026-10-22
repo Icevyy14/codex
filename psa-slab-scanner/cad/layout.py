@@ -173,6 +173,42 @@ X_RAIL_LEN = 1300.0
 X_RAIL_X0 = sum(travel_needed()["x"]) / 2 - X_RAIL_LEN / 2  # -10: rail centred on the pocket row
 LABEL_TOWARD = "front"  # slabs face-down, label end toward the operator (keeps the arm out of camera view)
 
+# ---- Head camera and the face-down card window ----------------------------------------------------------------------
+# The M5 elbow on the buffer's port sits on the cup axis up to c+116.8 (model.py), only 23 mm under the head lens. With the
+# lens ON the cup axis it hides a disc of radius 25.6 mm on the slab at hover, and the card's top edge is only ~31.7 mm
+# from the axis, so no shape of head_foot leaves 300 mm2 of card on the label side. The lens therefore sits HEAD_CAM_DY
+# toward the label end: every part on the axis (elbow, flag tab, port hex, nut) then casts its shadow toward +Y, away from
+# the label-side card. The label also moves 5 mm toward the frame centre.
+HEAD_CAM_DY = -5.0  # head-camera axis, Y from the cup axis (negative = toward the label end); X offset 0
+# [Likely, measured on 27 real PSA backs in the realslabs set] the card's top edge is 34.8-37.8 mm (median 36.1) from the
+# slab's label-end edge; the label insert ends ~26 mm and its compartment ridge ~31 mm from that edge. sim.py guessed 32.
+CARD_TOP_FROM_EDGE = (34.8, 36.1, 37.8)  # min, median, max
+CARD_W = 63.5
+LABEL_BAND = 31.0  # label compartment, from the label-end edge
+WINDOW_PLACE_TOL = 1.75 + XY_CAL_RESIDUAL  # slab play in its pocket (Y: (139 - 135.5) / 2) + the cup's X calibration residual
+# Card-window rectangles [x0, y0, x1, y1] on the slab plane, mm from the CUP axis (X along the row, Y along the slab, label
+# end negative). The software's face_down_window_mm is measured from the head-CAMERA axis: use face_down_window_cam().
+# y0 = the latest-measured card top (37.8 mm from the edge) moved the full placement tolerance toward the cup, +0.2 mm;
+# x: the card's edge (31.75) less the slab's X play (1.85), the calibration residual and 1.1 mm of card-in-slab offset;
+# y1: the free cup's pad at hover (checks.py check_face_down_window: exact frustums, hover and held, nothing in them).
+FACE_DOWN_WINDOW_MM = [[-27.5, -27.5, 27.5, -16.0]]
+
+
+def face_down_window_cam() -> list[list[float]]:
+    """FACE_DOWN_WINDOW_MM measured from the head-camera axis (what software config face_down_window_mm means)."""
+    return [[x0, round(y0 - HEAD_CAM_DY, 3), x1, round(y1 - HEAD_CAM_DY, 3)] for x0, y0, x1, y1 in FACE_DOWN_WINDOW_MM]
+
+
+def window_area() -> float:
+    return sum((x1 - x0) * (y1 - y0) for x0, y0, x1, y1 in FACE_DOWN_WINDOW_MM)
+
+
+# ---- Carry-height sensor (Z stall guard) ------------------------------------------------------------------------------
+# The spare TCST2103 endstop board sits on the Z spine (fixed to the X carriage), a flag on the z_plate (moves with Z): the
+# beam is blocked for every cup height from CARRY_SENSOR_C0 up to the Z hard top stop and clear below it. The software
+# reads it before every sideways move, so a Z stall while lifting stops the run instead of dragging a slab over the rods.
+CARRY_SENSOR_C0 = C_SAFE_EMPTY - 1.5  # 235.0: lowest cup height with the beam blocked (the flag's top edge on the beam)
+
 
 def check() -> list[str]:
     """Static sanity checks; returns a list of problems (empty = OK)."""
@@ -230,6 +266,20 @@ def check() -> list[str]:
         problems.append("left X bumper must stop the carriage >= 2 mm on its rail and below the home switch")
     if not travel_needed()["x"][1] + 15 + 2 <= X_HARD_STOP[1] <= X_RAIL_X0 + X_RAIL_LEN - MGN12H_L / 2 - 2:
         problems.append("right X bumper must lie beyond the soft limit and stop the carriage >= 2 mm on its rail")
+    # face-down card window: area, and on the card (not the label) wherever the slab lies in its pocket
+    edge = -SLAB_H / 2
+    card_top = edge + CARD_TOP_FROM_EDGE[2] + WINDOW_PLACE_TOL  # nearest the cup the card top can be
+    if window_area() < 300.0:
+        problems.append("face-down card window under 300 mm2 (software facedown.MIN_WINDOW_MM2)")
+    for x0, y0, x1, y1 in FACE_DOWN_WINDOW_MM:
+        if not (x0 < x1 and y0 < y1 < 0):
+            problems.append("face-down window rectangles must be [x0, y0, x1, y1] on the label side (y < 0)")
+        if y0 < card_top or max(abs(x0), abs(x1)) > CARD_W / 2 - 1.85 - XY_CAL_RESIDUAL - 1.0:
+            problems.append("face-down window reaches off the card for a slab at the edge of its pocket play")
+        if y0 < edge + LABEL_BAND + WINDOW_PLACE_TOL:
+            problems.append("face-down window reaches the label band")
+    if not C_SAFE_EMPTY - 2.0 <= CARRY_SENSOR_C0 < C_SAFE_EMPTY:
+        problems.append("carry sensor must trip just below C_SAFE_EMPTY")
     return problems
 
 

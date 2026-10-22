@@ -106,7 +106,7 @@
       78.0,
       33.0
     ],
-    "volume_cm3": 41.6,
+    "volume_cm3": 41.5,
     "note": "PETG, carriage face down, nut shelf up, 6 walls, 50% infill"
   },
   {
@@ -114,10 +114,10 @@
     "qty": 1,
     "size_mm": [
       45.5,
-      63.5,
+      56.5,
       45.5
     ],
-    "volume_cm3": 34.8,
+    "volume_cm3": 31.0,
     "note": "PETG, foot down (as exported), 5 walls, 40% infill; clear the 1.9 mm flag slot and the board slots with a hacksaw blade"
   },
   {
@@ -125,10 +125,10 @@
     "qty": 1,
     "size_mm": [
       48.0,
-      71.0,
+      76.0,
       26.0
     ],
-    "volume_cm3": 15.4,
+    "volume_cm3": 16.4,
     "note": "PETG matte black, shelf face down (as exported); the ring seat bridges ~30 mm between its 4 legs (tree supports there if your printer sags)"
   },
   {
@@ -179,11 +179,11 @@
     "part": "phase0_tray",
     "qty": 1,
     "size_mm": [
-      154.0,
+      158.4,
       151.0,
       20.0
     ],
-    "volume_cm3": 50.3,
+    "volume_cm3": 51.1,
     "note": "PLA/PETG (Phase 0 test jig), ledges down"
   },
   {
@@ -191,22 +191,44 @@
     "qty": 1,
     "size_mm": [
       154.0,
-      50.0,
+      55.0,
       11.4
     ],
-    "volume_cm3": 54.9,
+    "volume_cm3": 61.0,
     "note": "PLA/PETG (Phase 0 test jig), ring up"
   },
   {
     "part": "phase0_occluder_mount",
     "qty": 1,
     "size_mm": [
-      89.2,
+      91.4,
       59.2,
       18.0
     ],
-    "volume_cm3": 14.1,
+    "volume_cm3": 14.8,
     "note": "PLA/PETG (Phase 0 test jig), flat on its beam (as exported), 4 walls, 30% infill"
+  },
+  {
+    "part": "carry_sensor_mount",
+    "qty": 1,
+    "size_mm": [
+      48.0,
+      28.0,
+      5.0
+    ],
+    "volume_cm3": 6.2,
+    "note": "PETG, flat on its spine face (as exported), 4 walls, 40% infill"
+  },
+  {
+    "part": "carry_flag_arm",
+    "qty": 1,
+    "size_mm": [
+      46.0,
+      34.5,
+      24.0
+    ],
+    "volume_cm3": 17.2,
+    "note": "PETG, standing on its bottom face (as exported), 4 walls, 40% infill"
   },
   {
     "part": "awl_adapter",

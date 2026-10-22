@@ -27,6 +27,7 @@ during G38.x, so a plain G1 would drive into anything unexpected below the head.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import math
 import time
@@ -37,10 +38,10 @@ from typing import Callable
 
 import cv2
 
-from .certs import CodeRead, ItfModel, Verdict, consensus
+from .certs import TWO_D, CodeRead, ItfModel, Verdict, consensus, face_from_above, side_evidence
 from .config import Config
 from .decode import _to_gray as to_gray
-from .decode import decode_frame, ocr_digits
+from .decode import decode_frame, label_band, ocr_digits
 from .facedown import BASELINE_MAX, GLARE_REF_MAX, MIN_TEXTURE, CardBackRefs, describe, draw_window, frame_view_mm, image_rects, learned_match, learned_ready
 from .hw import SensorFault
 from .motion import ControllerLost, SafetyViolation
@@ -75,9 +76,18 @@ class FaceDownStop(Stop):
         self.pocket, self.why = pocket, why
 
 
+BACK_CODES = "a PSA back QR, a CGC back QR or the CGC 2020-23 back barcode"  # certs.SIDE_PROOFS: what proves a slab face-down
 FACE_DOWN_OK_REFUSED = ("--face-down-ok refused: the batch did not stop at the face-down check last time, so there is no slab for it to "
                         "confirm. Nothing moved. Resume without it; if a slab the check cannot confirm comes next, the run stops there and "
                         "you can confirm that one.")
+
+
+def needs_ocr(verdict: Verdict, reads: list[CodeRead]) -> bool:
+    """Front OCR is worth its time when nothing was read, or when only barcodes (no QR) were: the printed digits are
+    then the independent check that can make a one-barcode read 'ok' (certs.consensus)."""
+    machine = [r for r in reads if r.source != "ocr"]
+    one_d_only = bool(machine) and not any(r.symbology in TWO_D for r in machine)
+    return verdict.status == "no_read" or (verdict.status == "needs_review" and one_d_only)
 
 
 def last_face_down_stop(events: list[dict]) -> int | None:
@@ -184,6 +194,7 @@ class Runner:
         self.should_stop = should_stop  # polled between slabs (web Stop button, Ctrl-C)
         self.st = State()
         self.itf = ItfModel()
+        self._frame_seq = 0  # numbers every decoded frame (CodeRead.frame): reads of one frame are not independent
         self.journal = writer.dir / "journal.jsonl"
         self.z = None  # machine Z of the head; None while a move is in flight or after an error (secure() re-reads it)
         self.at: tuple[float, float] | None = None  # bed XY of the last completed _go
@@ -465,18 +476,20 @@ class Runner:
 
     def _read(self, frames, camera: str, distance_mm: float | None = None) -> tuple[list[CodeRead], list[str]]:
         """Decode frames. Head ('back') frames are cropped to the pocket under the cup. One read per
-        (symbology, payload) per frame: overlapping tiles of one frame are not separate evidence.
+        (symbology, payload) per frame: overlapping tiles of one frame are not separate evidence. Every read carries
+        its frame's number (CodeRead.frame), which consensus() uses against phantom reads.
         No OCR here (see _front_ocr)."""
         roi = self._head_roi(distance_mm) if camera == "back" and distance_mm else None
         reads: list[CodeRead] = []
         unparsed: list[str] = []
         for f in frames:
+            self._frame_seq += 1
             r, u = decode_frame(f, camera, self.cfg.custom_regex, allow_ocr=False, roi=roi)
             seen = set()
             for x in r:
                 if (x.symbology, x.raw) not in seen:
                     seen.add((x.symbology, x.raw))
-                    reads.append(x)
+                    reads.append(dataclasses.replace(x, frame=f"{camera}{self._frame_seq}"))
             unparsed += [x for x in u if x not in unparsed]
         return reads, unparsed
 
@@ -485,7 +498,9 @@ class Runner:
         ITF-only read. Never on the head camera: through the clear slab it sees the card back's own numbers."""
         if not self.cfg.allow_ocr or not frames or any(r.source == "ocr" for r in reads):
             return []
-        return ocr_digits(to_gray(frames[-1]), "front")
+        gray = to_gray(frames[-1])
+        # the label around a barcode read from below (all frames of one pose show it in the same place), else the frame
+        return ocr_digits(gray, "front", band=label_band(gray.shape, [r for r in reads if r.camera == "front"]))
 
     def _decide(self, reads: list[CodeRead], held_reads: list[CodeRead]) -> Verdict:
         """consensus() plus the run-level rules: the frame from above the stack alone never makes an 'ok'
@@ -494,7 +509,7 @@ class Runner:
         cfg = self.cfg
         v = consensus(reads, self.itf, accepted=tuple(cfg.accepted_graders))
         if v.status == "ok" and v.cert:
-            support = {c for r in held_reads for c in (r.cert, r.alt_cert) if c}
+            support = {r.cert for r in held_reads}
             if v.cert not in support:
                 v = Verdict("needs_review", v.cert, v.sources, "read only in the frame from above the stack (a neighbour's label?) - verify by eye", v.grader, v.raw)
         if v.status == "ok" and v.grader == "PSA" and cfg.psa_cert_digits and v.cert and len(v.cert) not in tuple(cfg.psa_cert_digits):
@@ -555,43 +570,47 @@ class Runner:
         if cfg.face_down_check == "off":
             return "face-down check: OFF - a slab loaded face-up gets the cup on its front"
         if cfg.face_down_check == "stop":
-            return "face-down check: back QR only - every slab without a PSA back QR stops for you"
+            return f"face-down check: back-label codes only - every slab without one ({BACK_CODES}) stops for you"
         why = learned_ready(self.refs, cfg.face_down_threshold, cfg.face_down_min_refs, cfg.face_down_window_mm, cfg.face_down_threshold_sig)
         if not why:
-            return (f"face-down check: learned (threshold {cfg.face_down_threshold:.2f}, {self.refs.summary()}): a slab without a back QR "
-                    "is picked only if its card window matches a known card back")
-        return f"face-down check: {why}. Until then every slab without a PSA back QR stops for you, as in 'stop' mode"
+            return (f"face-down check: learned (threshold {cfg.face_down_threshold:.2f}, {self.refs.summary()}): a slab without a back-label "
+                    "code is picked only if its card window matches a known card back")
+        return f"face-down check: {why}. Until then every slab without a back-label code ({BACK_CODES}) stops for you, as in 'stop' mode"
 
-    def _check_face_down(self, src: int, hover_reads: list[CodeRead], frame=None) -> str:
-        """Before the cup touches a slab: the frame from above must show a PSA back-label QR (PSA front labels
-        carry no QR), or - in "learned" mode - a card window that matches the card backs of earlier proven slabs.
-        Anything else - an older label without a back QR that matches nothing, a face-up slab, another grader's
-        code (they sit on the front label) - stops the run untouched until the operator confirms. Returns how the
-        slab was proven face-down: qr | operator | learned(score) | off."""
+    def _check_face_down(self, src: int, hover_reads: list[CodeRead], frame=None, unparsed: list[str] | None = None) -> str:
+        """Before the cup touches a slab, the frame from above must prove it FACE-DOWN: a code printed only on the BACK
+        label (certs.SIDE_PROOFS, rules that held on every real label: a PSA QR, a graded CGC QR, the CGC 2020-23 back
+        barcode), or - in "learned" mode - a card window that matches the card backs of earlier proven slabs. A code
+        printed only on the FRONT label (a CGC Authentic QR with grade 0_0, the CGC 10/13-digit barcode) means the slab
+        is FACE-UP. Back and front codes together, or two different back labels, mean another slab's label is in view.
+        Those, and a slab with no proof that matches no card back (PSA ITF/Code128 sit on both sides; older PSA labels,
+        CGC Authentic backs, BGS and SGC carry no back code), stop the run untouched until the operator confirms.
+        ``unparsed``: the payloads decode_frame could not read a cert from (a CGC QR without a cert is a hint there).
+        Returns how the slab was proven face-down: qr | code | operator | learned(score) | off."""
         cfg = self.cfg
         self._pending_ref = None
         if cfg.face_down_check == "off":
             return "off"
         learned = cfg.face_down_check == "learned"
         desc = self._fd_describe(frame) if learned else None
-        psa_back = any(r.source == "back_qr" and r.grader == "PSA" for r in hover_reads)
-        fronts = sorted({r.grader for r in hover_reads if r.grader not in ("PSA", "unknown")})
+        face, why, backs = face_from_above(hover_reads, unparsed or [])
+        front_in_view = face in ("up", "neighbour")  # a front-label code is (or may be) in view: never learned from
         ok_pocket, self.face_down_ok_pocket = self.face_down_ok_pocket, None  # a confirmation is for the first slab checked only
         if ok_pocket is not None and ok_pocket != src:
             self.log(f"--face-down-ok was for the top slab of pocket {ok_pocket}, but the next slab is in pocket {src}: not used")
             self._journal({"face_down_ok_unused": ok_pocket, "pocket": src, "t": round(time.time(), 1)})
         elif ok_pocket is not None:
             # a front code in view contradicts the confirmation: the slab is picked (your call), but never learned from
-            note = self._defer_reference(desc, src, "operator") if learned and not fronts else (
+            note = self._defer_reference(desc, src, "operator") if learned and not front_in_view else (
                 "not used as a reference: a front-label code is in view" if learned else "")
             self._journal({"face_down_confirmed": src, "by": "operator", **({"reference": note} if note else {}), "t": round(time.time(), 1)})
             return "operator"
-        if psa_back and not fronts:
-            if learned:
-                self._learn(desc, "qr", src, {"cert": next(r.cert for r in hover_reads if r.source == "back_qr" and r.grader == "PSA")})
-            return "qr"
+        if face == "down":
+            if learned:  # any back-label proof teaches the learned check, as a PSA back QR always did
+                self._learn(desc, "qr", src, {"cert": backs[0].cert or "", "proof": backs[0].kind})
+            return "qr" if any(e.kind.endswith("_qr") for e in backs) else "code"
         why_learned = ""
-        if learned and not fronts:
+        if learned and face == "unknown":
             ok, why_learned, m = learned_match(self.refs, desc, cfg.face_down_threshold, cfg.face_down_min_refs, cfg.face_down_window_mm,
                                                cfg.face_down_threshold_sig)
             if ok:
@@ -601,25 +620,29 @@ class Runner:
                                "prototype": m.proto, "threshold": cfg.face_down_threshold, "refs": self.refs.n_refs, "texture": round(desc.texture, 1),
                                "baseline": round(self.refs.baseline_score(desc), 3), "position": self.st.position + 1, "t": round(time.time(), 1)})
                 return f"learned({m.score:.2f})"
-        why = (f"a {'/'.join(fronts)} code is visible from above, and those sit on the FRONT label" if fronts
-               else "no PSA back-label QR was seen from above" + (f"; {why_learned}" if why_learned else ""))
+        if why_learned:
+            why += f"; {why_learned}"
         self.face_down_stops += 1
         if self.sim_operator is not None and self.sim_operator(src):
-            note = self._defer_reference(desc, src, "operator") if learned and not fronts else ""
+            note = self._defer_reference(desc, src, "operator") if learned and not front_in_view else ""
             self._journal({"face_down_confirmed": src, "by": "simulated operator", "why": why, **({"reference": note} if note else {}),
                            "t": round(time.time(), 1)})
             return "operator"
-        teach = (learned and not fronts and desc is not None and desc.texture >= MIN_TEXTURE and desc.glare <= GLARE_REF_MAX
+        teach = (learned and not front_in_view and desc is not None and desc.texture >= MIN_TEXTURE and desc.glare <= GLARE_REF_MAX
                  and self.refs.baseline_score(desc) < BASELINE_MAX)
+        confirm = ("resume with --face-down-ok (web page: tick 'the top slab is face-down'). That confirms this one slab only"
+                   + (": once it is placed, its card back becomes a reference for the learned check." if teach else "."))
+        if face == "up":
+            raise FaceDownStop(f"Pocket {src}: the top slab is FACE-UP ({why}). The cup must never touch a slab's front, so nothing touched "
+                               f"it. Turn the top slab of pocket {src} face-down, label end toward you, then resume. Only if it already is "
+                               f"face-down, {confirm}", src, why)
         raise FaceDownStop(f"Pocket {src}: the top slab could not be confirmed FACE-DOWN before touching it ({why}). The cup must never touch a "
                            f"slab's front, so nothing touched it. Look at the top slab of pocket {src}: if it is face-up, turn it face-down. If it "
-                           "is face-down (older labels have no back QR), resume with --face-down-ok (web page: tick 'the top slab is face-down'). "
-                           "That confirms this one slab only"
-                           + (": once it is placed, its card back becomes a reference for the learned check." if teach else "."), src, why)
+                           f"is face-down (older PSA labels, CGC Authentic, BGS and SGC slabs have no back-label code), {confirm}", src, why)
 
     def _defer_reference(self, desc, src: int, source: str) -> str:
         """An operator-confirmed slab is learned from only after it was placed (``_settle_reference``): its cert and back
-        photo then go with it, and a PSA back-label QR seen from BELOW (the slab was face-up after all) vetoes it."""
+        photo then go with it, and a back-label code seen from BELOW (the slab was face-up after all) vetoes it."""
         self._pending_ref = (desc, src, source)
         return "pending: learned once the slab is placed"
 
@@ -628,8 +651,9 @@ class Runner:
             return
         desc, src, source = self._pending_ref
         self._pending_ref = None
-        if any(r.source == "front_qr" and r.grader == "PSA" for r in reads):
-            note = "not used as a reference: the read station saw a PSA back-label QR from below, so this slab was FACE-UP"
+        below = [e for e in side_evidence([r for r in reads if r.camera == "front"]) if e.certain and e.side == "back"]
+        if below:
+            note = f"not used as a reference: the read station saw {below[0].what} from below, so this slab was FACE-UP"
             self.log(f"#{pos}: {note}. The cup touched its front: check it.")
         else:
             note = self._learn(desc, source, src, {"cert": verdict.cert or "", "image_back": image_back})
@@ -802,7 +826,7 @@ class Runner:
             self._z(self.c(s_pred) + cfg.approach_gap + 2)
             hover = self._frames(self.head_cam, "head", 1)
             hover_reads, unparsed = self._read(hover, "back", lens + cfg.approach_gap + 2)
-            face_down = self._check_face_down(src, hover_reads, hover[0])
+            face_down = self._check_face_down(src, hover_reads, hover[0], unparsed)
             if not cfg.hover_check:
                 hover_reads = []
         # bounded probe for the real top
@@ -862,14 +886,14 @@ class Runner:
             held_reads += f_reads
             unparsed += [x for x in f_unparsed if x not in unparsed]
             verdict = self._decide(reads, held_reads)
-            itf_only = bool(reads) and all(r.symbology == "ITF" for r in reads if r.source != "ocr")
-            if verdict.status == "no_read" or (verdict.status == "needs_review" and itf_only):
+            if needs_ocr(verdict, reads):
                 o = self._front_ocr(front_frames, reads)
                 if o:
                     reads += o
                     held_reads += o
                     verdict = self._decide(reads, held_reads)
-        to_output = verdict.status == "ok" or (verdict.status == "needs_review" and cfg.needs_review_to == "output")
+        # needs_review with no grader evidence (OCR only, a bare number) never goes to the output: it may not even be PSA or CGC
+        to_output = verdict.status == "ok" or (verdict.status == "needs_review" and cfg.needs_review_to == "output" and verdict.grader != "unknown")
         target = cfg.pocket(dst) if to_output else pex
         if target.index == pex.index and self.st.tops.get(pex.index, 0.0) + 2 * cfg.t_thick_max > cfg.max_line:
             raise Stop(f"Exception pocket {pex.index} is full. Empty it (those slabs need a hand check), then resume. The slab in the cup will be read again.")

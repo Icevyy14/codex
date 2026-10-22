@@ -153,6 +153,8 @@ def cut_list() -> list[tuple[str, str, float, int]]:
          round(13.0 - (FLAG_BOTTOM - FLAG_BEND_Z), 1), 1),
         ("2020", "Phase 0 jig post (cut square +/-0.5)", P0_POST, 2),
         ("2020", "Phase 0 jig arm stub (5.5 mm cross hole 19 mm from one end, match-drilled through head_foot)", P0_STUB, 1),
+        ("1 mm aluminium sheet", f"carry-sensor flag, {CF_X[1] - CF_X[0]:.1f} wide, flat (2 x 3.4 holes {CF_X[1] - CF_SCREWS[0][0]:.1f} mm from the inner edge, "
+         f"{CF_Z_TOP - CF_SCREWS[1][1]:.0f} and {CF_Z_TOP - CF_SCREWS[0][1]:.0f} mm below the top edge = the trip edge)", CF_LEN, 1),
     ]
 
 
@@ -389,6 +391,7 @@ def carriage_parts(cup_x: float) -> list[Part]:
         for dy in (-15.5, 15.5):  # Z motor screws from below, in counterbores
             parts.append(head(f"fc_zmot_{dx:+.0f}{dy:+.0f}", (mx + dx, my + dy, ztop + M3_CBORE[1]), (0, 0, -1), M3_HEAD, "carriage"))
     parts.append(head("fc_mount_tab", (cup_x + ZMM_TAB_BOLT[0], ZMM_TAB_Y[0], ztop + ZMM_TAB_BOLT[1]), (0, -1, 0), M5_HEAD, "carriage"))
+    parts += carry_sensor_parts(cup_x)
     return parts
 
 
@@ -472,7 +475,12 @@ def z_motor_mount() -> cq.Workplane:
 # --------------------------------------------------------------------------- head (moves with Z)
 
 FOOT_Z = (62.0, 75.0)
+# The foot stops FOOT_LABEL_Y short of the cup axis on the label side (was 15): further out it is in the head camera's view
+# of the face-down card window (layout.FACE_DOWN_WINDOW_MM; checks.py check_face_down_window). 9 mm still carries the 14 mm
+# M10 nuts (7 mm to the flats, 8.1 to the corners) and leaves 3.8 mm of wall round the M10 hole.
+FOOT_LABEL_Y = 9.0
 CAM_Z = L.CAM_TO_SLAB  # lens face height above the cup face (= held slab back)
+CAM_DY = L.HEAD_CAM_DY  # lens axis, Y from the cup axis (toward the label end): see layout.py
 ARM_Z = (FOOT_Z[0] + 3.0, L.Z_CARRIAGE_ABOVE_CUP + 55.0)  # arm bottoms on head_foot's socket floor; top 3 mm under the z_plate top
 Z_PLATE_ARM_BOLTS = (-12.0, 51.5)  # z_plate local Z: below and above the MGN12H block (0 .. 45.4)
 SENSOR_POST_X = (26.5, 30.5)  # contact-sensor post on the +X side of the buffer (clear of the arm at Y >= 25)
@@ -519,6 +527,10 @@ PROBE_BEAM_Z = 99.0  # beam centre above c; the flag's top edge crosses it after
 PROBE_ADJ = 4.0  # vertical slots for the board's M3 screws: +/- this much trip adjustment (covers BUFFER_SHIFT + PROBE_TRIP_TOL)
 PROBE_PCB = (33.0, 10.5, 1.6)  # endstop board: along the hole line (Y), across (Z), thickness (X)
 PROBE_HOLES = 19.0
+# Board screws: M3x16 with a washer under the head and under the nut (BUILD_GUIDE 7.6: solder joints under the board stand it
+# off the post, and an M3x12 then leaves no thread in the nut). The tip runs on 3.9 mm past the nut.
+PROBE_SCREW_L = 16.0
+M3_WASHER = (7.0, 0.5)  # ISO 7089 M3: OD, thickness
 TCST_GAP, TCST_AP, TCST_AP_DEPTH = 3.1, 1.0, 3.8  # slot width (Y); aperture slit width along the flag travel (Z), depth from the arm tips (X)
 TCST_H, TCST_W, TCST_L, TCST_U = 10.8, 6.3, 24.5, 11.9  # height (X), width (Z), flange length (Y), U-body length (Y)
 TCST_FLANGE_T, TCST_SLOT_DEPTH, TCST_AXIS = 3.1, 7.7, 2.6  # flange thickness; slot depth and optical axis from the arm tips
@@ -569,10 +581,61 @@ def occluder_parts(cup_x: float, cup_y: float, c: float, compression: float = L.
         Part(prefix + "vac_fitting", vac_fitting().translate((x, y, m + PORT_TOP + FLAG_T)), BLACK, "purchased", group, note="M5 barb elbow, 4 mm tube toward +Y"),
         Part(prefix + "contact_sensor", probe_sensor().translate((x, y, c)), BLACK, "purchased", group, note="TCST2103 optical endstop, slot along Z"),
     ]
-    for yy in (PROBE_Y - PROBE_HOLES / 2, PROBE_Y + PROBE_HOLES / 2):  # M3x12 through the sensor flange, board and post slot
-        parts.append(Part(prefix + f"probe_m3_{yy:+.0f}", cyl((x + TCST_BASE_X - TCST_FLANGE_T, y + yy, c + PROBE_BEAM_Z), M3_HEAD[0], M3_HEAD[1], (-1, 0, 0)), STEEL, "fastener", group))
-        parts.append(Part(prefix + f"probe_nut_{yy:+.0f}", cyl((x + SENSOR_POST_X[1], y + yy, c + PROBE_BEAM_Z), 6.4, 2.4, (1, 0, 0)), STEEL, "fastener", group))
+    for yy in (PROBE_Y - PROBE_HOLES / 2, PROBE_Y + PROBE_HOLES / 2):  # M3x16 + washers through the sensor flange, board and post slot
+        hx = x + TCST_BASE_X - TCST_FLANGE_T  # flange top: the head's washer sits here
+        head_w = cyl((hx, y + yy, c + PROBE_BEAM_Z), M3_WASHER[0], M3_WASHER[1], (-1, 0, 0))
+        head_w = head_w.union(cyl((hx - M3_WASHER[1], y + yy, c + PROBE_BEAM_Z), M3_HEAD[0], M3_HEAD[1], (-1, 0, 0)))
+        parts.append(Part(prefix + f"probe_m3_{yy:+.0f}", head_w, STEEL, "fastener", group))
+        nx = x + SENSOR_POST_X[1]  # post's +X face: washer, nut, then the screw tip
+        tip = hx - M3_WASHER[1] + PROBE_SCREW_L
+        nut = cyl((nx, y + yy, c + PROBE_BEAM_Z), M3_WASHER[0], M3_WASHER[1], (1, 0, 0))
+        nut = nut.union(cyl((nx + M3_WASHER[1], y + yy, c + PROBE_BEAM_Z), 6.4, 2.4, (1, 0, 0)))
+        nut = nut.union(cyl((nx + M3_WASHER[1] + 2.0, y + yy, c + PROBE_BEAM_Z), 3.0, tip - nx - M3_WASHER[1] - 2.0, (1, 0, 0)))
+        parts.append(Part(prefix + f"probe_nut_{yy:+.0f}", nut, STEEL, "fastener", group, note=f"washer + nut + the M3x{PROBE_SCREW_L:.0f} tip"))
     return parts
+
+
+def occluder_boxes(compression: float = 0.0) -> list[tuple[str, tuple[float, float, float, float, float, float], int]]:
+    """The head as the head camera sees it, for the simulator (software/slabscan/sim.py HEADS): (name, (x0, y0, x1, y1, z0, z1),
+    grey) boxes, mm from the CUP axis (X along the row, Y along the slab, label end negative), z above the cup height c. The
+    lens front is at z = CAM_Z, CAM_DY from the cup axis. Each box bounds one simple solid of a CAD part; only what lies below
+    the lens (the drop arm is cut there; the LED-ring seat around the lens is outside the field of view). ``compression`` =
+    buffer travel (0 = free cup: the hover frame and a held slab). Greys are guesses for the sim (matte black PETG ~52)."""
+    t = compression
+    out: list = []
+
+    def cylb(name, d, z0, z1, g, x=0.0, y=0.0):
+        out.append((name, (x - d / 2, y - d / 2, x + d / 2, y + d / 2, z0, z1), g))
+
+    cylb("cup pad", PAD_B, t + PAD_REST, t + PAD_REST + PAD_Y, 25)
+    cylb("cup hub", PAD_HUB, t + PAD_REST + PAD_Y, t + PAD_REST + PAD_C, 30)
+    cylb("cup hex", HEX8, t + PAD_REST + PAD_C, t + PAD_REST + PAD_D, 120)
+    cylb("buffer rod", BUFFER_ROD_D, t + PAD_REST + PAD_D, BODY_Z[0], 170)
+    cylb("buffer nut (under the foot)", BUFFER_NUT[0], FOOT_Z[0] - BUFFER_NUT[1], FOOT_Z[0], 150)
+    cylb("buffer body", 10.0, BODY_Z[0], BODY_Z[1], 120)
+    z0, z1 = FOOT_Z
+    py0, py1 = PROBE_Y - 17.0, PROBE_Y + 17.0
+    out.append(("head_foot plate", (-15.0, -FOOT_LABEL_Y, 15.0, L.ARM_TO_CUP + 10, z0, z1), 52))
+    out.append(("head_foot extension", (15.0, py0, SENSOR_POST_X[1], py1, z0, z1), 52))
+    out.append(("head_foot arm sleeve", (-12.0, L.ARM_TO_CUP - 12, 12.0, L.ARM_TO_CUP + 12, z0, z1 + 18), 52))
+    cylb("buffer nut (on the foot)", BUFFER_NUT[0], FOOT_Z[1], FOOT_Z[1] + BUFFER_NUT[1], 150)
+    out.append(("sensor post", (SENSOR_POST_X[0], py0, SENSOR_POST_X[1], py1, z1, SENSOR_POST_TOP), 52))
+    gx0, gx1 = FLAG_X[0] - 1.0, TCST_BASE_X - 0.5
+    out.append(("flag guide fins", (gx0, PROBE_Y - GUIDE_GAP / 2 - GUIDE_WALL, gx1, PROBE_Y + GUIDE_GAP / 2 + GUIDE_WALL, z1, GUIDE_TOP), 52))
+    pl, pw, _ = PROBE_PCB
+    out.append(("endstop board + TCST2103", (TCST_TIP_X, PROBE_Y - pl / 2, SENSOR_POST_X[0], PROBE_Y + pl / 2, PROBE_BEAM_Z - pw / 2, PROBE_BEAM_Z + pw / 2), 32))
+    out.append(("flag blade", (FLAG_X[0], PROBE_Y - FLAG_T / 2, FLAG_X[1], PROBE_Y + FLAG_T / 2, t + FLAG_BOTTOM, t + FLAG_TOP), 180))
+    out.append(("flag neck + band", (-FLAG_TAB_X, PROBE_Y - FLAG_T / 2 - FLAG_BEND_R, FLAG_X[1], PROBE_Y + FLAG_T / 2, t + FLAG_BAND_Z, t + FLAG_BEND_Z + FLAG_BEND_R + FLAG_T), 180))
+    cylb("buffer neck", BUF_NECK[0], t + BODY_Z[1], t + BODY_Z[1] + BUF_NECK[1], 140)
+    cylb("port hex", HEX8, t + BODY_Z[1] + BUF_NECK[1], t + PORT_TOP, 140)
+    out.append(("flag tab", (-FLAG_TAB_X, FLAG_TAB_END, FLAG_TAB_X, PROBE_Y - FLAG_T / 2, t + PORT_TOP, t + PORT_TOP + FLAG_T), 180))
+    d, h = VAC_FITTING
+    ad, reach, az = VAC_BARB
+    cylb("vacuum elbow", d, t + PORT_TOP + FLAG_T, t + PORT_TOP + FLAG_T + h, 140)
+    out.append(("elbow barb + tube end (toward +Y)", (-ad / 2, 0.0, ad / 2, reach, t + PORT_TOP + FLAG_T + az - ad / 2, t + PORT_TOP + FLAG_T + az + ad / 2), 140))
+    arm_y1 = Z_CAR_FRONT - L.Z_PLATE_T
+    out.append(("drop arm (cut at the lens)", (-10.0, arm_y1 - 20, 10.0, arm_y1, ARM_Z[0], CAM_Z), 60))
+    return [(n, tuple(round(v, 2) for v in b), g) for n, b, g in out]
 
 
 def vac_fitting() -> cq.Workplane:
@@ -594,9 +657,10 @@ def head_parts(cup_x: float, c: float, compression: float = L.CUP_HANG) -> list[
     off = arm_y1 - 10 - cup_y  # = ARM_TO_CUP
     parts.append(Part("camera_bracket", camera_bracket(off).translate((cup_x, cup_y, c)), PETG, "printed", "head"))
     parts += occluder_parts(cup_x, cup_y, c, compression)
-    zl, zs = c + CAM_Z, c + CAM_Z + HEAD_LENS_PROJ
-    cam = cbox(cup_x, cup_y, zs + 5, 38, 38, 10).union(cbox(cup_x, cup_y, (zl + 6 + zs) / 2, 16, 16, zs - zl - 6)).union(cyl((cup_x, cup_y, zl), 14, 6))
-    parts.append(Part("head_camera", cam, GREEN, "purchased", "head", note="USB 8MP IMX179, M12 3.6 mm"))
+    zl, zs, ly = c + CAM_Z, c + CAM_Z + HEAD_LENS_PROJ, cup_y + CAM_DY
+    cam = cbox(cup_x, ly, zs + 5, 38, 38, 10).union(cbox(cup_x, ly, (zl + 6 + zs) / 2, 16, 16, zs - zl - 6)).union(cyl((cup_x, ly, zl), 14, 6))
+    parts.append(Part("head_camera", cam, GREEN, "purchased", "head", note=f"USB 8MP IMX179, M12 3.6 mm; lens {-CAM_DY:.0f} mm toward the label from the cup axis"))
+    parts += carry_flag_parts(cup_x, c)
     for dx in (-10, 10):
         for dz in (-10, 10):  # MGN12H screws in counterbores on the arm side
             parts.append(head(f"fh_zcar_{dx:+d}{dz:+d}", (cup_x + dx, Z_CAR_FRONT - L.Z_PLATE_T + M3_CBORE[1], zc_bottom + 22.7 + dz), (0, -1, 0), M3_HEAD, "head"))
@@ -616,6 +680,7 @@ def z_plate() -> cq.Workplane:
     for x, z in car:  # counterbored: the drop arm covers X +/-10
         plate = plate.cut(cyl((x, -t - 1, z), M3_CBORE[0], 1 + M3_CBORE[1], (0, 1, 0)))
     plate = holes_y(plate, [(0, z) for z in Z_PLATE_ARM_BOLTS], M5_CLR)  # drop arm T-nuts, outside the MGN12H block
+    plate = holes_y(plate, CA_EAR_SCREWS, 2.5)  # carry_flag_arm: M3x10 self-tapping pilots
     for z in Z_PLATE_ARM_BOLTS:  # button-head recesses: only 5 mm between the plate back and the Z rail face
         plate = plate.cut(cyl((0, -2.5, z), 10.0, 3.5, (0, 1, 0)))
     sx, sy = L.Z_SCREW_DX, L.Z_SCREW_Y - Z_CAR_FRONT  # lead screw axis in local coords (24, -20)
@@ -631,12 +696,13 @@ def head_foot(arm_offset: float) -> cq.Workplane:
     """Holds the spring buffer (M10) on the cup axis and the contact probe; bolts to the drop-arm end.
     +X side: the sensor post (endstop board on its -X face, M3 + nuts in vertical slots for +/- PROBE_ADJ of trip
     adjustment) and the flag guide: two fins on the foot top with a GUIDE_GAP slot between them, continued as a slot
-    through the foot, in which the flag's blade rides over the whole stroke. The arm socket stays clear (Y >= 25)."""
+    through the foot, in which the flag's blade rides over the whole stroke. The arm socket stays clear (Y >= 25).
+    On the label side nothing reaches past Y = -FOOT_LABEL_Y: the head camera looks past it at the card window."""
     z0, z1 = FOOT_Z
     py0, py1 = PROBE_Y - 17.0, PROBE_Y + 17.0  # post covers the 33 mm board
-    body = box(-15, -15, z0, 15, arm_offset + 10, z1)
+    body = box(-15, -FOOT_LABEL_Y, z0, 15, arm_offset + 10, z1)
     body = body.union(box(-12, arm_offset - 12, z0, 12, arm_offset + 12, z1 + 18))  # sleeve around the arm end
-    body = body.union(box(15, -16.5, z0, SENSOR_POST_X[1], py1, z1))  # foot extension to the sensor post
+    body = body.union(box(15, py0, z0, SENSOR_POST_X[1], py1, z1))  # foot extension to the sensor post
     body = body.union(box(SENSOR_POST_X[0], py0, z1 - 0.01, SENSOR_POST_X[1], py1, SENSOR_POST_TOP))  # sensor post
     gx0, gx1 = FLAG_X[0] - 1.0, TCST_BASE_X - 0.5  # fins stop short of the board, which slides past their ends
     for y in (PROBE_Y - GUIDE_GAP / 2 - GUIDE_WALL, PROBE_Y + GUIDE_GAP / 2):
@@ -712,20 +778,120 @@ def ring_seat(z_bot: float, z_top: float, ring_od: float) -> cq.Workplane:
 
 
 def camera_bracket(arm_offset: float) -> cq.Workplane:
-    """Clamps the drop arm; holds the head camera board level, lens on the cup axis CAM_Z above the cup face.
-    The board sits on the shelf, HEAD_LENS_PROJ above the lens front; the LED ring hangs around the lens.
-    Print in matte black, shelf face down."""
-    z0 = CAM_Z
+    """Clamps the drop arm; holds the head camera board level, lens CAM_Z above the cup face and CAM_DY from the cup axis
+    (toward the label end). The board sits on the shelf, HEAD_LENS_PROJ above the lens front; the LED ring hangs around
+    the lens. Print in matte black, shelf face down."""
+    z0, ly = CAM_Z, CAM_DY
     zs = z0 + HEAD_LENS_PROJ  # shelf top = board underside
-    shelf = box(-24, -24, zs - 4, 24, arm_offset - 10, zs)
-    shelf = shelf.cut(cyl((0, 0, zs - 10), LENS_WINDOW_D, 20))  # lens holder window
-    shelf = holes_z(shelf, [(dx, dy) for dx in (-16, 16) for dy in (-16, 16)], 2.2)  # 32 mm board holes, M2 + nuts
-    seat = ring_seat(z0 - 4, zs - 4, HEAD_RING_OD)
+    shelf = box(-24, ly - 24, zs - 4, 24, arm_offset - 10, zs)
+    shelf = shelf.cut(cyl((0, ly, zs - 10), LENS_WINDOW_D, 20))  # lens holder window
+    shelf = holes_z(shelf, [(dx, ly + dy) for dx in (-16, 16) for dy in (-16, 16)], 2.2)  # 32 mm board holes, M2 + nuts
+    seat = ring_seat(z0 - 4, zs - 4, HEAD_RING_OD).translate((0, ly, 0))
     clamp = box(-12, arm_offset - 12, z0 - 6, 12, arm_offset + 12, zs)
     body = shelf.union(seat).union(clamp)
     body = body.cut(box(-10.2, arm_offset - 10.2, z0 - 7, 10.2, arm_offset + 10.2, zs + 1))  # arm bore, cut last
     body = holes_x(body, [(arm_offset, z0 + 9)], M5_CLR)
     return body
+
+
+# --------------------------------------------------------------------------- carry-height sensor (Z stall guard)
+# The spare TCST2103 endstop board (the BOM's sensors come as a 3-pack) on the Z spine's -X face, in carry_sensor_mount
+# (2 x M5x10 button heads into slot-6 T-nuts in the spine's -X slot: slide it along the slot to set the trip). Same board
+# orientation as the probe: arms toward -X, hole line along Y, so its slot runs along Z. A flag cut from the 1 mm aluminium
+# sheet, on carry_flag_arm (screwed to the z_plate's front face), rises into the slot from below: its top edge crosses the
+# beam at c = CARRY_SENSOR_C0 and the flag stays in the beam up to the Z hard top stop. Below CARRY_SENSOR_C0 the slot is
+# clear. [Guessing] the board outline and header position, as for the probe board.
+CS_PLATE_T = 5.0  # mount plate: the M5 button heads sit on its outer face, 5 mm of wall (>= 2.5) under them
+CS_Y = sum(Z_SPINE_Y) / 2  # 76: the spine's -X slot = the sensor slot's mid-plane
+CS_FACE_X = L.Z_SPINE_OFFSET_X - 20  # -30: the spine's -X face, X from the cup axis
+CS_BASE_X = CS_FACE_X - CS_PLATE_T - PROBE_PCB[2]  # -36.6: sensor base (board front)
+CS_TIP_X = CS_BASE_X - TCST_H  # -47.4: arm tips
+CS_SCREW_L = 10.0  # M3x10 board screws: heads in pockets on the mount's spine side, washer + nut on the sensor flange
+CS_M5_DZ = 17.0  # M5 screws above and below the board
+CF_Z_TOP = 20.0  # flag top edge (the trip edge), above the Z carriage bottom (z_plate local Z)
+CF_LEN = 36.0  # flag height: blocked from the trip to the hard top stop (27 mm) with 8.5 mm to spare
+CF_X = (-62.0, CS_TIP_X + TCST_AP_DEPTH + 1.5)  # flag outer / inner edge: covers the aperture slit by 1.5 mm, 2.4 short of the slot bottom
+CS_BEAM_Z = L.CARRY_SENSOR_C0 + L.Z_CARRIAGE_ABOVE_CUP + CF_Z_TOP  # 550: beam height above the pad top (fixed with the carriage)
+CA_Z = (-4.0, CF_Z_TOP)  # carry_flag_arm, z_plate local Z
+CA_LEG_X = (-64.0, -52.0)  # the arm's leg beside the spine: 4.6 mm outside the sensor's arm tips
+CA_EAR_SCREWS = [(-24.0, 2.0), (-24.0, 14.0)]  # M3x10 self-tapping through the arm's ear into the z_plate front face (X, local Z)
+CF_SCREWS = [(-58.0, 2.0), (-58.0, 14.0)]  # M3x8 self-tapping through the flag into the arm's leg end (X, local Z)
+
+
+def carry_sensor_mount() -> cq.Workplane:
+    """Plate on the Z spine's -X face that carries the spare endstop board. Local origin: X = cup axis, Y = machine Y,
+    Z = the beam height (CS_BEAM_Z). The board's M3 heads sit in pockets on the spine side (fit the board first)."""
+    x0, x1 = CS_FACE_X - CS_PLATE_T, CS_FACE_X
+    plate = box(x0, CS_Y - 14, -24, x1, CS_Y + 14, 24)
+    holes = [(CS_Y - PROBE_HOLES / 2, 0.0), (CS_Y + PROBE_HOLES / 2, 0.0)]
+    plate = holes_x(plate, holes, M3_CLR)
+    for y, z in holes:  # M3 head pockets on the spine side
+        plate = plate.cut(cyl((x1 + 1, y, z), M3_CBORE[0], 1 + 3.2, (-1, 0, 0)))
+    return holes_x(plate, [(CS_Y, -CS_M5_DZ), (CS_Y, CS_M5_DZ)], M5_CLR)
+
+
+def carry_sensor_parts(cup_x: float) -> list[Part]:
+    """Fixed to the X carriage: the mount, the board + TCST2103 and the fastener heads that stand proud."""
+    zb = CS_BEAM_Z
+    parts = [Part("carry_sensor_mount", carry_sensor_mount().translate((cup_x, 0, zb)), PETG, "printed", "carriage"),
+             Part("carry_sensor", probe_sensor().translate((cup_x + CS_BASE_X - TCST_BASE_X, CS_Y - PROBE_Y, zb - PROBE_BEAM_Z)), BLACK, "purchased", "carriage",
+                  note="spare TCST2103 endstop board: carry-height sensor")]
+    fx = cup_x + CS_BASE_X - TCST_FLANGE_T  # flange top: washer + nut, then the screw tip
+    for y in (CS_Y - PROBE_HOLES / 2, CS_Y + PROBE_HOLES / 2):
+        tip = cup_x + CS_FACE_X - 3.2 - CS_SCREW_L
+        nut = cyl((fx, y, zb), M3_WASHER[0], M3_WASHER[1], (-1, 0, 0)).union(cyl((fx - M3_WASHER[1], y, zb), 6.4, 2.4, (-1, 0, 0)))
+        if tip < fx - M3_WASHER[1] - 2.4:
+            nut = nut.union(cyl((fx - M3_WASHER[1] - 2.0, y, zb), 3.0, fx - M3_WASHER[1] - 2.0 - tip, (-1, 0, 0)))
+        parts.append(Part(f"fc_carry_nut_{y:.0f}", nut, STEEL, "fastener", "carriage"))
+    for dz in (-CS_M5_DZ, CS_M5_DZ):
+        parts.append(head(f"fc_carry_m5_{dz:+.0f}", (cup_x + CS_FACE_X - CS_PLATE_T, CS_Y, zb + dz), (-1, 0, 0), M5_BUTTON, "carriage"))
+    return parts
+
+
+def carry_sensor_aperture(cup_x: float = 0.0) -> cq.Workplane:
+    """The carry sensor's light path (as probe_aperture), machine coordinates."""
+    return probe_aperture().translate((cup_x + CS_BASE_X - TCST_BASE_X, CS_Y - PROBE_Y, CS_BEAM_Z - PROBE_BEAM_Z))
+
+
+def carry_sensor_cable(cup_x: float = 0.0) -> cq.Workplane:
+    """Envelope of the carry board's 3-core lead: up from the header (board's +Y end, [Guessing]) beside the spine's back
+    corner to the spine top, where it joins the 8-core with the Z switch cores. Fixed to the carriage; not a part."""
+    return box(cup_x + CS_BASE_X - 6.0, CS_Y + 11.5, CS_BEAM_Z + 4.0, cup_x + CS_BASE_X, CS_Y + 17.5, L.Z_SPINE_TOP)
+
+
+def carry_flag_arm() -> cq.Workplane:
+    """Printed L arm: an ear on the z_plate's front face (2 x M3x10 self-tapping), a bar past the z_plate's -X end, and a leg
+    beside the spine whose +Y end face carries the aluminium flag in the sensor slot's mid-plane. Local origin: X = cup axis,
+    Y = machine Y, Z = Z carriage bottom (z_plate local Z). Print standing on its bottom face (as exported)."""
+    z0, z1 = CA_Z
+    yf = Z_CAR_FRONT - L.Z_PLATE_T  # 45: z_plate front face
+    ear = box(CA_LEG_X[0], yf - 4.0, z0, -18.0, yf, z1)
+    bar = box(CA_LEG_X[0], yf - 4.0, z0, CS_FACE_X - 0.5, Z_CAR_FRONT, z1)  # beside the z_plate's -X end (0.5 mm gap)
+    leg = box(CA_LEG_X[0], yf - 4.0, z0, CA_LEG_X[1], CS_Y - FLAG_T / 2, z1)
+    body = ear.union(bar).union(leg)
+    body = holes_y(body, CA_EAR_SCREWS, M3_CLR)
+    for x, z in CF_SCREWS:  # 2.5 mm pilots for the flag screws, 10 deep into the leg's end
+        body = body.cut(cyl((x, CS_Y - FLAG_T / 2 + 0.01, z), 2.5, 10.0, (0, -1, 0)))
+    return body
+
+
+def carry_flag() -> cq.Workplane:
+    """1 mm aluminium flag (flat, no bend), z_plate local Z: its top edge is the trip edge."""
+    body = box(CF_X[0], CS_Y - FLAG_T / 2, CF_Z_TOP - CF_LEN, CF_X[1], CS_Y + FLAG_T / 2, CF_Z_TOP)
+    return holes_y(body, CF_SCREWS, M3_CLR)
+
+
+def carry_flag_parts(cup_x: float, c: float) -> list[Part]:
+    """Moves with Z: the arm, the flag and their screw heads."""
+    zc = c + L.Z_CARRIAGE_ABOVE_CUP
+    yf = Z_CAR_FRONT - L.Z_PLATE_T
+    parts = [Part("carry_flag_arm", carry_flag_arm().translate((cup_x, 0, zc)), PETG, "printed", "head"),
+             Part("carry_flag", carry_flag().translate((cup_x, 0, zc)), ALU, "made", "head", note="1 mm aluminium, cut to 19.9 x 36")]
+    for x, z in CA_EAR_SCREWS:
+        parts.append(head(f"fh_carry_arm_{z:.0f}", (cup_x + x, yf - 4.0, zc + z), (0, -1, 0), M3_HEAD, "head"))
+    for x, z in CF_SCREWS:
+        parts.append(head(f"fh_carry_flag_{z:.0f}", (cup_x + x, CS_Y + FLAG_T / 2, zc + z), (0, 1, 0), M3_HEAD, "head"))
+    return parts
 
 
 # --------------------------------------------------------------------------- build tools (printed)
@@ -793,6 +959,11 @@ P0_OCC_C = P0_TOP_Z - CAM_Z  # the jig's "c" = the slab back: every head part si
 P0_FACE_UP_LIFT = L.CUP_HANG + 1.0  # the free cup then hangs 1 mm above a face-up slab
 P0_STUB = 66.0  # 2020 arm stub, bottoms in head_foot's socket like the drop arm; its top stays under the bridge even lifted
 P0_MOUNT_Z = (110.0, 128.0)  # occluder mount band above P0_OCC_C: over the sensor post, under the bridge
+# Every printed wall an M5x10 passes into a 2020 T-nut is P0_M5_WALL thick (pads on the 1.8-2.0 mm clamp and socket walls;
+# the base sockets are 3.8). With one M5 washer the screw then ends 5 mm inside the profile's face: through the slot-6
+# T-nut, short of the profile core. [Guessing] the 2020 slot depth (~6 mm to the core); BUILD_GUIDE 1.5 tests one screw.
+P0_M5_WALL = 4.0
+P0_M5_PAD = P0_M5_WALL - (24.0 - 20.4) / 2  # on the tray clamps' 1.8 mm outer walls
 
 
 def phase0_occluder_mount() -> cq.Workplane:
@@ -805,10 +976,13 @@ def phase0_occluder_mount() -> cq.Workplane:
     socket = box(-12.2, yc - 12.2, 0, 12.2, yc + 12.2, h)
     beam = box(11.0, 11.0, 0, px, 30.0, 8.0)
     body = clamp.union(socket).union(beam)
+    w = P0_M5_WALL  # pads on the two walls the M5 screws pass (1.8 / 2.0 mm walls before)
+    body = body.union(box(px + 12 - 0.01, -7, h / 2 - 7, px + 10.2 + w, 7, h / 2 + 7))
+    body = body.union(box(12.2 - 0.01, yc - 7, h / 2 - 7, 10.2 + w, yc + 7, h / 2 + 7))
     body = body.cut(box(px - 10.2, -10.2, -1, px + 10.2, 10.2, h + 1))  # post bore
     body = body.cut(box(-10.2, yc - 10.2, -1, 10.2, yc + 10.2, h + 1))  # stub bore
-    body = body.cut(cyl((px + 9, 0, h / 2), M5_CLR, 5, (1, 0, 0)))  # clamp screw, outer wall only
-    return body.cut(cyl((9, yc, h / 2), M5_CLR, 5, (1, 0, 0)))  # stub screw, +X wall only
+    body = body.cut(cyl((px + 9, 0, h / 2), M5_CLR, 10, (1, 0, 0)))  # clamp screw, outer wall only
+    return body.cut(cyl((9, yc, h / 2), M5_CLR, 10, (1, 0, 0)))  # stub screw, +X wall only
 
 
 def p0_board_spacer(lens_proj: float = HEAD_LENS_PROJ) -> float:
@@ -832,8 +1006,10 @@ def phase0_tray() -> cq.Workplane:
     frame = frame.cut(cq.Workplane("XY").workplane(offset=3.0).rect(rw, rl).extrude(1.01, taper=-45))  # 1 mm lead-in
     frame = frame.cut(cq.Workplane("XY").workplane(offset=-4.01).rect(aw + 4, al + 4).extrude(2.01, taper=45))  # 45-deg underside chamfer: the 4 mm ledge doesn't shade the label edge
     frame = frame.cut(box(-25, -ol / 2 - 10, 0, 25, -ol / 2 + 10, 5))  # finger notch at the front to lift the slab out
-    for sx in (-1, 1):  # clamps onto the 2020 posts
-        clamp = cbox(sx * (ow / 2 + 11), 0, 6, 24, 24, 20).cut(cbox(sx * (ow / 2 + 11), 0, 6, 20.4, 20.4, 22))
+    for sx in (-1, 1):  # clamps onto the 2020 posts; the M5 goes through a pad on the outer wall (P0_M5_WALL in all)
+        cx = sx * (ow / 2 + 11)
+        clamp = cbox(cx, 0, 6, 24, 24, 20).cut(cbox(cx, 0, 6, 20.4, 20.4, 22))
+        clamp = clamp.union(cbox(cx + sx * (12 + P0_M5_PAD / 2 - 0.01), 0, 6, P0_M5_PAD + 0.02, 14, 14))
         clamp = holes_x(clamp, [(0, 6)], M5_CLR)
         frame = frame.union(clamp)
     return frame
@@ -844,13 +1020,14 @@ def phase0_top() -> cq.Workplane:
     (height p0_board_spacer()) and the head LED ring. Local origin: bar underside, centre."""
     ow = L.POCKET_W + 2 * 12
     span = ow + 2 * 11
-    bar = cbox(0, 0, P0_BAR_T / 2, span + 24, 50, P0_BAR_T)
-    bar = bar.cut(cyl((0, 0, -1), LENS_WINDOW_D, 12))
+    ly = CAM_DY  # the head lens sits CAM_DY from the slab (= cup) axis, as on the machine
+    bar = box(-(span + 24) / 2, ly - 25, 0, (span + 24) / 2, 25, P0_BAR_T)
+    bar = bar.cut(cyl((0, ly, -1), LENS_WINDOW_D, 12))
     for sx in (-1, 1):
         bar = bar.cut(cbox(sx * span / 2, 0, P0_BAR_SOCKET / 2, 20.4, 20.4, P0_BAR_SOCKET))  # blind sockets
-    seat = ring_seat(P0_TOP_Z - 4 - P0_BAR_Z0, 0.0, HEAD_RING_OD)
+    seat = ring_seat(P0_TOP_Z - 4 - P0_BAR_Z0, 0.0, HEAD_RING_OD).translate((0, ly, 0))
     body = bar.union(seat)
-    return holes_z(body, [(dx, dy) for dx in (-16, 16) for dy in (-16, 16)], 1.8, z0=P0_BAR_T - 6, h=10)  # blind, for M2 standoffs
+    return holes_z(body, [(dx, ly + dy) for dx in (-16, 16) for dy in (-16, 16)], 1.8, z0=P0_BAR_T - 6, h=10)  # blind, for M2 standoffs
 
 
 def phase0_base() -> cq.Workplane:
@@ -879,8 +1056,8 @@ def phase0_parts(compression: float = L.CUP_HANG, lift: float = 0.0) -> list[Par
     parts.append(Part("p0_slab", slab(0, 0, P0_SLAB_Z), SLAB, "slab", "static"))
     parts.append(Part("p0_label", slab_label(0, 0, P0_SLAB_Z), LABEL, "slab", "static"))
     parts.append(Part("p0_top", phase0_top().translate((0, 0, P0_BAR_Z0)), PETG, "printed", "static"))
-    zs = P0_BAR_TOP + p0_board_spacer()  # board underside
-    cam = cbox(0, 0, zs + 5, 38, 38, 10).union(cbox(0, 0, (P0_TOP_Z + 6 + zs) / 2, 16, 16, zs - P0_TOP_Z - 6)).union(cyl((0, 0, P0_TOP_Z), 14, 6))
+    zs, ly = P0_BAR_TOP + p0_board_spacer(), CAM_DY  # board underside; lens offset as on the machine
+    cam = cbox(0, ly, zs + 5, 38, 38, 10).union(cbox(0, ly, (P0_TOP_Z + 6 + zs) / 2, 16, 16, zs - P0_TOP_Z - 6)).union(cyl((0, ly, P0_TOP_Z), 14, 6))
     parts.append(Part("p0_head_camera", cam, GREEN, "purchased", "static"))
     parts += phase0_occluder(compression, lift)
     return parts
@@ -969,6 +1146,8 @@ def printed_catalog() -> list[tuple[str, cq.Workplane, int, str]]:
         ("phase0_tray", phase0_tray(), 1, "PLA/PETG (Phase 0 test jig), ledges down"),
         ("phase0_top", _flip_x(phase0_top(), 180), 1, "PLA/PETG (Phase 0 test jig), ring up"),
         ("phase0_occluder_mount", phase0_occluder_mount(), 1, "PLA/PETG (Phase 0 test jig), flat on its beam (as exported), 4 walls, 30% infill"),
+        ("carry_sensor_mount", carry_sensor_mount().rotate((0, 0, 0), (0, 1, 0), 90), 1, "PETG, flat on its spine face (as exported), 4 walls, 40% infill"),
+        ("carry_flag_arm", carry_flag_arm(), 1, "PETG, standing on its bottom face (as exported), 4 walls, 40% infill"),
         ("awl_adapter", awl_adapter(), 1, "PETG (build tool) + M5 heat-set insert + 3 mm steel pin"),
         ("fill_gauge", _flip_x(fill_gauge(), 90), 2, "PLA, flat (as exported) (loading tool)"),
     ]

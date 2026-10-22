@@ -21,8 +21,8 @@ def _cfg(**kw):
     return dataclasses.replace(cfg, **kw) if kw else cfg
 
 
-def _run(tmp_path, cfg, stacks, itf_payload="zero_pad"):
-    w = SimWorld(cfg, stacks={k: list(v) for k, v in stacks.items()}, itf_payload=itf_payload)
+def _run(tmp_path, cfg, stacks):
+    w = SimWorld(cfg, stacks={k: list(v) for k, v in stacks.items()})
     r = Runner(cfg, SimMotion(w), SimVacuum(w), SimLights(), SimCamera(w, "head"), SimCamera(w, "station"), BatchWriter(tmp_path), gate=SimGate(w), log=lambda *_: None)
     return w, r, r.run()
 
@@ -67,14 +67,37 @@ def test_old_labels_go_to_station_and_still_read(tmp_path):
     assert summary["status_counts"].get("ok", 0) >= 0.8 * len(rows)
 
 
-def test_check_digit_itf_is_learned(tmp_path):
-    cfg = _cfg(face_down_check="off")
-    stacks = make_batch(cfg, per_pocket=3, seed=11, eras=(0.6, 0.4, 0.0))
-    w, r, summary = _run(tmp_path, cfg, stacks, itf_payload="check_digit")
-    truth = {s.cert.lstrip("0") for v in stacks.values() for s in v}
+def test_2016_labels_read_from_their_back_and_front_itf(tmp_path):
+    """A 2016 label carries the same 8-digit ITF on both sides: two printed symbols, so 'ok' without OCR. (It used to
+    stay needs_review, waiting for an ITF format to be learned that no real label could teach.)"""
+    cfg = _cfg(face_down_check="off", allow_ocr=False)
+    stacks = make_batch(cfg, per_pocket=3, seed=11, eras=(0.0, 1.0, 0.0))
+    w, r, summary = _run(tmp_path, cfg, stacks)
     rows = list(csv.DictReader((r.w.dir / "certs.csv").open()))
-    assert all(row["cert"] in truth for row in rows if row["status"] == "ok")
-    assert summary["itf_mode"] in ("check_digit", None)
+    truth = {s.cert.lstrip("0") for v in stacks.values() for s in v}
+    assert all(len(c) <= 8 for c in truth)  # 9-digit certs never sit on an ITF label
+    assert {row["status"] for row in rows} == {"ok"} and {row["cert"] for row in rows} == truth
+    assert all(set(row["sources"].split("+")) == {"front_barcode", "back_barcode"} for row in rows)
+    assert summary["itf_mode"] == "zero_pad"
+
+
+def test_the_default_mix_has_real_label_formats_and_no_wrong_cert(tmp_path):
+    """Mostly PSA (current, lighthouse, 2016, pre-2016), some CGC (2023+, OG, Authentic) and BGS, each with the codes its
+    real label carries. Every 'ok' is right; a slab with no grader evidence (BGS: no code) never goes to the output."""
+    cfg = _cfg(face_down_check="off")
+    stacks = make_batch(cfg, per_pocket=4, seed=21)
+    kinds = {(s.grader, s.era) for v in stacks.values() for s in v}
+    assert ("PSA", "current") in kinds and any(g == "CGC" for g, _ in kinds)
+    w, r, summary = _run(tmp_path, cfg, stacks)
+    truth = {s.cert.lstrip("0"): s for v in stacks.values() for s in v}
+    rows = list(csv.DictReader((r.w.dir / "certs.csv").open()))
+    assert len(rows) == len(truth)
+    for row in rows:
+        if row["status"] == "ok":
+            assert row["cert"] in truth and row["grader"] == truth[row["cert"]].grader
+        if row["grader"] == "unknown":
+            assert row["out_pocket"] == str(cfg.exceptions.index)
+    assert summary["status_counts"].get("ok", 0) >= 0.8 * len(rows)
 
 
 def test_double_pick_is_detected_and_flagged(tmp_path):
@@ -141,8 +164,10 @@ def test_cgc_slabs_are_read_and_stacked_normally(tmp_path):
     rows = {row["cert"]: row for row in csv.DictReader((r.w.dir / "certs.csv").open())}
     assert rows["4123456001"]["grader"] == "CGC" and rows["4123456001"]["status"] == "ok"
     assert rows["4123456001"]["out_pocket"] == "3"
-    bgs = [row for row in rows.values() if row["grader"] == "BGS"]
-    assert bgs and bgs[0]["status"] == "other_grader" and bgs[0]["out_pocket"] == str(cfg.exceptions.index)
+    # a BGS label carries no code: at best OCR finds a number, with no grader - never 'ok', always the exception pocket
+    bgs = [row for row in rows.values() if row["position"] and row["cert"] not in {s.cert.lstrip("0") for v in stacks.values() for s in v if s.grader != "BGS"}]
+    assert len(bgs) == 1 and bgs[0]["status"] in ("needs_review", "no_read") and bgs[0]["grader"] == "unknown"
+    assert bgs[0]["out_pocket"] == str(cfg.exceptions.index)
 
 
 class _FlakyCamera(SimCamera):

@@ -10,6 +10,10 @@ Builds the machine at every critical pose and measures exact minimum distances
     intended overlaps; fastener heads that could foul something are modelled as parts,
   * the held slab against every part above it at every lift height up to the Z hard top stop,
   * reading at the upward-camera station, camera line-of-sight to the label (head and station),
+  * the head camera's view of the face-down card window (layout.FACE_DOWN_WINDOW_MM): nothing in it at hover over a low,
+    half and full stack or with the slab held at both carry heights, and the window on the card, clear of the label,
+  * the carry-height sensor (Z stall guard): trip height, beam clear below / blocked up to the hard top stop, flag and arm
+    clear of the carriage over the whole Z travel, and a path for its lead,
   * X / Z hard stops (bumpers, Z end cap, top stop) and carriage-on-rail margins,
   * the contact probe over the whole 20 mm buffer stroke: trip travel, beam fully blocked after the trip, flag
     clear of the sensor and of its anti-rotation guide (also turned against the guide, for a rotating buffer),
@@ -295,13 +299,134 @@ def check_head_camera() -> None:
     p = P[4]
     c = L.C_SAFE_LOADED
     parts = M.machine(p.x, c, held_slab=True, fill=FULL)
-    lens_z = c + M.CAM_Z
+    lens_z, lens_y = c + M.CAM_Z, p.y + M.CAM_DY
     label_y = p.y - SLAB_H / 2 + 5 + 10
-    fr = frustum((p.x, p.y, lens_z - 0.5), (p.x - 37, label_y - 12, c + 0.5), (p.x + 37, label_y + 12, c + 0.5))
+    fr = frustum((p.x, lens_y, lens_z - 0.5), (p.x - 37, label_y - 12, c + 0.5), (p.x + 37, label_y + 12, c + 0.5))
     vol, who = blocked(fr, [q for q in parts if q.group in ("head", "carriage") and q.name not in ("head_camera", "held_slab", "held_label")])
     record("head camera line-of-sight to back label: blocked volume (mm3)", vol, 1.0, who, larger_is_better=False)
-    need = math.degrees(math.atan2(abs(label_y - 12 - p.y), lens_z - c))
+    need = math.degrees(math.atan2(abs(label_y - 12 - lens_y), lens_z - c))
     record("head camera half-angle needed to see label edge (deg, <= 30)", need, 30.0, "", larger_is_better=False)
+
+
+HOVER_GAP = 7.0  # cup face above the top slab's back for the frame from above (software: approach_gap 5 + 2; lens 147 above it)
+
+
+def _free_machine(x: float, c: float, fill: dict) -> list:
+    """The machine with the cup FREE (buffer at rest), as at hover and while a slab hangs on it (machine() poses the probe trip)."""
+    return M.frame_parts() + M.bed_parts() + M.carriage_parts(x) + M.head_parts(x, c, compression=0.0) + M.stacks(fill)
+
+
+def _window_view(parts, lens, plane_z: float, skip: tuple) -> tuple[float, float, str]:
+    """Frustums from the lens to every FACE_DOWN_WINDOW_MM rectangle 0.5 mm above the slab plane z: total volume of parts
+    inside them (no threshold), and the smallest gap between them and any part (mm, 0 = touching), with its name."""
+    fr = [frustum((lens[0], lens[1], lens[2] - 0.5), (lens[0] + x0, lens[1] - M.CAM_DY + y0, plane_z + 0.5), (lens[0] + x1, lens[1] - M.CAM_DY + y1, plane_z + 0.5))
+          for x0, y0, x1, y1 in L.FACE_DOWN_WINDOW_MM]
+    vol, gap = 0.0, (1e9, "")
+    for p in parts:
+        if p.name in skip or p.name.startswith(("pad_", "bed_")):
+            continue
+        s = p.shape.val()
+        for f in fr:
+            if not _near(f, s, 5.0):
+                continue
+            d = f.distance(s)
+            gap = min(gap, (d, p.name))
+            if d < 1e-6:
+                vol += f.intersect(s).Volume()
+    return vol, gap[0], gap[1]
+
+
+def check_face_down_window() -> None:
+    """The software's face-down check compares the card back seen through FACE_DOWN_WINDOW_MM (layout.py) with earlier
+    face-down slabs: the head camera must see all of it, and only card. Exact frustums from the lens (CAM_DY toward the label
+    from the cup axis) to each rectangle, against every part except the camera and the slab looked at, at hover (free cup
+    HOVER_GAP above the top slab, over a stack of 1, 15 and 30) and with the slab held (it hangs CUP_HANG below c) at both carry
+    heights. Then where the window lies on the slab: area, card top, card sides, label band."""
+    p = P[4]
+    worst = (-1.0, 1e9, "", "")
+    for n in (1, 15, L.STACK_MAX):
+        top = n * SLAB_T
+        c = top + HOVER_GAP
+        parts = _free_machine(p.x, c, {**FULL, p.index: n})
+        vol, gap, who = _window_view(parts, (p.x, p.y + M.CAM_DY, c + M.CAM_Z), top, ("head_camera", f"stack_{p.index}", f"labels_{p.index}"))
+        record(f"face-down window, hover over a stack of {n} (lens {M.CAM_Z + HOVER_GAP:.0f} mm above the slab): parts in view (mm3)", vol, 0.01, who if vol else "",
+               larger_is_better=False)
+        worst = min(worst, (gap, n, who), key=lambda w: w[0] if w[0] >= 0 else 1e9)
+    record("face-down window at hover: nearest part to the view, all stack heights (clearance mm)", worst[0], 0.5, f"{worst[2]}, stack of {worst[1]}")
+    for c in (L.C_SAFE_EMPTY, L.C_SAFE_LOADED):
+        parts = _free_machine(p.x, c, FULL)
+        z0 = c - L.CUP_HANG - SLAB_T
+        parts.append(M.Part("held_slab", M.slab(p.x, L.Y_ROW, z0), M.SLAB, "slab", "head"))
+        vol, gap, who = _window_view(parts, (p.x, p.y + M.CAM_DY, c + M.CAM_Z), z0 + SLAB_T, ("head_camera", "held_slab"))
+        record(f"face-down window, slab held at c={c:.1f} (hanging {L.CUP_HANG:.0f} mm under the cup): parts in view (mm3)", vol, 0.01, who if vol else "",
+               larger_is_better=False)
+        record(f"face-down window, slab held at c={c:.1f}: nearest part to the view (clearance mm)", gap, 0.5, who)
+    # where it lies on the slab (mm from the cup axis; the slab may lie WINDOW_PLACE_TOL off it)
+    edge = -SLAB_H / 2
+    card_top = edge + L.CARD_TOP_FROM_EDGE[2] + L.WINDOW_PLACE_TOL
+    side = L.CARD_W / 2 - 1.85 - L.XY_CAL_RESIDUAL - 1.0
+    w = L.FACE_DOWN_WINDOW_MM
+    record(f"face-down window area: {len(w)} rectangle(s) (mm2, software needs 300)", L.window_area(), 300.0)
+    record("face-down window inside the card's top edge, latest card top measured (37.8 mm) and the slab at the end of its play (mm)",
+           min(r[1] for r in w) - card_top, 0.0, f"median card top: {min(r[1] for r in w) - (edge + L.CARD_TOP_FROM_EDGE[1]):.1f} mm inside, slab centred")
+    record("face-down window inside the card's side edges, slab at the end of its X play (mm)", side - max(max(abs(r[0]), abs(r[2])) for r in w), 0.0)
+    record("face-down window clear of the label band, slab at the end of its play (mm)", min(r[1] for r in w) - (edge + L.LABEL_BAND + L.WINDOW_PLACE_TOL), 3.0)
+
+
+CARRY_STEPS = sorted({L.C_HARD_BOTTOM, *range(-10, 262, 4), L.CARRY_SENSOR_C0 - 0.5, L.CARRY_SENSOR_C0, L.CARRY_SENSOR_C0 + 0.5, L.C_SAFE_EMPTY,
+                      L.C_SAFE_LOADED, L.C_MAX, L.Z_SWITCH_C, L.C_HARD_TOP})
+
+
+def check_carry_sensor() -> None:
+    """The Z stall guard: the spare TCST2103 on the Z spine (fixed to the X carriage) and its flag on the z_plate (moves with Z).
+    The beam must be blocked for every cup height from CARRY_SENSOR_C0 up to the Z hard top stop and clear below it; the flag,
+    its arm and their screws must clear everything fixed to the carriage over the whole Z travel; the board's lead must have a
+    path to the spine top clear of everything that moves. Carriage-local (cup X = 0); the flag set moves rigidly with c."""
+    fixed = {p.name: p.shape.val() for p in M.carriage_parts(0.0)}
+    mov = {p.name: p.shape.val() for p in M.carry_flag_parts(0.0, 0.0)}
+    flag, ap = mov["carry_flag"], M.carry_sensor_aperture().val()
+    full = M.TCST_AP * M.TCST_AP_DEPTH * M.FLAG_T
+    frac = lambda c: _moved(flag, c).intersect(ap).Volume() / full  # noqa: E731
+    c0 = L.CARRY_SENSOR_C0
+    trip = _bisect(lambda c: frac(c) >= 0.5, c0 - 5.0, c0 + 5.0)
+    record(f"carry sensor: cup height at which the flag edge crosses the beam centre, error vs CARRY_SENSOR_C0 = {c0:.1f} (mm)", abs(trip - c0), 0.05,
+           f"trips at c = {trip:.2f}", larger_is_better=False)
+    below = [c for c in CARRY_STEPS if c <= c0 - M.TCST_AP / 2 - 0.05]
+    worst_lo = max(below, key=frac)
+    record(f"carry sensor: beam clear at every height from c = {L.C_HARD_BOTTOM:.0f} to {below[-1]:.1f} (max blocked share)", frac(worst_lo), 0.0,
+           f"highest at c = {worst_lo:.1f}", larger_is_better=False)
+    above = [c for c in CARRY_STEPS if c >= c0 + M.TCST_AP / 2 + 0.05]
+    worst_hi = min(above, key=frac)
+    record(f"carry sensor: beam fully blocked from c = {above[0]:.1f} to the hard top stop {L.C_HARD_TOP:.0f} (min blocked share)", frac(worst_hi), 0.999,
+           f"lowest at c = {worst_hi:.1f}; {M.CF_LEN - (L.C_HARD_TOP - c0) - M.TCST_AP / 2:.1f} mm of flag left below the beam at the top stop")
+    record(f"carry sensor: margin between its trip and C_SAFE_EMPTY = {L.C_SAFE_EMPTY} (mm)", L.C_SAFE_EMPTY - trip, 1.0)
+    sensor = fixed["carry_sensor"]
+    others = {n: s for n, s in fixed.items() if n != "carry_sensor"}
+    dflag, dall = (1e9, 0.0, ""), (1e9, 0.0, "")
+    for c in CARRY_STEPS:
+        mv = {n: _moved(s, c) for n, s in mov.items()}
+        dflag = min(dflag, (mv["carry_flag"].distance(sensor), c, "carry_flag/carry_sensor"))
+        for n, s in mv.items():
+            for o, os_ in others.items():
+                if _near(s, os_, 3.0):
+                    dall = min(dall, (s.distance(os_), c, f"{n}/{o}"))
+            if n != "carry_flag" and _near(s, sensor, 3.0):
+                dall = min(dall, (s.distance(sensor), c, f"{n}/carry_sensor"))
+    S = f"c = {L.C_HARD_BOTTOM:.0f}..{L.C_HARD_TOP:.0f}"
+    record(f"carry sensor: flag vs the sensor over {S} (min clearance, mm)", dflag[0], 0.5, f"at c = {dflag[1]:.0f}")
+    record(f"carry sensor: flag, arm and screw heads vs every part fixed to the X carriage over {S} (min clearance, mm)", dall[0], 1.0,
+           f"{dall[2]} at c = {dall[1]:.0f}")
+    cable = M.carry_sensor_cable().val()
+    head = [p for p in M.head_parts(0.0, 0.0, compression=0.0)]
+    dc = (1e9, 0.0, "")
+    for c in CARRY_STEPS:
+        for p in head:
+            s = _moved(p.shape.val(), c)
+            if _near(s, cable, 60.0):
+                dc = min(dc, (s.distance(cable), c, p.name))
+    record(f"carry sensor: its lead (header up to the spine top) vs everything that moves with Z over {S} (min clearance, mm)", dc[0], 3.0, f"{dc[2]} at c = {dc[1]:.0f}")
+    hit = [n for n, s in fixed.items() if n not in ("carry_sensor", "carry_sensor_mount") and _near(s, cable, 0.0) and s.intersect(cable).Volume() > OVERLAP_TOL]
+    record("carry sensor: its lead vs the parts fixed to the X carriage (parts it would cut through, count)", len(hit), 0, ",".join(hit), larger_is_better=False)
 
 
 def _moved(shape: cq.Shape, dz: float = 0.0, deg: float = 0.0) -> cq.Shape:
@@ -384,7 +509,7 @@ def check_probe() -> None:
     check_key_access()
     # the head camera's label view: every moving part while it reads; the flag and the buffer stop to the end of a probe
     label_y = -SLAB_H / 2 + 5 + 10
-    fr = frustum((0, 0, M.CAM_Z - 0.5), (-37, label_y - 12, 0.5), (37, label_y + 12, 0.5))
+    fr = frustum((0, M.CAM_DY, M.CAM_Z - 0.5), (-37, label_y - 12, 0.5), (37, label_y + 12, 0.5))
     def view(names, ts):
         w = (0.0, 0.0)
         for t in ts:
@@ -449,7 +574,7 @@ def check_key_access() -> None:
         for t in (0.0, L.CUP_HANG):
             parts = [p for p in M.head_parts(0.0, 0.0, compression=t) if not p.name.startswith(("probe_m3", "probe_nut", "z_", "fh_"))]
             for dz in (-M.PROBE_ADJ, 0.0, M.PROBE_ADJ):
-                x0 = M.TCST_BASE_X - M.TCST_FLANGE_T - M.M3_HEAD[1] + 1.5  # 1.5 mm into the M3 socket
+                x0 = M.TCST_BASE_X - M.TCST_FLANGE_T - M.M3_WASHER[1] - M.M3_HEAD[1] + 1.5  # 1.5 mm into the M3 socket (head on its washer)
                 key = M.cyl((x0, y, M.PROBE_BEAM_Z + dz), 2.5, 70.0, direction).val()
                 for p in parts:
                     sh = _moved(p.shape.val(), dz) if p.name == "contact_sensor" else p.shape.val()
@@ -540,7 +665,7 @@ def check_phase0() -> None:
     record("Phase 0: station camera line-of-sight to the front label: blocked volume (mm3)", vol, 1.0, who, larger_is_better=False)
     zb = M.P0_SLAB_Z + SLAB_T
     viewers = [p for p in parts if p.name not in ("p0_head_camera", "p0_slab", "p0_label")]  # occluder included
-    fr = frustum((0, 0, M.P0_TOP_Z - 0.5), (-37, label_y - 12, zb + 0.5), (37, label_y + 12, zb + 0.5))
+    fr = frustum((0, M.CAM_DY, M.P0_TOP_Z - 0.5), (-37, label_y - 12, zb + 0.5), (37, label_y + 12, zb + 0.5))
     vol, who = blocked(fr, viewers)
     record("Phase 0: head camera line-of-sight to the back label, occluder fitted: blocked volume (mm3)", vol, 1.0, who, larger_is_better=False)
     # occluder: the jig must show the head camera what the machine shows it
@@ -550,7 +675,7 @@ def check_phase0() -> None:
            f"cup centre {math.hypot(cup.center.x, cup.center.y):.2f} mm off the lens axis", larger_is_better=False)
     mx, mc = P[4].x, L.C_SAFE_LOADED
     mp = {p.name: p for p in M.machine(mx, mc, held_slab=True, fill=FULL)}
-    lens_m, lens_j = (mx, 0.0, mc + M.CAM_Z), (0.0, 0.0, M.P0_TOP_Z)
+    lens_m, lens_j = (mx, M.CAM_DY, mc + M.CAM_Z), (0.0, M.CAM_DY, M.P0_TOP_Z)
     def rel(part, lens, keep=6):
         b = part.shape.val().BoundingBox()
         return [v - lens[i // 2] for i, v in enumerate((b.xmin, b.xmax, b.ymin, b.ymax, b.zmin, b.zmax))][:keep]
@@ -558,9 +683,9 @@ def check_phase0() -> None:
     worst = max((max(abs(a - b) for a, b in zip(rel(mp[m], lens_m, k), rel(jp[j], lens_j, k))), m) for m, j, k in pairs)
     record("Phase 0 occluder vs machine, relative to the head lens: worst bounding-box offset (mm)", worst[0], 1.0, f"{worst[1]}; {len(pairs)} parts compared",
            larger_is_better=False)
-    def whole(lens):  # the head camera's view of the WHOLE slab back, down to 1 mm above the cup face
-        z = lens[2] - M.CAM_Z + 1.0
-        return frustum((lens[0], lens[1], lens[2] - 0.5), (lens[0] - SLAB_W / 2, lens[1] - SLAB_H / 2, z), (lens[0] + SLAB_W / 2, lens[1] + SLAB_H / 2, z))
+    def whole(lens):  # the head camera's view of the WHOLE slab back (centred on the cup axis), down to 1 mm above the cup face
+        z, cy = lens[2] - M.CAM_Z + 1.0, lens[1] - M.CAM_DY
+        return frustum((lens[0], lens[1], lens[2] - 0.5), (lens[0] - SLAB_W / 2, cy - SLAB_H / 2, z), (lens[0] + SLAB_W / 2, cy + SLAB_H / 2, z))
     # head parts only: the parts fixed to the X carriage (lead screw tip, z_end_cap) also reach into this view over the
     # slab's back half, by an amount that depends on the Z height, so the jig does not copy them
     vm, whom = blocked(whole(lens_m), [q for q in mp.values() if q.group == "head" and q.name not in ("head_camera", "held_slab", "held_label")])
@@ -605,7 +730,9 @@ def main() -> int:
     check_gate_beam()
     check_station()
     check_head_camera()
+    check_face_down_window()
     check_probe()
+    check_carry_sensor()
     check_extremes()
     check_rail_slots()
     check_printed()

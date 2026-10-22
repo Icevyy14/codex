@@ -43,6 +43,8 @@ After=network-online.target
 [Service]
 User=$USER
 WorkingDirectory=$PWD
+# Tesseract OCR: one OpenMP thread. With the default threads OCR timed out on a busy CPU (slabscan/decode.py sets it too)
+Environment=OMP_THREAD_LIMIT=1
 ExecStart=$PWD/.venv/bin/python -m slabscan web --port 8080
 Restart=on-failure
 

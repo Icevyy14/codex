@@ -131,8 +131,114 @@ def probe_closeup(dest: Path) -> None:
     out.save(dest)
 
 
+def face_down_view(dest: Path, px: float = 8.0) -> None:
+    """What the head camera sees of the top slab at hover (free cup 7 mm above it, lens 147 mm above it, CAM_DY toward the
+    label): every head part below the lens projected from the lens onto the slab plane (tessellated CAD solids), over the slab,
+    the measured card position, the label band and the face-down card window. +Y (the arm) is up, the label end down."""
+    import model as M
+    from PIL import Image, ImageDraw, ImageFont
+    from dims import SLAB_H, SLAB_W
+
+    lz, ly, plane = M.CAM_Z, M.CAM_DY, -(L.CUP_HANG + 5.0)
+    xr, yr, foot = (-52.0, 52.0), (-74.0, 74.0), 120
+    W, H = int((xr[1] - xr[0]) * px), int((yr[1] - yr[0]) * px)
+    P_ = lambda x, y: ((x - xr[0]) * px, (yr[1] - y) * px)  # noqa: E731  image y down = slab -Y down
+    im = Image.new("RGB", (W, H + foot), (250, 250, 250))
+    d = ImageDraw.Draw(im, "RGBA")
+    edge = -SLAB_H / 2
+    d.rectangle([P_(-SLAB_W / 2, SLAB_H / 2), P_(SLAB_W / 2, edge)], fill=(225, 232, 240), outline=(60, 60, 60))
+    d.rectangle([P_(-L.CARD_W / 2, edge + L.CARD_TOP_FROM_EDGE[1] + 88.9), P_(L.CARD_W / 2, edge + L.CARD_TOP_FROM_EDGE[1])], fill=(70, 95, 170))
+    d.rectangle([P_(-37, edge + 26.0), P_(37, edge + 5.0)], fill=(245, 245, 245), outline=(120, 120, 120))  # label insert
+    for p in M.head_parts(0.0, 0.0, compression=0.0):
+        sh = p.shape.val()
+        bb = sh.BoundingBox()
+        if p.name == "head_camera" or bb.zmin >= lz - 0.01:
+            continue
+        verts, tris = sh.tessellate(0.1, 0.3)
+        v = [(q.x, q.y, min(q.z, lz - 0.05)) for q in verts]
+        r, g, b, _ = p.color
+        col = (int(r * 200), int(g * 200), int(b * 200), 255)
+        for t in tris:
+            if any(verts[i].z >= lz - 0.05 for i in t):
+                continue
+            pts = []
+            for i in t:
+                x, y, z = v[i]
+                s = (lz - plane) / (lz - z)
+                pts.append(P_(x * s, ly + (y - ly) * s))
+            d.polygon(pts, fill=col)
+    for x0, y0, x1, y1 in L.FACE_DOWN_WINDOW_MM:
+        d.rectangle([P_(x0, y1), P_(x1, y0)], outline=(230, 30, 30), width=4)
+    d.line([P_(-3, 0), P_(3, 0)], fill=(0, 0, 0), width=2)
+    d.line([P_(0, -3), P_(0, 3)], fill=(0, 0, 0), width=2)
+    d.ellipse([P_(-1.5, ly + 1.5), P_(1.5, ly - 1.5)], outline=(0, 140, 0), width=3)
+    try:
+        font = ImageFont.truetype("DejaVuSans.ttf", 22)
+    except OSError:
+        font = ImageFont.load_default()
+    a = L.window_area()
+    for k, text in enumerate((f"Head camera at hover: lens {lz + 7:.0f} mm above the slab, {-ly:.0f} mm toward the label",
+                              "(green circle; + = cup axis). Red: the face-down card window,",
+                              f"{a:.0f} mm2, clear of every head part. Blue: the card, label at the bottom.")):
+        d.text((16, H + 8 + 34 * k), text, fill=(20, 20, 20), font=font)
+    im.save(dest)
+
+
+CARRY_PARTS = ("z_spine", "z_plate", "carry_", "fc_carry", "fh_carry", "z_carriage", "z_rail")
+
+
+def carry_closeup(dest: Path) -> None:
+    """The carry-height sensor just below its trip (slot clear) and at the Z hard top stop (flag through the slot)."""
+    import subprocess
+
+    import cadquery as cq
+    import model as M
+    from PIL import Image, ImageDraw, ImageFont
+
+    tiles = []
+    c0 = L.CARRY_SENSOR_C0
+    for c, text in ((c0 - 2.0, f"c = {c0 - 2:.0f}: flag 2 mm below the beam, slot clear"), (L.C_HARD_TOP, f"c = {L.C_HARD_TOP:.0f} (top stop): flag still in the beam")):
+        d = build.OUT / "renders" / f"stl_carry_{c:.0f}"
+        d.mkdir(parents=True, exist_ok=True)
+        lines = []
+        for p in M.carriage_parts(0.0) + M.head_parts(0.0, c):
+            if not p.name.startswith(CARRY_PARTS):
+                continue
+            shape = p.shape.intersect(M.box(-90, 20, M.CS_BEAM_Z - 60, 40, 100, M.CS_BEAM_Z + 60)) if p.name.startswith(("z_spine", "z_rail")) else p.shape
+            cq.exporters.export(shape, str(d / f"{p.name}.stl"), tolerance=0.05, angularTolerance=0.1)
+            r, g, b, a = p.color
+            a = {"carry_sensor": 0.35, "z_spine": 0.3}.get(p.name, a)
+            lines.append(f'color([{r},{g},{b},{a}]) import("{p.name}.stl");')
+        beam = M.cyl((M.CS_TIP_X + M.TCST_AXIS, M.CS_Y - 7, M.CS_BEAM_Z), 0.8, 14, (0, 1, 0))
+        cq.exporters.export(beam, str(d / "beam.stl"), tolerance=0.05, angularTolerance=0.1)
+        lines.append('color([1.0,0.1,0.1,1.0]) import("beam.stl");')
+        lines.sort(key=lambda ln: ",0.35]" in ln or ",0.3]" in ln)
+        (d / "scene.scad").write_text("\n".join(lines) + "\n")
+        png = d / "carry.png"
+        z = M.CS_BEAM_Z
+        subprocess.run(["xvfb-run", "-a", "openscad", "-o", str(png), "--imgsize=900,900", f"--camera=-175,215,{z + 55},-42,62,{z - 6}", "--projection=p",
+                        "--colorscheme=Tomorrow", "scene.scad"], check=True, cwd=d, capture_output=True, timeout=600)
+        tiles.append((Image.open(png).convert("RGB"), text))
+    w, h = tiles[0][0].size
+    bar = 60
+    out = Image.new("RGB", (2 * w, h + bar), (250, 250, 250))
+    dr = ImageDraw.Draw(out)
+    try:
+        font = ImageFont.truetype("DejaVuSans.ttf", 24)
+    except OSError:
+        font = ImageFont.load_default()
+    for i, (im, text) in enumerate(tiles):
+        out.paste(im, (i * w, 0))
+        dr.text((i * w + 18, h + 16), text, fill=(20, 20, 20), font=font)
+    out.save(dest)
+
+
 def main():
     DOCS.mkdir(parents=True, exist_ok=True)
+    face_down_view(DOCS / "face_down_view.png")
+    print(DOCS / "face_down_view.png")
+    carry_closeup(DOCS / "carry_sensor.png")
+    print(DOCS / "carry_sensor.png")
     phase0_jig(DOCS / "phase0_jig.png")
     print(DOCS / "phase0_jig.png")
     probe_closeup(DOCS / "probe_closeup.png")

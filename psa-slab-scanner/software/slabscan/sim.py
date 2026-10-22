@@ -1,13 +1,14 @@
-"""Synthetic PSA-style label images for testing without real slabs or hardware.
+"""Synthetic slab label images for testing without real slabs or hardware.
 
-These are NOT pixel copies of real PSA labels. PSA does not publish its layout or
-symbology. They are stand-ins with realistic size, code size and failure modes
-(glare, blur, tilt, low resolution), used to prove the decode pipeline and to size
-the camera. ``tools/calibrate.py`` checks the same pipeline against real slabs.
+These are NOT pixel copies of real labels. They are stand-ins with realistic size, code size and failure modes
+(glare, blur, tilt, low resolution), used to prove the decode pipeline and to size the camera. What each label
+CARRIES does follow the real labels, per grader and era (``label_codes``; the payload formats are in certs.py and were
+read off 64 real PSA/CGC/BGS/SGC slabs). ``tools/real_eval.py`` runs the same pipeline on real photos.
 """
 
 from __future__ import annotations
 
+import zlib
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -20,16 +21,79 @@ LABEL_W_MM, LABEL_H_MM = 70.0, 20.0
 SLAB_W_MM, SLAB_H_MM = 80.3, 135.5
 LABEL_TOP_MM = 5.0  # label offset from slab top edge (guess - calibrate on real slabs)
 
+# Label eras. PSA: "current" (back QR + Code128, front Code128), "2017+" (a back QR: QR + ITF for certs of up to 8
+# digits = the 2017+ "lighthouse" label, QR + Code128 for 9-digit certs = the current label, as on real slabs), "2016"
+# (back ITF only; "2015" means the same), "old" (before 2016: front ITF only, nothing on the back). CGC: "2023+" (front
+# Code128, back QR with the grade; also used for any non-CGC era string), "og" (2020-23: back QR on cgccomics.com + a
+# 26-digit Code128, nothing on the front), "authentic" (front QR with grade 0_0 + Code128, nothing on the back).
+# BGS and SGC: no machine-readable code at all, the printed cert only.
+PSA_ERAS = ("current", "2017+", "2016", "2015", "old")
+CGC_ERAS = ("2023+", "og", "authentic")
+_CGC_GRADES = ("10_0", "9_5", "9_0", "8_5", "8_0", "7_0")
 
-def itf_text(cert: str, mode: str = "zero_pad") -> str:
-    """How a (simulated) PSA prints a cert as ITF: zero-padded, or cert + mod-10 check digit."""
-    if mode == "check_digit":
-        body = cert
-        s = sum(int(d) * (3 if i % 2 == 0 else 1) for i, d in enumerate(reversed(body)))
-        text = body + str((10 - s % 10) % 10)
-    else:
-        text = cert
-    return "0" + text if len(text) % 2 else text
+
+def _stable_seed(*parts) -> int:
+    return zlib.crc32("|".join(map(str, parts)).encode())
+
+
+def itf_text(cert: str) -> str:
+    """PSA's ITF payload: the cert zero-padded to 8 digits, on every real label. A cert longer than 8 digits never
+    appears on an ITF label (9-digit certs use Code128); asked for one anyway, this pads it to an even length, which the
+    parser rejects as a misread, as it rejects every ITF that is not 8 digits."""
+    if len(cert) <= 8:
+        return cert.zfill(8)
+    return "0" + cert if len(cert) % 2 else cert
+
+
+def psa_label(era: str, cert: str) -> str:
+    """Which PSA label a slab of this era and cert carries: current | lighthouse | 2016 | old."""
+    if era == "current" or (era == "2017+" and len(cert.lstrip("0")) > 8):
+        return "current"
+    if era == "2017+":
+        return "lighthouse"
+    if era in ("2016", "2015"):
+        return "2016"
+    if era == "old":
+        return "old"
+    raise ValueError(f"unknown PSA era {era!r} (one of {PSA_ERAS})")
+
+
+def cgc_grade(cert: str) -> str:
+    return _CGC_GRADES[_stable_seed("grade", cert) % len(_CGC_GRADES)]
+
+
+def label_codes(cert: str, side: str, grader: str = "PSA", era: str = "2017+") -> list[tuple[str, str]]:
+    """The machine-readable codes printed on one side ('front' | 'back') of a real label: [(symbology, payload)]."""
+    if grader == "PSA":
+        kind = psa_label(era, cert)
+        if kind == "current":
+            return [("Code128", cert)] if side == "front" else [("QRCode", f"https://www.psacard.com/cert/{cert}/"), ("Code128", cert)]
+        itf = ("ITF", itf_text(cert))
+        if side == "front":
+            return [itf]
+        if kind == "lighthouse":  # both URL forms are on real lighthouse labels
+            url = f"http://psacard.com/cert/{cert}" if _stable_seed("url", cert) % 2 else f"https://www.psacard.com/cert/{cert}/"
+            return [("QRCode", url), itf]
+        return [itf] if kind == "2016" else []
+    if grader == "CGC":
+        era = era if era in CGC_ERAS else "2023+"
+        if era == "og":
+            if side == "front":
+                return []
+            prefix = str(4700000000000000 + _stable_seed("og", cert) % 10**8 * 10**8)[:16]  # 16 digits, then the cert
+            return [("QRCode", f"https://www.cgccomics.com/certlookup/{cert}/{cgc_grade(cert)}"), ("Code128", prefix + cert)]
+        if era == "authentic":
+            return [("QRCode", f"https://www.cgccards.com/certlookup/{cert}/0_0/"), ("Code128", cert)] if side == "front" else []
+        return [("Code128", cert)] if side == "front" else [("QRCode", f"https://www.cgccards.com/certlookup/{cert}/{cgc_grade(cert)}/")]
+    return []  # BGS, SGC: the printed cert only
+
+
+def has_back_code(grader: str, era: str, cert: str) -> bool:
+    """Does the back label carry a code that proves the slab face-down (certs.SIDE_PROOFS)?"""
+    return any(sym == "QRCode" or (grader == "CGC" and len(text) > 13) for sym, text in label_codes(cert, "back", grader, era))
+
+
+_MODULE_MM = {"QRCode": 0.42, "ITF": 0.25, "Code128": 0.25}  # [Guessing] from photos; CGC codes are drawn smaller below
 
 
 def _symbol(text: str, fmt: str, module_mm: float, height_mm: float | None = None) -> np.ndarray:
@@ -63,29 +127,48 @@ def _text(canvas: np.ndarray, s: str, x_mm: float, y_mm: float, size_mm: float) 
     cv2.putText(canvas, s, (int(x_mm * PX_PER_MM_RENDER), int(y_mm * PX_PER_MM_RENDER)), cv2.FONT_HERSHEY_SIMPLEX, scale, 0, max(1, int(scale * 2)), cv2.LINE_AA)
 
 
+def label_blank(grader: str, era: str, side: str) -> bool:
+    """True when that side shows no label at all in the simulator (an old PSA label's back)."""
+    return grader == "PSA" and side == "back" and psa_label(era, "1") == "old"
+
+
 @lru_cache(maxsize=256)
-def render_label(cert: str, side: str = "front", symbology: str = "ITF", module_mm: float = 0.25, itf_payload: str = "zero_pad") -> np.ndarray:
-    """Grayscale label at PX_PER_MM_RENDER. side='front' -> 1D code, 'back' -> QR + 1D,
-    'back_itf_only' -> 2015-2017 style back label (1D only). Cached: treat the result as read-only."""
-    code_text = itf_text(cert, itf_payload) if symbology == "ITF" else cert
+def render_label(cert: str, side: str = "front", grader: str = "PSA", era: str = "2017+", module_mm: float | None = None) -> np.ndarray:
+    """Grayscale label at PX_PER_MM_RENDER with the codes ``label_codes`` lists for that side, printed text and the
+    printed cert. ``module_mm`` overrides the 1D module size (decode sweeps). Cached: treat the result as read-only."""
     canvas = np.full((int(LABEL_H_MM * PX_PER_MM_RENDER), int(LABEL_W_MM * PX_PER_MM_RENDER)), 245, np.uint8)
     cv2.rectangle(canvas, (0, 0), (canvas.shape[1] - 1, canvas.shape[0] - 1), 120, 6)
+    codes = label_codes(cert, side, grader, era)
+    qr = [t for s, t in codes if s == "QRCode"]
+    bars = [(s, t) for s, t in codes if s != "QRCode"]
     if side == "front":
-        _text(canvas, "2023 POKEMON SV151", 3, 5, 2.4)
-        _text(canvas, "#199 CHARIZARD EX", 3, 9, 2.4)
-        _text(canvas, "SPECIAL ILLUS. RARE", 3, 13, 2.4)
-        _text(canvas, "GEM MT 10", 50, 6, 2.6)
-        bar = _symbol(code_text, symbology, module_mm, height_mm=4.5)
-        _paste(canvas, bar, LABEL_W_MM - 3 - bar.shape[1] / PX_PER_MM_RENDER, 8.5)
-        _text(canvas, cert, 40, 18, 2.4)  # printed cert, fully inside the label (52 mm clipped the 9th digit)
+        tx = 20 if qr else 3  # a CGC Authentic front has its QR at the left end
+        _text(canvas, "2023 POKEMON SV151", tx, 5, 2.4)
+        _text(canvas, "#199 CHARIZARD EX", tx, 9, 2.4)
+        _text(canvas, "SPECIAL ILLUS. RARE", tx, 13, 2.4)
+        if not qr:  # an Authentic label carries no grade
+            _text(canvas, {"PSA": "GEM MT 10", "CGC": "MINT 9"}.get(grader, "NM-MT 8.5"), 50, 6, 2.6)
     else:
-        if side != "back_itf_only":
-            qr = _symbol(f"https://www.psacard.com/cert/{cert}", "QRCode", 0.42)
-            _paste(canvas, qr, 2, (LABEL_H_MM - qr.shape[0] / PX_PER_MM_RENDER) / 2)
-        _text(canvas, "PSA", 30, 9, 4)
-        bar = _symbol(code_text, symbology, module_mm, height_mm=3.5)
-        _paste(canvas, bar, LABEL_W_MM - 2 - bar.shape[1] / PX_PER_MM_RENDER, 12)
-        _text(canvas, cert, 52, 10, 2.2)
+        _text(canvas, grader if grader in ("PSA", "CGC", "BGS", "SGC") else "", 30, 9, 4)
+    if qr:  # the QR at the left end: the back label, or a CGC Authentic front
+        q = _symbol(qr[0], "QRCode", _MODULE_MM["QRCode"] if grader == "PSA" else 0.38)
+        _paste(canvas, q, 2, (LABEL_H_MM - q.shape[0] / PX_PER_MM_RENDER) / 2)
+    for sym, text in bars:
+        if grader == "CGC":  # short bars: the CGC front Code128 is the weakest symbol on real labels (~1.7 mm bars)
+            bar = _symbol(text, sym, module_mm or 0.2, height_mm=1.8 if side == "front" else 3.0)
+            _paste(canvas, bar, LABEL_W_MM - 2.5 - bar.shape[1] / PX_PER_MM_RENDER, LABEL_H_MM - 4.5 if side == "front" else 13)
+        elif side == "front":
+            bar = _symbol(text, sym, module_mm or _MODULE_MM[sym], height_mm=4.5)
+            _paste(canvas, bar, LABEL_W_MM - 3 - bar.shape[1] / PX_PER_MM_RENDER, 8.5)
+        else:
+            bar = _symbol(text, sym, module_mm or _MODULE_MM[sym], height_mm=3.5)
+            _paste(canvas, bar, LABEL_W_MM - 2 - bar.shape[1] / PX_PER_MM_RENDER, 12)
+    # [Likely, two real pre-2016 labels: OCR read '02074012', '01418255'] PSA prints a 7-digit cert zero-padded to 8; BGS to 10
+    printed = cert.zfill(8) if grader == "PSA" else cert.zfill(10) if grader == "BGS" else cert
+    if side == "front":
+        _text(canvas, printed, 40 if grader == "PSA" else 20 if qr else 3, 18, 2.4)  # printed cert, fully inside the label
+    elif grader == "PSA" or qr:
+        _text(canvas, printed, 52 if grader == "PSA" else 30, 10 if grader == "PSA" else 12.2, 2.2)
     return canvas
 
 
@@ -102,18 +185,20 @@ class Degrade:
     haze: float = 0.12  # slab plastic lowers contrast
 
 
-def slab_view(cert: str, side: str, deg: Degrade, symbology: str = "ITF", module_mm: float = 0.25, seed: int = 0, itf_payload: str = "zero_pad") -> np.ndarray:
-    """Camera view of the top ~45 mm of a slab (label + border), degraded."""
+def slab_view(cert: str, side: str, deg: Degrade, grader: str = "PSA", era: str = "2017+", module_mm: float | None = None, seed: int = 0) -> np.ndarray:
+    """Camera view of the top ~45 mm of a slab (label + border), degraded. The side with no label (an old PSA back)
+    is the bare slab."""
     rng = np.random.default_rng(seed)
-    label = render_label(cert, side, symbology, module_mm, itf_payload)
     view_w_mm, view_h_mm = SLAB_W_MM + 10, 45.0
     canvas = np.full((int(view_h_mm * PX_PER_MM_RENDER), int(view_w_mm * PX_PER_MM_RENDER)), 40, np.uint8)
     sx, sy = 5.0, 2.0  # slab corner within view
     cv2.rectangle(canvas, (int(sx * PX_PER_MM_RENDER), int(sy * PX_PER_MM_RENDER)), (int((sx + SLAB_W_MM) * PX_PER_MM_RENDER), canvas.shape[0]), 70, -1)
     lx = sx + (SLAB_W_MM - LABEL_W_MM) / 2
     ly = sy + LABEL_TOP_MM
-    y0, x0 = int(ly * PX_PER_MM_RENDER), int(lx * PX_PER_MM_RENDER)
-    canvas[y0:y0 + label.shape[0], x0:x0 + label.shape[1]] = label
+    if not label_blank(grader, era, side):
+        label = render_label(cert, side, grader, era, module_mm)
+        y0, x0 = int(ly * PX_PER_MM_RENDER), int(lx * PX_PER_MM_RENDER)
+        canvas[y0:y0 + label.shape[0], x0:x0 + label.shape[1]] = label
     spots = [((lx + deg.glare_pos[0] * LABEL_W_MM), (ly + deg.glare_pos[1] * LABEL_H_MM), deg.glare)] if deg.glare > 0 else []
     return _degrade(canvas.astype(np.float32), deg, rng, spots)
 
@@ -223,12 +308,6 @@ def _draw_occluders(out: np.ndarray, occluders, px_per_mm: float) -> np.ndarray:
     return np.clip(out * (1 - mask) + layer * mask, 0, 255).astype(np.uint8)
 
 
-def _stable_seed(*parts) -> int:
-    import zlib
-
-    return zlib.crc32("|".join(map(str, parts)).encode())
-
-
 @lru_cache(maxsize=8)
 def card_back(kind: str = "pokemon_en") -> np.ndarray:
     """Procedural stand-in for a card back (NOT the real artwork), at CARD_PX_PER_MM: one fixed image per back type,
@@ -302,13 +381,13 @@ def _card_layer(card: np.ndarray, rows_mm: float) -> np.ndarray:
 
 
 def head_view(cert: str, side: str, deg: Degrade, era: str = "2017+", grader: str = "PSA", back: str = "pokemon_en",
-              head: str = "cad", itf_payload: str = "zero_pad", seed: int | None = None, front: str = "art") -> np.ndarray:
+              head: str = "cad", seed: int | None = None, front: str = "art") -> np.ndarray:
     """What the head camera sees of one slab from above: HEAD_VIEW_MM of it. ``side`` is the slab side facing up:
-    'back' (face-down: back label, or none on old labels, and the card BACK in the card window) or 'front' (face-up:
-    front label and the card's own front). The slab lies up to +/-2 mm off centre and up to 1 deg off square in its
-    pocket, the exposure differs by up to 12 %, and about a third of the slabs carry a glare spot on the card window.
-    The head's own parts (``head``, see HEADS) are drawn in front of it. ``front``: "art" (card_front) or "plain"
-    (plain_front)."""
+    'back' (face-down: the back label with what it carries for this grader and era, none on old PSA labels, and the
+    card BACK in the card window) or 'front' (face-up: the front label and the card's own front). The slab lies up to
+    +/-2 mm off centre and up to 1 deg off square in its pocket, the exposure differs by up to 12 %, and about a third of
+    the slabs carry a glare spot on the card window. The head's own parts (``head``, see HEADS) are drawn in front of
+    it. ``front``: "art" (card_front) or "plain" (plain_front)."""
     rng = np.random.default_rng(_stable_seed(cert, side, era, grader, back, head) if seed is None else seed)
     x0v, y0v, x1v, y1v = HEAD_VIEW_MM
     W, H = x1v - x0v, y1v - y0v
@@ -320,15 +399,8 @@ def head_view(cert: str, side: str, deg: Degrade, era: str = "2017+", grader: st
     card = card_back(back) if side == "back" else (plain_front(cert) if front == "plain" else card_front(cert))
     _paste_clip(canvas, _card_layer(card, H - cy + 1), cx, cy)
     lx, ly = sx + (SLAB_W_MM - LABEL_W_MM) / 2, sy + LABEL_TOP_MM
-    if grader != "PSA":
-        if side == "front":  # other graders: a QR with their URL on the front label
-            url = {"CGC": f"https://www.cgccards.com/certlookup/{cert}/", "BGS": f"https://www.beckett.com/grading/card-lookup?item_id={cert}"}.get(grader, cert)
-            lab = np.full((int(25 * PX_PER_MM_RENDER), int(75 * PX_PER_MM_RENDER)), 240, np.uint8)
-            _paste(lab, _symbol(url, "QRCode", 0.4), 3, 3)
-            _paste_clip(canvas, lab, sx + (SLAB_W_MM - 75) / 2, ly)
-    elif not (side == "back" and era == "old"):  # old labels: nothing printed on the back
-        view_side = "back_itf_only" if side == "back" and era == "2015" else side
-        _paste_clip(canvas, render_label(cert, view_side, "ITF", 0.25, itf_payload), lx, ly)
+    if not label_blank(grader, era, side):
+        _paste_clip(canvas, render_label(cert, side, grader, era), lx, ly)
     spots = [(lx + deg.glare_pos[0] * LABEL_W_MM, ly + deg.glare_pos[1] * LABEL_H_MM, deg.glare)] if deg.glare > 0 else []
     if rng.random() < 0.35:
         spots.append((cx + rng.uniform(10, CARD_W_MM - 10), cy + rng.uniform(2, 16), rng.uniform(0.15, 0.35)))

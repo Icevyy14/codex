@@ -23,7 +23,7 @@ import numpy as np
 
 from .config import Config
 from .motion import SafetyViolation
-from .sim import HEAD_VIEW_MM, Degrade, empty_head_view, head_view, slab_view
+from .sim import HEAD_VIEW_MM, Degrade, empty_head_view, has_back_code, head_view, slab_view
 
 BUFFER_STROKE = 25.0
 TRIGGER_COMPRESSION = 2.0  # buffer compression at which the optical sensor trips
@@ -39,7 +39,9 @@ class Crash(SafetyViolation):
 class SimSlab:
     cert: str
     thickness: float = 6.6
-    era: str = "2017+"  # 2017+ (back QR+ITF) | 2015 (back ITF only) | old (front only)
+    # label era (sim.PSA_ERAS / CGC_ERAS): PSA current | 2017+ (back QR; ITF up to 8 digits, Code128 for 9) | 2016 (back
+    # ITF only) | old (front ITF only); CGC 2023+ | og | authentic. BGS and SGC labels carry no code.
+    era: str = "2017+"
     grader: str = "PSA"
     face_down: bool = True
     back: str = "pokemon_en"  # card back seen through the slab when face-down: pokemon_en | pokemon_jp (sim.card_back)
@@ -60,7 +62,6 @@ class SimWorld:
     gripping: bool = False
     seed: int = 1
     events: list[str] = field(default_factory=list)
-    itf_payload: str = "zero_pad"  # how this simulated PSA prints odd-length certs
     rng: random.Random = field(default_factory=lambda: random.Random(1))
     trigger_compression: float = TRIGGER_COMPRESSION  # buffer travel between first touch and the probe trip
     # A clinging slab (double pick) held only by an air film: None = rides to placement; "peel" = falls back
@@ -409,7 +410,7 @@ class SimCamera:
                 return self._blank()
             s = w.held[0]
             side = "front" if s.face_down else "back"
-        base = _cached_view(s.cert, s.era, s.grader, side, self.role, w.itf_payload, self.deg, back=s.back, head=w.head, front=s.front)
+        base = _cached_view(s.cert, s.era, s.grader, side, self.role, self.deg, back=s.back, head=w.head, front=s.front)
         noise = np.random.default_rng(self.n).normal(0, 2.0, base.shape)
         return np.clip(base.astype(np.float32) + noise, 0, 255).astype(np.uint8)
 
@@ -417,57 +418,110 @@ class SimCamera:
 _VIEW_CACHE: dict = {}
 
 
-def _cached_view(cert, era, grader, side, role, itf_payload, deg, back="pokemon_en", head="cad", front="art"):
-    key = (cert, era, grader, side, role, itf_payload, back, head, front, repr(deg))
+def _cached_view(cert, era, grader, side, role, deg, back="pokemon_en", head="cad", front="art"):
+    key = (cert, era, grader, side, role, back, head, front, repr(deg))
     if key not in _VIEW_CACHE:
         if role == "head":
-            _VIEW_CACHE[key] = head_view(cert, side, deg, era=era, grader=grader, back=back, head=head, itf_payload=itf_payload, front=front)
+            _VIEW_CACHE[key] = head_view(cert, side, deg, era=era, grader=grader, back=back, head=head, front=front)
         else:
-            _VIEW_CACHE[key] = render_slab_side(SimSlab(cert, era=era, grader=grader), side, deg, seed=hash(key) & 0xFFFF, itf_payload=itf_payload)
+            _VIEW_CACHE[key] = render_slab_side(SimSlab(cert, era=era, grader=grader), side, deg, seed=hash(key) & 0xFFFF)
     return _VIEW_CACHE[key]
 
 
-def render_slab_side(s: SimSlab, side: str, deg: Degrade, seed: int, itf_payload: str = "zero_pad"):
-    if s.grader != "PSA":  # other graders: a QR with their URL on the front label
-        img = other_grader_view(s.cert, s.grader, deg, seed)
-        return img if side == "front" else np.full_like(img, 40)
-    if side == "back" and s.era == "old":
-        return np.full((int(45 / deg.mm_per_px), int(90 / deg.mm_per_px)), 40, np.uint8)
-    view_side = side
-    if side == "back" and s.era == "2015":
-        view_side = "back_itf_only"
-    return slab_view(s.cert, view_side, deg, seed=seed, itf_payload=itf_payload)
+def render_slab_side(s: SimSlab, side: str, deg: Degrade, seed: int):
+    """The station camera's view of one side of a slab: its label with what the grader and era print there."""
+    return slab_view(s.cert, side, deg, grader=s.grader, era=s.era, seed=seed)
 
 
-def other_grader_view(cert: str, grader: str, deg: Degrade, seed: int):
-    import cv2
-
-    from .sim import PX_PER_MM_RENDER, _paste, _symbol
-
-    url = {"CGC": f"https://www.cgccards.com/certlookup/{cert}/", "BGS": f"https://www.beckett.com/grading/card-lookup?item_id={cert}"}.get(grader, cert)
-    canvas = np.full((int(25 * PX_PER_MM_RENDER), int(75 * PX_PER_MM_RENDER)), 240, np.uint8)
-    _paste(canvas, _symbol(url, "QRCode", 0.4), 3, 3)
-    scale = 1.0 / (deg.mm_per_px * PX_PER_MM_RENDER)
-    img = cv2.resize(canvas, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-    return cv2.GaussianBlur(img, (0, 0), max(0.3, deg.blur_px))
+def back_code(s: SimSlab) -> bool:
+    """Does this slab's back label carry a code that proves it face-down (a PSA or CGC back QR, the CGC OG barcode)?"""
+    return has_back_code(s.grader, s.era, s.cert)
 
 
-def make_batch(cfg: Config, per_pocket: int | None = None, seed: int = 7, eras=(0.85, 0.1, 0.05), clingy_rate=0.0, thick_rate=0.0,
-               jp_rate: float = 0.0) -> dict[int, list[SimSlab]]:
+# The default batch: what the label mix of a buyer of mostly low-end Pokemon slabs might look like. [Guessing: not
+# counted from a real batch; set your own with `sim --mix`.] SGC is left out: its 86.25 mm holder does not fit the
+# 84 mm pockets (cad/layout.py).
+DEFAULT_MIX = {"psa:current": 0.55, "psa:2017+": 0.15, "psa:2016": 0.03, "psa:old": 0.05,
+               "cgc:2023+": 0.15, "cgc:og": 0.04, "cgc:authentic": 0.01, "bgs:": 0.02}
+
+
+def parse_mix(text: str) -> dict[str, float]:
+    """'psa:current=0.6,cgc:2023+=0.4' -> {kind: share}; the shares are normalised."""
+    mix = {}
+    for part in text.split(","):
+        k, _, v = part.strip().partition("=")
+        if k:
+            mix[k.strip().lower()] = float(v)
+    for k in mix:
+        g, _, era = k.partition(":")
+        if g not in ("psa", "cgc", "bgs", "sgc") or (g == "psa" and era not in ("current", "2017+", "2016", "2015", "old")) or (
+                g == "cgc" and era not in ("2023+", "og", "authentic")):
+            raise ValueError(f"unknown label kind {k!r}: psa:current|2017+|2016|old, cgc:2023+|og|authentic, bgs:, sgc:")
+    total = sum(mix.values())
+    if total <= 0:
+        raise ValueError("the mix shares must add up to more than 0")
+    return {k: v / total for k, v in mix.items()}
+
+
+def _mix_slab(kind: str, rng: random.Random) -> tuple[str, str, str, float]:
+    """(grader, era, cert, thickness) of one slab of a label kind, with certs and holders as real ones of that kind."""
+    g, _, era = kind.partition(":")
+    if g == "psa":
+        if era == "current":
+            cert = str(rng.randint(100_000_000, 199_999_999)) if rng.random() < 0.9 else str(rng.randint(20_000_000, 99_999_999))
+        elif era == "2017+":
+            cert = str(rng.randint(20_000_000, 79_999_999))
+        elif era in ("2016", "2015"):
+            cert = str(rng.randint(15_000_000, 29_999_999))
+        else:
+            cert = str(rng.randint(1_000_000, 9_999_999)) if rng.random() < 0.4 else str(rng.randint(10_000_000, 19_999_999))
+        return "PSA", era, cert, rng.uniform(6.25, 6.9)
+    if g == "cgc":
+        lo, hi = {"2023+": (4_000_000_000, 6_999_999_999), "og": (3_700_000_000, 4_299_999_999), "authentic": (6_100_000_000, 6_199_999_999)}[era]
+        cert = "140" + str(rng.randint(1_000_000_000, 9_999_999_999)) if era == "2023+" and rng.random() < 0.05 else str(rng.randint(lo, hi))
+        return "CGC", era, cert, rng.uniform(7.3, 7.7)
+    if g == "bgs":
+        return "BGS", "", "00" + str(rng.randint(10_000_000, 99_999_999)), rng.uniform(7.5, 7.8)  # [Guessing] BGS holder thickness
+    return "SGC", "", str(rng.randint(1_000_000_000, 9_999_999_999)), rng.uniform(7.0, 7.5)
+
+
+def make_batch(cfg: Config, per_pocket: int | None = None, seed: int = 7, eras=None, clingy_rate=0.0, thick_rate=0.0,
+               jp_rate: float = 0.0, mix: dict[str, float] | None = None) -> dict[int, list[SimSlab]]:
+    """Simulated stacks, deterministic for a seed. ``mix`` ({"psa:current": share, ...}, DEFAULT_MIX when neither it nor
+    ``eras`` is given) draws each slab's grader and label era. ``eras`` = (2017+, 2016, old) shares of a PSA-only batch
+    (80 % of the 2017+ ones with 9-digit certs, which carry Code128; older labels get 7-8 digit certs, as on real ones).
+    A pocket is never filled above its MAX line: a thick slab that would cross it becomes a standard PSA one."""
     rng = random.Random(seed)
     rng_back = random.Random(seed * 7919 + 1)  # its own stream: the rest of the batch is the same with or without JP backs
+    kinds = None if eras is not None else sorted((mix or DEFAULT_MIX).items())
     stacks: dict[int, list[SimSlab]] = {}
-    n = 0
     for p in cfg.sources:
         k = per_pocket if per_pocket is not None else cfg.stack_max
         stack = []
+        height = 0.0
         for _ in range(k):
-            n += 1
-            cert = str(rng.randint(100_000_000, 179_999_999)) if rng.random() < 0.8 else str(rng.randint(10_000_000, 99_999_999))
-            r = rng.random()
-            era = "2017+" if r < eras[0] else ("2015" if r < eras[0] + eras[1] else "old")
-            t = 10.25 if rng.random() < thick_rate else rng.uniform(6.25, 6.9)
+            if kinds is None:
+                cert = str(rng.randint(100_000_000, 179_999_999)) if rng.random() < 0.8 else str(rng.randint(10_000_000, 99_999_999))
+                r = rng.random()
+                era = "2017+" if r < eras[0] else ("2016" if r < eras[0] + eras[1] else "old")
+                if era != "2017+" and len(cert) > 8:
+                    cert = cert[1:]  # 9-digit certs exist only on current labels (Code128)
+                t = 10.25 if rng.random() < thick_rate else rng.uniform(6.25, 6.9)
+                grader = "PSA"
+            else:
+                x, kind = rng.random(), kinds[-1][0]
+                for name, share in kinds:
+                    if x < share:
+                        kind = name
+                        break
+                    x -= share
+                grader, era, cert, t = _mix_slab(kind, rng)
+                if rng.random() < thick_rate:
+                    t = 10.25
+                if height + t > cfg.max_line - 1.0:
+                    grader, era, cert, t = _mix_slab("psa:current", rng)
             back = "pokemon_jp" if jp_rate > 0 and rng_back.random() < jp_rate else "pokemon_en"
-            stack.append(SimSlab(cert, t, era, clingy=rng.random() < clingy_rate, back=back))
+            stack.append(SimSlab(cert, t, era, grader=grader, clingy=rng.random() < clingy_rate, back=back))
+            height += t
         stacks[p.index] = stack
     return stacks

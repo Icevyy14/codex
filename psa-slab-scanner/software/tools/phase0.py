@@ -2,15 +2,14 @@
 
 Put a slab face-down in the Phase 0 jig (front toward the bottom camera, label end toward you),
 type its printed cert, press Enter, repeat for 30-50 slabs (mix old and new PSA labels, and a few
-CGC). Scan five 2024+ slabs (9-digit certs, back QR) FIRST: they teach the ITF format, and the
-machine learns in the same order.
-Every capture is saved, and a CSV records exactly what each camera decoded (symbology + raw
-payload), which settles the open questions about PSA's barcode format.
+CGC). Every capture is saved, and a CSV records exactly what each camera decoded (symbology + raw
+payload). The report checks those payloads against the label formats seen on real slabs (certs.py):
+an ITF that is not 8 digits, or a payload no rule knows, is listed there.
 
 Learned face-down check: every back image also gives a card-window descriptor (slabscan/facedown.py).
 The read-rate report is written as soon as you type 'q'. Then, with --face-up N (N >= 15 for a GO), a
-face-up pass scans N slabs FACE-UP with the head camera only (nothing touches them in the jig; include a
-plain and a full-art card). The report compares the backs with each other and with the face-up slabs. A
+face-up pass scans N slabs FACE-UP with the head camera only (first slide the occluder mount 3 mm up its post,
+so the free cup clears the slab's front; include a plain and a full-art card). The report compares the backs with each other and with the face-up slabs. A
 back that matches none of the others (a Japanese card, another game, a CGC holder) is named and left out.
 GO for face_down_check = "learned" needs the lowest remaining back-to-back similarity at least
 FACE_DOWN_MARGIN above the highest face-up similarity; the threshold is the midpoint, never below
@@ -25,8 +24,8 @@ Without cameras (demo with synthetic labels):   python -m tools.phase0 --sim 10
 from __future__ import annotations
 
 import argparse
-import copy
 import csv
+import dataclasses
 import time
 from collections import Counter
 from pathlib import Path
@@ -34,7 +33,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from slabscan.certs import ItfModel, consensus
+from slabscan.certs import TWO_D, ItfModel, consensus, parse_payload, side_evidence
 from slabscan.decode import decode_frame
 from slabscan.facedown import (FILE_NAME, MIN_TEXTURE, THRESHOLD_FLOOR, CardBackRefs, compare, describe, draw_window, frame_view_mm, image_rects,
                                threshold_tag, window_area)
@@ -159,7 +158,7 @@ def main(argv=None) -> int:
                     if n == 1:
                         fd.window_picture(img, out / "window_check.jpg")
                 r, u = decode_frame(img, side)
-                reads += r
+                reads += [dataclasses.replace(x, frame=f"{name}{k}") for x in r]
                 unparsed += u
             res[name] = (reads, unparsed, (time.monotonic() - t0) * 1000)
         allreads = res["back"][0] + res["front"][0]
@@ -179,8 +178,9 @@ def main(argv=None) -> int:
     # written now: the face-up pass below waits for you, and Ctrl-C there must not lose the read-rate result
     (out / "phase0_report.txt").write_text("\n".join(report + ["(learned face-down check: not evaluated yet - the face-up pass did not finish)"]) + "\n")
     face_up_pass(a, head, fd, out)
-    # a slab whose BACK label faced the station camera (a PSA QR read from below) was face-up: its window shows a front
-    face_up_by_mistake = {n for n, (_, _, res) in enumerate(rows, start=1) if any(r.source == "front_qr" and r.grader == "PSA" for r in res["front"][0])}
+    # a slab whose BACK label faced the station camera (a back-label code read from below) was face-up: its window shows a front
+    face_up_by_mistake = {n for n, (_, _, res) in enumerate(rows, start=1)
+                          if any(e.certain and e.side == "back" for e in side_evidence(res["front"][0], res["front"][1]))}
     fd_lines, threshold, outliers = face_down_report(fd, cfg, face_up_by_mistake)
     report += fd_lines
     seed = save_seed(fd, cfg, out / FILE_NAME, outliers | face_up_by_mistake)
@@ -197,9 +197,11 @@ def face_up_pass(a, head, fd: FaceDown, out: Path) -> None:
     if a.face_up <= 0:
         return
     if not a.sim:
-        print(f"\nFace-up pass: {a.face_up} slabs FACE-UP in the jig (label end toward you), for the learned face-down check. Nothing touches "
-              "them here. Use different cards, and include at least one plain card (one colour, little print) and one full-art card: "
-              "they are the hardest to tell from a card back.")
+        print(f"\nFace-up pass: {a.face_up} slabs FACE-UP in the jig (label end toward you), for the learned face-down check. FIRST slide "
+              "the occluder mount 3 mm UP its post (BUILD_GUIDE Phase 0): the free cup then hangs about 1 mm above the slab's front, so "
+              "nothing touches it. Use junk or low-value slabs anyway, and change them with the cup pushed up no more than about 12 mm. "
+              "Use different cards, and include at least one plain card (one colour, little print) and one full-art card: they are the "
+              "hardest to tell from a card back. Afterwards slide the mount back down to 62.0 mm.")
     try:
         for k in range(1, a.face_up + 1):
             if a.sim:  # the first one is a plain card front: the hardest case
@@ -254,10 +256,10 @@ def face_down_report(fd: FaceDown, cfg, exclude: set | frozenset = frozenset()) 
     out.append(f"  usable back images: {len(sep['backs'])} of {sep['n_backs']}" + ("" if len(sep["backs"]) == sep["n_backs"] else
                "  (the rest show nothing in the window - blank, dark or outside the frame - or were face-up: a PSA back QR read from below)"))
     for n in sorted(exclude):
-        out.append(f"  slab {n}: the station camera read a PSA back-label QR from below, so it was FACE-UP in the jig: left out")
+        out.append(f"  slab {n}: the station camera read a back-label code from below, so it was FACE-UP in the jig: left out")
     for x, n in sorted(sep["outliers"], key=lambda t: t[1]):
         out.append(f"  slab {n} matches none of the other backs ({x:.2f}): another back design (a Japanese card, another game) or a CGC "
-                   "holder? Left out of the threshold and of the references. On the machine such slabs stop until a back-QR slab or "
+                   "holder? Left out of the threshold and of the references. On the machine such slabs stop until a back-code slab or "
                    "three of your confirmations teach that back.")
     hold = []
     lo = hi = None
@@ -287,7 +289,7 @@ def face_down_report(fd: FaceDown, cfg, exclude: set | frozenset = frozenset()) 
         hold.append(f"{len(sep['outliers'])} backs match none of the others: too many to call them exceptions (check window_check.jpg)")
     if hold:
         out.append('  HOLD for the learned check: ' + "; ".join(hold) + '. Keep face_down_check = "stop" (set it in calibration.toml): '
-                   "every slab without a back QR then stops for you to check.")
+                   "every slab without a back-label code then stops for you to check.")
         return out, None, {n for _, n in sep["outliers"]}
     out.append(f'  GO for face_down_check = "learned": recommended face_down_threshold = {threshold:.2f} (midpoint of {lo:.2f} and {hi:.2f}, '
                f"floor {THRESHOLD_FLOOR:.2f}; margin {lo - hi:.2f} >= {FACE_DOWN_MARGIN:.2f}). {nu} face-up slabs were seen: the true highest "
@@ -327,14 +329,30 @@ def save_face_down(a, fd: FaceDown, cfg, out: Path, threshold: float | None, exc
     return [f"--save: wrote face_down_threshold = {threshold:.2f} (sig {tag}) to {cal} and {refs.summary()} to {cdir / FILE_NAME}"]
 
 
-def phase0_report(rows: list, itf: ItfModel) -> list[str]:
-    """The GO / HOLD decision. ``rows`` = [(typed cert, verdict in scan order, {side: (reads, unparsed, ms)})]."""
+def payload_check(rows: list) -> list[str]:
+    """What the payloads say about the label formats (certs.py): ITF lengths, the rule each payload matched, and every
+    payload no rule knows. On real labels every PSA ITF is 8 digits; another length is a misread or a new format."""
+    reads = [r for _, _, res in rows for side in ("back", "front") for r in res[side][0] if r.source != "ocr"]
+    itf_len = Counter(len(r.raw) for r in reads if r.symbology == "ITF")
+    kinds = Counter(p.kind for r in reads for p in [parse_payload(r.raw, r.symbology)] if p)
+    unknown = sorted({u for _, _, res in rows for side in ("back", "front") for u in res[side][1]})
+    out = [f"payload formats: {dict(sorted(kinds.items()))}"]
+    if itf_len:
+        out.append(f"ITF payload lengths: {dict(sorted(itf_len.items()))} (real PSA labels: always 8 = the cert zero-padded)")
+    if unknown:
+        shown = unknown[:12]
+        out.append(f"payloads no rule reads ({len(unknown)}): " + "; ".join(shown) + (" ..." if len(unknown) > len(shown) else "")
+                   + ". A CGC QR without a cert or a short ITF is a known case; anything else: send phase0.csv with your question.")
+    qr_slabs = sum(1 for _, _, res in rows if any(r.symbology in TWO_D for r in res["back"][0]))
+    out.append(f"slabs whose back QR the head camera read: {qr_slabs}/{len(rows)}")
+    return out
+
+
+def phase0_report(rows: list, itf: ItfModel | None = None) -> list[str]:
+    """The GO / HOLD decision. ``rows`` = [(typed cert, verdict in scan order, {side: (reads, unparsed, ms)})]. ``itf`` is
+    accepted for old callers; the ITF format is fixed (certs.ItfModel)."""
     total = len(rows)
     ok = sum(1 for _, v, _ in rows if v.status == "ok")
-    # the same reads scored again with the ITF format as finally learned (the machine itself learns in order,
-    # so the in-order number is the one that predicts a run; the second shows what scan order cost)
-    learned = copy.deepcopy(itf)
-    ok_after = sum(1 for _, _, res in rows if consensus(res["back"][0] + res["front"][0], copy.deepcopy(learned)).status == "ok")
     back_any = sum(1 for _, _, r in rows if r["back"][0])
     front_any = sum(1 for _, _, r in rows if r["front"][0])
     syms = Counter(r.symbology for _, _, res in rows for side in ("back", "front") for r in res[side][0])
@@ -349,10 +367,10 @@ def phase0_report(rows: list, itf: ItfModel) -> list[str]:
     go = ok >= 0.95 * total and wrong == 0 and untyped == 0 and n > 0
     report = [
         f"slabs: {total}",
-        f"confident read (ok), in scan order: {ok}/{total} = {100 * ok / total:.0f}%   (with the ITF format learned from the start: {ok_after}/{total})",
+        f"confident read (ok), in scan order: {ok}/{total} = {100 * ok / total:.0f}%",
         f"back camera read something: {back_any}/{total}; front camera: {front_any}/{total}",
         f"symbologies seen: {dict(syms)}",
-        f"ITF format learned: {itf.mode} (evidence {dict(itf.evidence)})",
+        *payload_check(rows),
         f"WRONG certs vs what you typed: {wrong} of {n} typed  <- must be 0" + (f"; {untyped} NOT typed (every slab must be typed)" if untyped else ""),
     ]
     if bound:

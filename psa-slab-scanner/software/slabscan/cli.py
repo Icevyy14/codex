@@ -28,6 +28,7 @@ import sys
 import threading
 import time
 import tomllib
+from collections import Counter
 from pathlib import Path
 
 from .config import Config, from_layout, load
@@ -100,7 +101,7 @@ def run_options(batch_dir: Path) -> dict:
 def face_down_line(fd: dict) -> str:
     """How the batch's slabs were proven face-down (summary.json face_down)."""
     c = fd.get("counts") or {}
-    parts = [f"{c[k]} {label}" for k, label in (("qr", "by back QR"), ("learned", "by the learned card-back match"),
+    parts = [f"{c[k]} {label}" for k, label in (("qr", "by back QR"), ("code", "by a back-label barcode"), ("learned", "by the learned card-back match"),
                                                   ("operator", "confirmed by you"), ("off", "not checked (check off)")) if c.get(k)]
     line = "face-down: " + (", ".join(parts) if parts else "no slabs")
     learned = fd.get("learned") or []
@@ -364,7 +365,7 @@ def cmd_run(args, con):
         con.say("Before starting: slabs FACE-DOWN, label end toward you, in pockets 1-11, none above the MAX line.\n"
                 "Pocket 0 and pocket 12 empty. Cup wiped. Hands out (light roof on, if fitted).")
         if args.all_face_down:
-            con.say("--all-face-down: slabs the face-down check cannot confirm (no back QR, no match with a known card back) are picked\n"
+            con.say("--all-face-down: slabs the face-down check cannot confirm (no back-label code, no match with a known card back) are picked\n"
                     "without stopping. A slab loaded face-up would get the cup on its front, so check every stack before you walk away.")
         if not con.confirm("Start the run?"):
             return 1
@@ -502,21 +503,26 @@ class _CountVac:
 
 def cmd_sim(args, con):
     from .factory import sim_hardware, sim_stacks
+    from .simworld import back_code, parse_mix
 
     cfg, _ = load_config(args)
     if args.front_photo:
         cfg = dataclasses.replace(cfg, front_photo=args.front_photo)
-    eras = tuple(float(x) for x in args.eras.split(","))
-    stacks = sim_stacks(cfg, args.slabs, seed=args.seed, eras=eras, clingy_rate=args.clingy_rate, thick_rate=args.thick_rate, jp_rate=args.jp_rate)
-    unconfirmable = sum(1 for v in stacks.values() for sl in v if sl.era != "2017+" or sl.grader != "PSA")
+    eras = tuple(float(x) for x in args.eras.split(",")) if args.eras else None
+    mix = parse_mix(args.mix) if args.mix else None
+    stacks = sim_stacks(cfg, args.slabs, seed=args.seed, eras=eras, clingy_rate=args.clingy_rate, thick_rate=args.thick_rate, jp_rate=args.jp_rate, mix=mix)
+    kinds = Counter(f"{sl.grader} {sl.era}".strip() for v in stacks.values() for sl in v)
+    con.say("labels: " + ", ".join(f"{k} {n}" for k, n in sorted(kinds.items(), key=lambda kv: -kv[1])))
+    unconfirmable = sum(1 for v in stacks.values() for sl in v if not back_code(sl))
     n_slabs = sum(len(v) for v in stacks.values())
     if cfg.face_down_check != "off" and not args.face_down_check:
         # Every simulated slab is face-down. On the machine, each slab the check cannot confirm stops the run until you
         # confirm it (resume --face-down-ok): here that is reported instead, so the timing is for a full run.
         cfg = dataclasses.replace(cfg, face_down_check="off")
-        con.say(f"(sim: face-down check off. On the machine {unconfirmable} of these {n_slabs} slabs have no PSA back-label QR. With "
+        con.say(f"(sim: face-down check off. On the machine {unconfirmable} of these {n_slabs} slabs have no back-label code (a PSA or "
+                "CGC back QR, or the CGC 2020-23 back barcode). With "
                 "face_down_check = \"stop\" each one stops the run until you confirm it is face-down (resume --face-down-ok). With \"learned\" "
-                "(the default) they are first compared with the card backs of QR-confirmed slabs: `sim --face-down-check` shows how many "
+                "(the default) they are first compared with the card backs of code-proven slabs: `sim --face-down-check` shows how many "
                 "would still stop.)")
     if args.face_down_check and cfg.face_down_check == "learned" and cfg.face_down_threshold is None:
         cfg = dataclasses.replace(cfg, face_down_threshold=SIM_FACE_DOWN_THRESHOLD, face_down_threshold_sig=threshold_tag(cfg.face_down_window_mm))
@@ -570,7 +576,7 @@ def cmd_sim(args, con):
     if sim_operator is not None:
         stops = survey["runner"].face_down_stops
         con.say(f"face-down check ({cfg.face_down_check}): {stops} of {n_slabs} slabs stopped for you (the simulated operator confirmed each; "
-                f"checking only the back QR, {unconfirmable} would have). On the machine every stop waits for you, and resume homes and "
+                f"checking only back-label codes, {unconfirmable} would have). On the machine every stop waits for you, and resume homes and "
                 f"re-surveys first (~{survey_s + survey_vents * cfg.vent_s:.0f} s), so the time above is for an unbroken run.")
     return 0
 
@@ -694,7 +700,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--front-photo", choices=["always", "fallback"], help="always = photograph every front (+~3 s/slab)")
     p.add_argument("--all-face-down", action="store_true",
                    help="you loaded every slab face-down: don't stop at slabs the face-down check cannot confirm "
-                        "(no back QR, and no match with a known card back)")
+                        "(no back-label code, and no match with a known card back)")
     p.add_argument("--yes", action="store_true", help="no start question (unattended start)")
     p.add_argument("--uncalibrated", action="store_true", help=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_run)
@@ -711,7 +717,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("sim", help="full simulated batch, no hardware")
     p.add_argument("--slabs", type=int, default=22)
     p.add_argument("--seed", type=int, default=7)
-    p.add_argument("--eras", default="0.85,0.1,0.05", help="share of 2017+ / 2015-2017 / pre-2015 labels")
+    p.add_argument("--mix", help="label mix, e.g. 'psa:current=0.6,psa:2017+=0.2,cgc:2023+=0.2' (kinds: psa:current|2017+|2016|old, "
+                        "cgc:2023+|og|authentic, bgs:, sgc:). Default: mostly PSA, some CGC (simworld.DEFAULT_MIX)")
+    p.add_argument("--eras", help="PSA-only batch instead: share of labels with a back QR / 2016 (back ITF only) / pre-2016, e.g. 0.85,0.1,0.05")
     p.add_argument("--clingy-rate", type=float, default=0.0, help="share of slabs that stick to the one above (double picks)")
     p.add_argument("--thick-rate", type=float, default=0.0, help="share of thick holders")
     p.add_argument("--front-photo", choices=["always", "fallback"])
