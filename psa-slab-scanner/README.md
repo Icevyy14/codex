@@ -50,7 +50,7 @@ The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
 | Cycle | about 11–12 s per slab in the timing simulation, so about 1 hour per 330. Real speed will be measured in the acceptance tests. |
 | Touches the slab | cup on the **back** only; edges against wooden dowels; slabs rest on each other as in any stack |
 | Output | `certs.csv` (cert, grader, status, pocket and position), `certs.txt`, `report.html` with label photos |
-| Budget | see [docs/BOM.md](docs/BOM.md), target $1,000–1,400 (hard cap $2,000) |
+| Budget | about **$1,700** for everything including a 10% allowance, or about **$1,440** if the school supplies filament, wire and common screws. Hard cap $2,000. Details in [docs/BOM.md](docs/BOM.md). |
 
 ## What's in this folder
 
