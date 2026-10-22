@@ -16,10 +16,10 @@ filled. Every time estimate is **[Guessing]**.
   - **0A, camera test: ≈ $449**, or ≈ $285 if you borrow a school Pi 4 or Pi 5 (a Pi 5 4 GB costs
     about $110 by itself in October 2026). Buy your own Pi only after 0A says GO.
   - **0B, cup test: ≈ $145.** A hand vacuum pump on the bench: no mains wiring, no electronics.
-- **The full machine is far above your target and close to the cap.** [Likely ±15%] The BOM comes
-  to about $1,903 with a 15% allowance, about $1,634 if the school supplies its usual shop stock,
-  and about $1,547 with the lean swaps. The target was $1,000–1,400 and the hard cap is $2,000. A
-  realistic worst case buying everything is about $2,170, so plan on the school's shop stock.
+- **The full machine costs about $1,903.** [Likely ±15%] That is with a 15% allowance; it is about
+  $1,634 if the school supplies its usual shop stock and about $1,547 with the lean swaps. A
+  realistic worst case buying everything is about $2,170, inside the $2,500–3,000 you said is
+  fine. Use the school's shop stock anyway: it is the cheapest headroom.
 - **Nothing here has moved a real slab yet.** [Certain] The CAD passes its clearance checks and the
   software passes its tests against a simulator. Real labels, the real cup and real wiring are
   untested. That is why Phase 0 comes first and section 13 has the tests to pass before you trust
@@ -131,10 +131,10 @@ they are search-extract prices dated 2023 to August 2026]
 | With school shop stock (filament, wire, glue, fuses, screws) | ≈ $1,634 |
 | Lean (also generic valves and Home Depot plywood) | ≈ $1,547 |
 | Optional light roof, only if Phase 0 shows glare (conditional BOM lines) | + ≈ $39 |
-| Worst case buying everything (tools, HT1 cups, roof, [Guessing] prices 20% high) | ≈ $2,170: over the cap |
+| Worst case buying everything (tools, HT1 cups, roof, [Guessing] prices 20% high) | ≈ $2,170: under $2,500 |
 | Junk slabs for §13, if they don't come from your stock | + $150–400 |
 
-**Keep a tally** of what you actually paid against the $2,000 cap after each order (BOM.md).
+**Keep a tally** of what you actually paid after each order (BOM.md).
 
 ---
 

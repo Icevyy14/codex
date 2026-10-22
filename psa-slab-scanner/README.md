@@ -25,9 +25,10 @@ other moves it up and down.
   - **0B, cup test:** does the cup seal on your holders, and does it leave a mark after 24 h? This
     is the only part that touches your inventory. About $145, a hand vacuum pump on the bench, no
     mains wiring.
-- **[Likely] The budget has almost no headroom.** The full list is about $1,900 against the $2,000
-  cap; a realistic worst case is about $2,170. With the school's shop stock it drops to about
-  $1,630 (worst case about $1,900). Details below and in [docs/BOM.md](docs/BOM.md).
+- **[Likely] The budget fits, with headroom.** The full list is about $1,900, and a realistic worst
+  case is about $2,170, inside the $2,500–3,000 you said is fine. With the school's shop stock it
+  drops to about $1,630 (worst case about $1,900). Spend the headroom only when a test asks for it.
+  Details below and in [docs/BOM.md](docs/BOM.md).
 - **[Certain, code] Older labels stop the run.** Before the cup touches a slab, the head camera
   must see a PSA back-label QR, the proof that the slab is face-down. Pre-2017 PSA labels and CGC
   slabs have none, so each one stops the run until you confirm it, unless you start the run with
@@ -64,7 +65,7 @@ The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
 | Cycle | about 14 s per slab in the timing simulation: 78 min for a 330-slab load with the default label mix, including homing and the stack survey. Older front-only labels can take up to 30 s more each (OCR on the Pi), and each slab without a back QR stops the run unless you use `--all-face-down`. Real speed will be measured in the acceptance tests. |
 | Touches the slab | cup on the **back** only; edges against wooden dowels; slabs rest on each other as in any stack |
 | Output | `certs.csv` (cert, grader, status, pocket and position), `certs.txt`, `report.html` with label photos |
-| Budget | about **$1,900** expected for everything including a 15% allowance; about **$2,170** worst case (tools, the conditional HT1 cups and light roof, [Guessing] prices 20% high), which is over the $2,000 hard cap. About **$1,630** (worst case about $1,900) if the school supplies filament, wire and common screws. Junk test slabs are extra unless they come from your stock. Details in [docs/BOM.md](docs/BOM.md). |
+| Budget | about **$1,900** expected for everything including a 15% allowance; about **$2,170** worst case (tools, the conditional HT1 cups and light roof, [Guessing] prices 20% high), inside the $2,500–3,000 ceiling. About **$1,630** (worst case about $1,900) if the school supplies filament, wire and common screws. Junk test slabs are extra unless they come from your stock. Details in [docs/BOM.md](docs/BOM.md). |
 
 ## What's in this folder
 

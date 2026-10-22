@@ -8,24 +8,28 @@ dated listing, **[Guessing]** = estimate.
 
 ## Bottom line
 
-- **The full list costs about $1,903 with a 15% allowance.** [Likely ±15%] That is only $97 under
-  the $2,000 hard cap and far above the $1,000–1,400 target.
-- **The worst case is over the cap.** [Guessing] Add the tools you will probably have to buy
+- **The full list costs about $1,903 with a 15% allowance.** [Likely ±15%] That is close to the
+  original $2,000 figure. You have since said $2,500–3,000 is fine if the machine works properly,
+  so there is about $600–1,100 of headroom.
+- **The worst case fits too.** [Guessing] Add the tools you will probably have to buy
   ($35–40), the conditional lines Phase 0 is designed to trigger (HT1 cups and the light roof,
   about $80 with the allowance), and the [Guessing] lines coming in 20% high (about +$150): about
-  **$2,170**.
+  **$2,170**, still under $2,500.
 - **About $1,634 if the school supplies its usual shop stock** (filament, wire, glue, fuses,
-  common screws). [Likely] This is the realistic way to keep headroom: the same worst case then
-  comes to about $1,900.
+  common screws). [Likely] It is the cheapest headroom: the same worst case then comes to about
+  $1,900.
 - **About $1,547 lean:** school stock, plus generic direct-acting valves instead of Clippard, plus
   Home Depot plywood instead of Baltic birch. [Likely]
-- **Keep a running tally against the cap** (a spreadsheet: line, quoted, paid). After order 1
-  (Phase 0, ≈ $594) you have ≈ $1,406 left and order 2 is quoted at ≈ $1,309. If order 1 came in
-  more than about $60 over its quote, stop and re-quote order 2 before buying it.
+- **Keep a running tally** (a spreadsheet: line, quoted, paid). Order 1 (Phase 0) is quoted at
+  ≈ $594 and order 2 at ≈ $1,309. If order 1 comes in more than about 10% over its quote, re-quote
+  order 2 before buying it.
+- **Spend the headroom only when a test asks for it.** The conditional lines are there for that:
+  HT1 cups if Phase 0B leaves a mark, the light roof if Phase 0A shows glare, spares for whatever
+  the acceptance tests break. Adding parts before the tests doesn't make the machine work better.
 - **Not in any total: junk graded slabs for the acceptance tests** (15–20, some deliberately
   dropped). Take your lowest-value slabs from stock and write off 2–3 of them, or budget
   $150–400 to buy them (BUILD_GUIDE §13).
-- **Things that push the total past $2,000 by themselves:**
+- **Things that add the most by themselves** (each still fits under $2,500):
   - buying every tool new (about +$400);
   - the genuine HIWIN rail tier (+$330);
   - a drag-chain-rated USB cable (+$150).
@@ -183,8 +187,8 @@ doesn't have one.
 | Heat gun, clamps, square, level, 120/220 sandpaper | General; doming the rod tops | $25 | Likely |
 
 **Tools you will probably have to buy: about $35–40.** That is the brad-point bit, depth collar,
-heat-set tips and NPT tap. **If you had to buy every tool new, the total would pass $2,000**
-($1,903 + about $400), so use the school's.
+heat-set tips and NPT tap. **If you had to buy every tool new, the total would be about $2,300**
+($1,903 + about $400), so use the school's where you can.
 
 ## How the quantities were derived
 

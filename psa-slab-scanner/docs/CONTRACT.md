@@ -149,6 +149,6 @@ Every document and file must agree with this page. If something here is wrong, f
   `slabrail-web` before running CLI machine commands.
 
 ## Budget
-Hard cap $2,000 total. Target $1,000–1,400 including spares and shipping. The user has school 3D printers and mechatronics instructors.
-The current BOM is about $1,903 with a 15% allowance, which is far above the target and close to
-the cap (BOM.md has the breakdown and the worst case).
+The original figure was $2,000; on 22 Oct 2026 the user said $2,500–3,000 is fine as long as the machine works properly and is good quality. The user has school 3D printers and mechatronics instructors.
+The current BOM is about $1,903 with a 15% allowance, and the worst case about $2,170 (BOM.md has
+the breakdown).
