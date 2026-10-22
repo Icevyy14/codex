@@ -209,10 +209,12 @@ How it behaves:
 
 ## Simulator and timing
 
-`python -m slabscan sim --slabs 330` runs a full load in about 7 minutes on a laptop. It prints:
+`python -m slabscan sim --slabs 330` runs a full load in about 5 minutes on a PC. It prints:
 - the survey time,
 - the seconds per slab,
-- the total for a full load. The October 2026 run gave 55 s of survey, then 11.1 s per slab: about 62 min for 330 slabs, all read.
+- the total for a full load. The 22 Oct 2026 run (seed 7) gave 70 s of homing and survey, then 14.0 s per slab: about 78 min
+  for 330 slabs, all 330 read `ok`. It runs with the face-down check off and says how many slabs would have stopped (49);
+  `sim --face-down-check` runs it on.
 
 Motion uses a trapezoid acceleration model. Camera frame times and the Pi's decode speed are
 **[Guessing]** values, listed at the top of `slabscan/cli.py`. Phase 0 measures the real ones.
