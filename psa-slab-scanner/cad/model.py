@@ -270,7 +270,8 @@ def gate_post(side: str) -> cq.Workplane:
         foot = foot.cut(box(s * 4 - 3, y - 2.25, -1, s * 4 + 3, y + 2.25, 5))
         foot = holes_z(foot, [(s * 4 - 3, y), (s * 4 + 3, y)], 4.5)
     post = cbox(s * 4, 0, hz / 2 + 6, 10, 16, hz + 12)
-    post = post.cut(cyl((s * 15, 0, hz), 6.2, 30, (-s, 0, 0)))  # 6 mm laser / receiver barrel
+    bore = 7.2 if side == "L" else 6.2  # left: the 7 mm Class 2 laser (BOM); right: the 6 mm receiver module
+    post = post.cut(cyl((s * 15, 0, hz), bore, 30, (-s, 0, 0)))  # laser / receiver barrel
     post = post.cut(cyl((s * 4, 0, hz), 2.5, 10, (0, 1, 0)))  # M3 set screw (tap or self-form) onto the barrel
     post = post.cut(cbox(s * 4, 0, hz + 9, 12, 2, 5))  # wire slot
     return foot.union(post)

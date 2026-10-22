@@ -86,17 +86,19 @@ def test_a_z_stall_lifting_from_the_read_station_keeps_the_slab_held(tmp_path):
 
 
 def test_a_small_z_loss_on_a_loaded_lift_is_caught_before_the_slab_goes_down(tmp_path):
-    """[Certain, arithmetic] one trip height cannot see a loss that leaves the loaded head above it (248 - 10 = 238 >=
-    235): the slab is carried over (it still clears the rods by 11 mm). The held descent pauses 1.25 mm above the trip,
-    where the sensor must read blocked: the run stops there, before the placement probe would measure a 10 mm wrong step
-    (it used to record a DOUBLE PICK and an UNREAD row). Not over its own pocket, so the slab stays held."""
+    """[Certain, arithmetic] one trip height cannot see a loss that leaves the loaded head above it: a loss just under
+    c_safe_loaded - carry_sensor_c0 keeps the beam blocked at travel height, so the slab is carried over (it still clears
+    the rods). The held descent pauses 1.25 mm above the trip, where the sensor must read blocked: the run stops there,
+    before the placement probe would measure a wrong step (it used to record a DOUBLE PICK and an UNREAD row). Not over
+    its own pocket, so the slab stays held."""
     cfg = _cfg()
-    world = _world(cfg, z_lost_steps=10.0)
+    loss = cfg.c_safe_loaded - cfg.carry_sensor_c0 - 0.1
+    world = _world(cfg, z_lost_steps=loss)
     r = _runner(cfg, world, tmp_path)
-    with pytest.raises(Stop, match=r"Z stall suspected before a Z move with a slab in the cup over pocket 2: .* head at 236\.\d mm"):
+    with pytest.raises(Stop, match=r"Z stall suspected before a Z move with a slab in the cup over pocket 2: .* head at \d+\.\d mm"):
         r.run()
     assert r.w.rows == [] and len(world.held) == 1 and r.freeze == "hold" and world.pocket_at(world.x, world.y).index == 2
-    assert world.z == pytest.approx(cfg.carry_sensor_c0 + CARRY_BAND_MM + 0.25 - 10.0)
+    assert world.z == pytest.approx(cfg.carry_sensor_c0 + CARRY_BAND_MM + 0.25 - loss)
 
 
 # ---------------------------------------------------------------------- the sensor itself
@@ -170,15 +172,16 @@ def test_selftest_motion_measures_where_the_carry_sensor_trips(tmp_path):
     con = ScriptedConsole([])
     assert selftest(cfg, con, hw=hw, sim=True, do_motion=True, out_dir=tmp_path) == 0
     line = next(x for x in con.lines if "carry sensor" in x)
-    assert line.startswith("[PASS] carry sensor: blocked at the top, trips at about 234.88 mm (set 235.0")
+    c0 = cfg.carry_sensor_c0
+    assert line.startswith("[PASS] carry sensor: blocked at the top, trips at about ") and f"(set {c0:.1f}" in line
     assert hw.world.z == 250.0 and hw.world.x == cfg.x_travel[0]  # back where homing left it
     # a mount that slid 3 mm up: still blocked at the top, but clear at the empty travel height
     hw = sim_hardware(cfg, slabs=0)
-    hw.carry = SimCarry(hw.world, trip=238.0)
+    hw.carry = SimCarry(hw.world, trip=c0 + 3.0)
     con = ScriptedConsole([])
     assert selftest(cfg, con, hw=hw, sim=True, do_motion=True, out_dir=tmp_path) == 1
-    assert any(x.startswith("[FAIL] carry sensor: must read blocked from 236.0 mm up and clear from 234.0 mm down; it read CLEAR at 237.75")
-               and "Slide the sensor mount" in x for x in con.lines)
+    assert any(x.startswith(f"[FAIL] carry sensor: must read blocked from {c0 + CARRY_BAND_MM:.1f} mm up and clear from "
+                            f"{c0 - CARRY_BAND_MM:.1f} mm down; it read CLEAR at ") and "Slide the sensor mount" in x for x in con.lines)
     # without --motion it only reads the input
     con = ScriptedConsole([])
     selftest(cfg, con, hw=sim_hardware(cfg, slabs=0), sim=True, out_dir=tmp_path)
@@ -196,8 +199,9 @@ def test_config_takes_the_sensor_stroke_and_window_from_the_cad(tmp_path):
     assert [list(r) for r in cfg.face_down_window_mm] == L.face_down_window_cam()  # from the camera axis, not the cup axis
     assert cfg.carry_sensor_c0 + CARRY_BAND_MM <= cfg.c_safe_empty
     bad = tmp_path / "m.toml"
-    bad.write_text(dumps(dataclasses.replace(cfg, carry_sensor_c0=236.0)))
-    with pytest.raises(ValueError, match="carry sensor must read blocked at the travel height 236.5 mm"):
+    travel = min(cfg.c_safe_empty, cfg.c_safe_loaded)
+    bad.write_text(dumps(dataclasses.replace(cfg, carry_sensor_c0=travel - CARRY_BAND_MM + 0.5)))
+    with pytest.raises(ValueError, match=f"carry sensor must read blocked at the travel height {travel} mm"):
         load(bad)
     bad.write_text(dumps(dataclasses.replace(cfg, probe_window=20.0)))
     with pytest.raises(ValueError, match="smaller than the buffer stroke 20.0"):

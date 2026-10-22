@@ -129,3 +129,4 @@ PASS  Phase 0 face-up pass: the same pushed on to the buffer's end (20 mm): no c
 PASS  Phase 0: head board standoff for an 8 mm board-to-lens-front camera (mm, >= 0 = the posts work)                                                     0.6  (limit 0.0)  
 
 128/128 checks passed
+exit=0

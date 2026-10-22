@@ -22,6 +22,7 @@ search-engine extracts of the listings, and every "measure" step below exists be
 4. [MOSFET modules](#4-mosfet-modules)
 5. [Vacuum sensor](#5-vacuum-sensor-xgzp6847a--ads1115)
 6. [Contact probe](#6-contact-probe-fail-safe-optical-endstop)
+   - [6a. Carry-height sensor](#6a-carry-height-sensor-z-stall-guard)
 7. [Limit switches](#7-limit-switches-nc)
 8. [Overfill laser gate](#8-overfill-laser-gate)
 9. [LED rings](#9-led-rings)
@@ -236,7 +237,8 @@ on your board.
 ### 3.3 Raspberry Pi 5 header and the I/O board
 
 **What the I/O board is:** a small perfboard, about 70 × 50 mm, next to the Pi. It carries the
-ADS1115, the XGZP6847A, the two dividers, the gate pull-down and screw terminals. It connects to the
+ADS1115, the XGZP6847A, the three dividers (vacuum sensor, laser gate, carry-height sensor) and
+screw terminals. It connects to the
 Pi header with female Dupont leads.
 
 **Physical pin numbers** are the standard 40-pin layout. [Certain]
@@ -255,6 +257,7 @@ Pi header with female Dupont leads.
 | W39 | 18 | GPIO24 | Q5 SIG (station LED) | 24 AWG | |
 | W40 | 22 | GPIO25 | Lid switch C (switch NO → GND, pin 20) | 24 AWG 2-core | Optional. Closed = lid shut. |
 | W41 | 29 | GPIO5 | Gate divider midpoint (§8) | 24 AWG | |
+| W48 | 31 | GPIO6 | Carry-height sensor divider midpoint (§6a) | 24 AWG | GPIO 6 is used by nothing else [Certain, docs, software and firmware searched] |
 | W42 | 9 | GND | **0 V bus** (one wire) | 22 AWG black | Common reference for the MOSFET inputs. Keep it even though USB also joins the grounds. |
 | W43 | USB 2.0 (black) port | | Rodent USB-C | USB-A → USB-C **data** cable, 1 m | Serial to FluidNC |
 | W44 | USB 2.0 (black) port | | Head-camera extension (§10) | | |
@@ -269,6 +272,7 @@ Pi header with female Dupont leads.
 | W52 | X home switch (left end of beam): **C** and **NC** tabs | **X-MAX**: signal and GND | 24 AWG 2-core, about 1.3 m, static | 3-pin housing (V-Lim pin empty) | §7. Not "X-MIN": the board's names don't matter, the config does. |
 | W53 | Z top switch on the spine: **C** and **NC** | **Z-MAX**: signal and GND | 8-core cores 4 and 5, through the chain | 3-pin housing | §7 |
 | W54 | Optical probe board: VCC, GND, OUT | **Y-MAX**: V-Lim, GND, signal | 8-core cores 1, 2 and 3, through the chain | 3-pin housing | §6. Yes, Y-MAX: there is no Y axis. |
+| W55 | Carry-height sensor board (Z spine): VCC, GND, OUT | VCC and GND: spliced into cores 1 and 2 at the spine top (the probe's 5 V and GND). OUT: core 8 → **I/O board divider → Pi GPIO 6** (not the Rodent) | the board's 3-pin cable, about 0.2 m, then the 8-core through the chain | solder + heat-shrink at the splice; screw terminal at the I/O board | §6a |
 | — | nothing | Sockets **Y** and **E** | — | — | Spare drivers (FIRMWARE.md). Leave them empty. |
 | — | nothing | Probe, E0-MAX, E1-MAX, V-MOS, RS485, spindle | — | — | unused |
 
@@ -421,6 +425,57 @@ FIRMWARE.md Step 5 catches this.
 **Why not the board's Probe connector:** its opto input is the other way round. The sensor would
 need to source current at rest, and an emitter failure would read "not touching". (Explained in
 config.yaml.)
+
+## 6a. Carry-height sensor (Z stall guard)
+
+**Part:** the second optical endstop board from the BOM's packs (the same TCST2103 board as the
+probe), on `carry_sensor_mount` on the Z spine's left face. A flat 1 mm aluminium flag on
+`carry_flag_arm` (on the `z_plate`) enters its slot from below once the cup is at least 246.5 mm
+above the pad, and stays in it up to the top stop (BUILD_GUIDE §7.4a). [Certain, CAD]
+
+**What reads it:** the Pi, not the Rodent: FluidNC knows nothing about it. The runner reads it
+before every sideways move (it must read blocked), before every grip (it must read clear), and on
+every Z move with a slab in the cup. [Certain, `runner._carry_check`, `hw.PiCarry`: majority of
+three reads 1 ms apart]
+
+**Wiring (W55, W48):**
+- At the top of the Z spine, where the 8-core's jacket is already opened for the Z switch (§11):
+  board **VCC → core 1** (+5 V, shared with the probe), **GND → core 2**, **OUT → core 8**. Solder
+  and heat-shrink each splice. The board is fixed to the X carriage, so its lead runs only in the X
+  drag chain and never enters the Z service loop. At the head end, core 8 is cut back and insulated.
+- At the panel end: core 8 to the I/O board:
+
+```
+  core 8 (OUT) ── 10 kΩ ──┬── GPIO 6 (pin 31)
+                          └── 20 kΩ ── GND
+```
+
+- 5 V × 20/(10 + 20) = 3.3 V at GPIO 6 with a push-pull output, and the 20 kΩ pulls GPIO 6 LOW
+  when the lead is cut. [Certain, arithmetic]
+- The board's 5 V comes from the Rodent's V-Lim (core 1). The Pi and the Rodent share a ground
+  through W42 and the USB cable. [Certain, §3.3]
+
+**Polarity: HIGH = the flag is in the beam = the head is at carry height.** Check it on the bench
+first, as for the probe (§6): OUT about 0–0.4 V with the slot clear, about 5 V with a card in it.
+Don't use a board that is the other way round.
+
+**Check the level at GPIO 6 once it is wired** [Likely: many of these boards pull OUT up through
+about 10 kΩ, and the 30 kΩ divider then gives only about 2.5 V]: with a card in the slot, GPIO 6
+must read at least 2.5 V. If it is lower, solder a 2.2 kΩ pull-up from OUT to VCC **at the board**,
+as on the laser receiver (§8). At the board end a cut wire still reads LOW.
+
+| Failure | GPIO 6 reads | Result |
+|---|---|---|
+| OUT wire (core 8) cut | LOW (the 20 kΩ) | "clear" at travel height: sideways moves are refused ("Z stall suspected … right after homing this is most likely the sensor itself") → safe |
+| Board VCC cut, or the Rodent unpowered | LOW | the same → safe |
+| Board GND cut | HIGH (OUT floats up to VCC) [Likely] | "blocked" everywhere: **not safe by itself**; caught at the next grip, where it must read clear ("Carry-height sensor fault …") |
+| Emitter LED dead, or dirt or a card in the slot | HIGH | the same: **not safe by itself**, caught at the next grip |
+| Flag bent away, or the mount slid down | wrong trip height | `selftest --motion` measures the trip; outside 246.5 ± 1 mm it fails |
+
+**Why a dead emitter is not simply fail-safe here:** the flag blocks the beam at carry height, so
+"dark" is the "OK to move" reading. The grip rule (the cup is far below the trip at every pick, so
+the sensor must read clear there) is what turns a dark sensor into a stop. [Certain, the CAD
+report's own warning, implemented in `runner._carry_check`]
 
 ## 7. Limit switches (NC)
 
@@ -581,14 +636,14 @@ Don't tie anything inside the chain.
 
 | Core | Use | Rodent end | Head end |
 |---|---|---|---|
-| 1 | +5 V probe | Y-MAX V-Lim | optical board VCC |
-| 2 | probe GND | Y-MAX GND | optical board GND |
+| 1 | +5 V probe and carry sensor | Y-MAX V-Lim | optical board VCC; carry board VCC (spliced at the spine top) |
+| 2 | probe and carry sensor GND | Y-MAX GND | optical board GND; carry board GND (spliced at the spine top) |
 | 3 | probe signal | Y-MAX signal | optical board OUT |
 | 4 | Z switch signal | Z-MAX signal | Z switch NC |
 | 5 | Z switch GND | Z-MAX GND | Z switch C |
 | 6 | +12 V head ring | Q4 "+" | ring + |
 | 7 | head ring return | Q4 "−" | ring − |
-| 8 | spare | insulate | insulate |
+| 8 | carry sensor OUT | I/O board: 10 kΩ / 20 kΩ divider → Pi GPIO 6 (§6a) | carry board OUT, spliced at the spine top; insulated past the splice |
 | shield | drain | Rodent GND, board end only | cut back, heat-shrink |
 
 **Off the fixed end:**
@@ -604,6 +659,8 @@ Don't tie anything inside the chain.
 - the 8-core carries on past the carriage to the head;
 - at the top of the Z spine, open the jacket over about 40 mm and take cores 4 and 5 out to the
   Z switch;
+- in the same opening, splice the carry-height sensor's lead to cores 1, 2 and 8 (§6a); core 8
+  ends there;
 - heat-shrink over the opening.
 
 The 8-core, the USB extension and the vacuum tube then form one loop wrapped in the BOM's 10 mm
@@ -702,7 +759,9 @@ Do this with everything wired, **mains unplugged**, and the E-stop released.
     - pump: a few tens of ohms [Guessing];
     - valve coil: hundreds of ohms [Guessing];
     - **never close to 0 Ω**.
-13. Divider resistors: measure each 10 kΩ, 20 kΩ and 2.2 kΩ (10k and 100k are easy to mix up).
+13. Divider resistors: measure each 10 kΩ, 20 kΩ and 2.2 kΩ (10k and 100k are easy to mix up),
+    including the carry sensor's pair (§6a): its GPIO 6 node to GND, with the Pi lead and core 8 unplugged,
+    about 20 kΩ.
     **MOSFET SIG pull-downs:** SIG to GND on each of Q1–Q5, Pi lead unplugged: **about 10 kΩ**. Open
     means the pull-down is missing: add it (§4) before any power-up.
 
@@ -727,6 +786,10 @@ Do this with everything wired, **mains unplugged**, and the E-stop released.
 4. **Test each load from the Pi** with Raspberry Pi OS's `pinctrl`: `pinctrl set 17 op dh` turns
    the pump on and `pinctrl set 17 op dl` turns it off. [Likely, Bookworm tool] Do the same for
    27, 22, 23 and 24, one at a time. Each output must drive only its own load.
+4a. **Carry-height sensor** (it is powered from the Rodent, so the E-stop must be released):
+   `pinctrl get 6` must read low with the slot clear and high with a card in it, and GPIO 6 must
+   measure at least 2.5 V high (§6a). `python -m slabscan selftest` shows the same as its
+   `carry sensor` line.
 5. Now follow FIRMWARE.md from Step 1.
 6. **After 10 minutes of motors holding:** the motor bodies may be warm but **below about 50 °C**
    (comfortable to hold a finger on). Hotter than that means the sense-resistor setting is wrong:
@@ -746,8 +809,14 @@ Do this with everything wired, **mains unplugged**, and the E-stop released.
    first power-up; add 10 kΩ if it reads open (§4). BUILD_GUIDE §13.4 ("unplug the Pi, the pump
    must stop") checks it again.
 6. **[Guessing] Probe flag chatter** with `probe_hard_limit: true`: see §6 "Hysteresis".
+7. **[Likely] The carry sensor's high level through the divider** may be only about 2.5 V with a
+   10 kΩ on-board pull-up: measure it (§6a), add 2.2 kΩ at the board if low.
+8. **[Certain] A dark carry sensor reads "OK to move".** A dead emitter, dirt or a cut GND is caught
+   only at the next grip (§6a); until then it cannot see a stall. The run checks at every grip, so
+   that window is at most one slab's moves.
 
 **Resolved:** the BOM now lists Adafruit #5648 modules, bare microswitches, the 1/3/5 A fuses,
-the mains box, a Class 2 laser and a two-block E-stop used on this page. The CAD has printed hard
+the mains box, a Class 2 laser and a two-block E-stop used on this page, and the 8-core's spare
+core now carries the carry-height sensor (§6a). The CAD has printed hard
 stops that keep both carriages on their rails (CONTRACT), so the old Z-rail margin issue is
 closed.

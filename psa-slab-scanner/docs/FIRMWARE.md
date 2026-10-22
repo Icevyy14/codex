@@ -377,9 +377,12 @@ The probe report prints machine coordinates. [Certain, `report_probe_parameters`
    above a foam block and 200 g on the cup, then watch for 1 minute. If it creeps, add a friction
    brake or counterweight before unattended use (the BOM's conditional "Z counterweight" line).
 5. **[Likely] Z torque margin at 0.8 A.** The Z motor runs at about half its rated current, at
-   750 rpm, with no stall detection. A stall while lifting a slab leaves the head lower than the
-   software thinks. BUILD_GUIDE §7.8 has a 100-lift test (`python -m tools.bench_tests lifts 100`):
-   the bare pad must re-probe within 0.1 mm. If not, lower Z `max_rate_mm_per_min` here and
+   750 rpm, and FluidNC has no stall detection. A stall while lifting a slab leaves the head lower
+   than the software thinks. The carry-height sensor (on the Pi's GPIO 6, not on the Rodent:
+   WIRING.md §6a, BUILD_GUIDE §7.4a) now stops a run before any sideways move once a stall has left
+   the head more than about 2.5 mm low [Certain, CAD and simulator]; it does not prevent the
+   stall. BUILD_GUIDE §7.8 has a 100-lift test (`python -m tools.bench_tests lifts 100`): the bare
+   pad must re-probe within 0.1 mm. If not, lower Z `max_rate_mm_per_min` here and
    `feed_z` in `calibration.toml` to 3000, then raise Z `run_amps` to about 60% of the motor's
    rating (motor under 50 °C). Only if it still fails, buy the BOM's conditional Z motor. A
    closed-loop motor is not a drop-in here: the Rodent has no step/dir header for one. [Likely]

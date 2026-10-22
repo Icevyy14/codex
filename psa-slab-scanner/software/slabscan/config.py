@@ -24,7 +24,7 @@ class Config:
     station_xy: tuple[float, float]
     station_read_c: float
     # defaults = cad/layout.py (machine.toml always sets them; a stale default must never be unsafe)
-    c_safe_empty: float = 236.5
+    c_safe_empty: float = 248.0
     c_safe_loaded: float = 248.0
     c_max: float = 250.0
     post_h: float = 218.0
@@ -104,7 +104,7 @@ class Config:
     # pause just above the trip on every held descent, and CLEAR whenever the head is well below that height (each pick):
     # a dead emitter or a dirty slot reads blocked too.
     carry_sensor: bool = True
-    carry_sensor_c0: float = 235.0
+    carry_sensor_c0: float = 246.5
     light_settle_s: float = 0.3  # wait after an LED ring switches on, so auto exposure settles before a frame
     # paths
     out_dir: str = "batches"

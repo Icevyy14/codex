@@ -13,20 +13,21 @@ filled. Every time estimate is **[Guessing]**.
 ## Read this first
 
 - **Phase 0 is two gates, and both come before any motion parts.** [Likely, BOM.md order plan]
-  - **0A, camera test: ≈ $457**, or ≈ $293 if you borrow a school Pi 4 or Pi 5 (a Pi 5 4 GB costs
-    about $110 by itself in October 2026). Buy your own Pi only after 0A says GO.
-  - **0B, cup test: ≈ $198**, with a spare SMC cup and buffer. A hand vacuum pump on the bench: no
+  - **0A, camera test: ≈ $470**, or ≈ $281 if you borrow a school Pi 4 or Pi 5 (a Pi 5 4 GB costs
+    $110 by itself in October 2026). Buy your own Pi only after 0A says GO.
+  - **0B, cup test: ≈ $167**, with a spare SMC cup and buffer. A hand vacuum pump on the bench: no
     mains wiring, no electronics.
-- **The full machine costs about $1,973.** [Likely ±15%] That is with a 15% allowance; it is about
-  $1,703 if the school supplies its usual shop stock and about $1,616 with the lean swaps. A
-  realistic worst case buying everything is about $2,235, inside the $2,500–3,000 you said is
+- **The full machine costs about $2,182.** [Likely ±10%] That is with a 15% allowance; it is about
+  $1,862 if the school supplies its usual shop stock and about $1,787 with generic valves as well.
+  A realistic worst case buying everything is about $2,365, inside the $2,500–3,000 you said is
   fine. Use the school's shop stock anyway: it is the cheapest headroom. Upgrades are in the BOM as
-  qty-0 lines: buy one only when its test fails.
+  qty-0 lines: buy one only when its test fails. Every order, with a link per line, is in
+  [SHOPPING_LIST.md](SHOPPING_LIST.md).
 - **Nothing here has moved a real slab yet.** [Certain] The CAD passes its clearance checks and the
   software passes its tests against a simulator. Real labels, the real cup and real wiring are
   untested. That is why Phase 0 comes first and section 13 has the tests to pass before you trust
   the machine with inventory.
-- **Plan on 60–85 hours of hands-on work over 6–10 weeks**, plus about 40 hours of printer time.
+- **Plan on 60–85 hours of hands-on work over 6–10 weeks**, plus about 42 hours of printer time.
   [Guessing] Drilling 82 rod holes, the wiring and the acceptance tests are most of it.
 - **The CAD and BOM still have small gaps you fix during the build.** [Certain, from reading the
   CAD and BOM] Each one is handled where it comes up:
@@ -34,12 +35,16 @@ filled. Every time estimate is **[Guessing]**.
 | Gap | Where it is handled |
 |---|---|
 | The CAD has no brackets, and the bed covers the base-rail tops where the upright brackets would go. | §4.3 |
-| The SMC cup code `ZPT25UUK20-B5-A10` comes from SMC's catalog (25 mm pads come only in 10/20/30/40/50 mm stroke [Certain]), but no listing of this exact code was found [Likely orderable]. Get it confirmed. `head_foot` now has a flag guide, so the rotating "J" buffer works too. | §2, §7.6 |
-| The flag, guide and sensor post are built on bought-part numbers you must check on arrival: the buffer's catalog heights [Certain, SMC catalog], the M-5ALU-4 elbow's height (9.3 mm) [Likely], and the endstop board's header position and component heights (unknown). Measure them before you cut the flag; the board slots give ±4 mm. | §3.3, §7.6 |
-| The head camera's board-to-lens-front length (20 mm) and its 32 mm hole pattern are guesses in the CAD. | §1.5, §3.3 |
+| The SMC cup code `ZPT25UUK20-B5-A10` comes from SMC's catalog (25 mm pads come only in 10/20/30/40/50 mm stroke [Certain]). Proax lists the exact code, but back-ordered with no lead time [Certain, 22 Oct 2026]. `head_foot` has a flag guide, so the rotating "J" buffer works too. | §2, §7.6 |
+| The flag, guide and sensor post are built on bought-part numbers you must check on arrival: the buffer's catalog heights [Certain, SMC catalog], the M-5ALU-4 elbow's height (9.3 mm) [Likely], and the endstop board's header position and component heights (unknown; the listing does not even name the TCST2103). Measure them before you cut the flag; the board slots give ±4 mm. The carry-height sensor uses the same board. | §3.3, §7.4a, §7.6 |
+| The head camera's board-to-lens-front length (20 mm) and its 32 mm hole pattern are guesses in the CAD (the ELP board is 38 × 38 mm). | §1.5, §3.3 |
+| The head lens sits **5 mm toward the label from the cup axis**, set by `camera_bracket` (and by the jig's bridge in Phase 0): there is no adjustment. With the lens on the axis, the vacuum elbow 23 mm under it hid the card window the learned face-down check needs [Certain, CAD ray cast]. Print the current `camera_bracket` and `phase0_top`. | §1.5, §7.7 |
+| The card window assumes the card's top edge is 34.8–37.8 mm from the slab's label-end edge, measured on 27 real PSA backs [Likely ±1 mm, image scale]. On CGC holders the card sits about 2.5–3 mm further in [Likely, 15 real backs], so on a worst-case CGC slab the window's label-side edge may reach 0.5–1.5 mm past the card. | §1.2, §12.3 |
+| The card window has little margin for camera aim: a tilt of more than about 0.6° toward the cup puts the cup pad into it [Certain, CAD aim check]. Above about 1.2° the software refuses the learned check by itself; in between nothing catches it but your look at the frame. | §7.7, §12.3 |
+| The carry-height sensor's trip (c = 246.5) is set by sliding its mount along the spine's slot, then measured by `selftest --motion`. | §7.4a, §12.1 |
+| The only Class 2 laser module found has a 7 mm body; the gate post's barrel hole is 6.2 mm. Drill it out. | §5.9 |
 | The Z lead screw must be cut to 340 mm below the motor face. | §7.3 |
-| Two screw lengths in the CAD have no margin: the jig's M5×10 through 1.8–2.0 mm walls may bottom in the slot, and the probe board's M3×12 leave no thread. Washers and M3×16 fix them. [Likely] | §1.5, §7.6 |
-| The head foot hides the card window that the learned face-down check needs [Certain, CAD ray cast: 0 of 75 points visible]. Until a CAD change clears it, that check stays off and every slab without a PSA back QR stops for you. | §1.7, §13.8 |
+| The jig's M5×10 screws pass 4 mm printed walls with one washer each, and the probe board takes M3×16 with washers, as the CAD now models. Test the first jig screw anyway: the slot depth is a guess. [Guessing] | §1.5, §7.6 |
 
 ## Contents
 
@@ -92,7 +97,7 @@ in [OPERATING.md §4](OPERATING.md#4-what-the-machine-does).
 | Rails | X: MGN12 1300 mm on a 4040 beam. Z: MGN12 330 mm on a 2040 spine. | CONTRACT [Certain] |
 | Pocket | 84 × 139 mm inside, made by 8 mm dowels 218 mm tall | `cad/layout.py` [Certain] |
 | Capacity | 11 × 30 = 330 PSA slabs | [Certain] |
-| Cycle time | about 14 s per slab, so about 80 min for 330 (`sim --slabs 330`) | software [Guessing until measured] |
+| Cycle time | about 14 s per slab, so about 79 min for 330 (`sim --slabs 330`) | software [Guessing until measured] |
 
 ### 0.1 Build order and time
 
@@ -105,11 +110,11 @@ drill template), so §5 is split: 5A now, 5B after the machine moves (§12).
 | 1 | Phase 0A: camera test (and the probe flag, if the SMC cup has arrived) | §1 | 6–7 h | about 15 h print | no |
 | 2 | Phase 0B: cup bench test (hand pump) | §1.10 | 3–4 h | 24 h test | no |
 | 3 | Order the machine parts | §2 | 1 h | 1–4 weeks delivery | no |
-| 4 | Print the machine parts | §3 | 3 h | about 25 h | no |
+| 4 | Print the machine parts | §3 | 3 h | about 27 h | no |
 | 5 | Frame | §4 | 4–6 h | | **yes: squaring** |
 | 6 | Bed, part A (cut, notch, bolt down, cut pads) | §5A | 3–4 h | | for power-tool rules |
 | 7 | X axis | §6 | 4–5 h | | helpful for the dial indicator |
-| 8 | Z axis and head | §7 | 4–6 h | | no |
+| 8 | Z axis, head and carry-height sensor | §7 | 5–7 h | | no |
 | 9 | Vacuum plumbing (finish) | §8 | 2–3 h | | no |
 | 10 | Electronics | §9 | 10–15 h | | **yes: mains, crimp review, first power-up** |
 | 11 | Firmware | §10 | 2–3 h | | first homing: yes |
@@ -122,20 +127,22 @@ drill template), so §5 is split: 5A now, 5B after the machine moves (§12).
 
 ### 0.2 Cost
 
-From [BOM.md](BOM.md), with its 15% allowance. No price is a live checkout price. [Certain that
-they are search-extract prices dated 2023 to August 2026]
+From [BOM.md](BOM.md), with its 15% allowance; the orders line by line, with links, are in
+[SHOPPING_LIST.md](SHOPPING_LIST.md). $1,323 of the $1,897 parts subtotal is a price seen on the
+product page on 22 Oct 2026 [Certain]; the rest are search-text prices or estimates. None is a
+checkout price: shipping, tax and duty come on top, and the allowance is for them.
 
 | | Cost |
 |---|---:|
-| Order 1a: Phase 0A (Pi, cameras, rings, USB extension, jig parts, flag sheet) | ≈ $457 (≈ $293 with a borrowed Pi) |
-| Order 1b: Phase 0B (two cups and buffers, pads, elbows, tube, fittings, hand vacuum pump) | ≈ $198 |
-| Order 2: the machine (frame, motion, bed, vacuum system, electronics, mains box, cables) | ≈ $1,317 |
-| **Full list** | **≈ $1,973** |
-| With school shop stock (filament, wire, glue, fuses, screws) | ≈ $1,703 |
-| Lean (also generic valves and Home Depot plywood) | ≈ $1,616 |
-| Optional light roof, only if Phase 0 shows glare (conditional BOM lines) | + ≈ $39 |
-| Worst case buying everything (tools, HT1 cups, roof, [Guessing] prices 20% high) | ≈ $2,235: under $2,500 |
-| Upgrades, each only if its test fails (HIWIN rail, Z motor, counterweight, flex USB, VXB pump, branded E-stop) | + $20–380 each, about $815 if all of them |
+| Order 1a: Phase 0A (Pi, cameras, rings, USB extension, jig parts, endstop boards, flag sheet) | ≈ $470 (≈ $281 with a borrowed Pi) |
+| Order 1b: Phase 0B (two cups and buffers, pads, elbows, tube, fittings, hand vacuum pump) | ≈ $167 |
+| Order 2: the machine (frame, motion, bed, vacuum system, electronics, mains box, cables) | ≈ $1,545 |
+| **Full list** | **≈ $2,182** |
+| With school shop stock (filament, wire, glue, fuses, screws, flag sheet) | ≈ $1,862 |
+| Lean (also generic valves) | ≈ $1,787 |
+| Optional light roof, only if Phase 0 shows glare (conditional BOM lines) | + ≈ $36 |
+| Worst case buying everything (tools, HT1 cups, roof, [Guessing] prices 20% high) | ≈ $2,365: under $2,500 |
+| Upgrades, each only if its test fails (HIWIN rail, Z motor, constant-force spring, high-flex USB, branded pump, branded E-stop) | + $20–420 each, about $920 if all of them |
 | Junk slabs for §13, if they don't come from your stock | + $150–400 |
 
 **Keep a tally** of what you actually paid after each order (BOM.md).
@@ -155,19 +162,20 @@ Rows marked "PHASE 0A" in BOM.csv. [Certain for the list; prices as in the BOM]
 
 | Part | From | Cost |
 |---|---|---:|
-| Raspberry Pi 5 4 GB, 27 W PSU, 64 GB microSD, Active Cooler | BOM, or borrow a school Pi | $143 (or $0) |
-| Camera Module 3 (standard) + 500 mm Pi 5 cable | BOM | $27.50 |
-| ELP 8 MP IMX179 USB camera, 3.6 mm M12 lens | BOM | $66 |
-| 3 m USB 2.0 extension (the BOM line has two; Phase 0A needs one) | BOM | $22 |
+| Raspberry Pi 5 4 GB, 27 W PSU, 64 GB microSD, Active Cooler | BOM, or borrow a school Pi | $164.85 (or $0) |
+| Camera Module 3 (standard) + 500 mm Pi 5 cable | BOM | $29.45 |
+| ELP 8 MP IMX179 USB camera, 3.6 mm M12 lens | BOM | $55 |
+| 3 m USB 2.0 extension (the BOM line has two; Phase 0A needs one) | BOM | $13.90 |
 | LED rings: 40 mm for the head, 60 mm for the station (12 V COB) | BOM | $24 |
-| 12 V DC wall adapter, 1 A or more | BOM | $10 |
+| 12 V DC wall adapter, 1 A or more, with a screw-terminal pigtail | BOM | $14.95 |
 | Two 2020 × 312 mm extrusion posts, cut square to ± 0.5 mm, and one 2020 × 66 mm arm stub | BOM | $16 |
-| M2 screw kit and M2 standoff kit; 6 × M5×10 + 12 M5 washers + 6 M5 slot-6 T-nuts; 1 × M5×30 + nylock; 2 × M3×16 + 4 washers + 2 nuts | BOM / school stock | $17 |
-| Optical endstop board (for `head_foot`'s sensor post) | BOM | $9 |
-| 1 mm soft aluminium sheet, at least 25 × 56 mm (the probe flag) | BOM / school stock | $3 (or $0) |
-| Hookup wire, heat shrink, filament | BOM / school stock | $60 (or $0) |
+| M2 screw kit and M2 standoff kit | BOM | $17 |
+| 6 × M5×10 + 6 M5 washers + 6 M5 slot-6 T-nuts; 1 × M5×30 + nylock; 2 × M3×16 + 4 washers + 2 nuts | school stock (their packs are order-2 lines) | ≈ $0–5 |
+| Optical endstop boards, two 2-packs (one for `head_foot`'s sensor post; the second becomes the carry-height sensor) | BOM | $5.08 |
+| 1 mm soft aluminium sheet, at least 50 × 60 mm (the probe flag now, the carry flag later) | BOM / school stock | $11.99 (or $0) |
+| Hookup wire, heat shrink, filament | BOM / school stock | $56.68 (or $0) |
 | Printed: `phase0_base`, `phase0_tray`, `phase0_top`, `phase0_occluder_mount`, and `head_foot` (the machine's own part) | §3 | |
-| **Total** | | **≈ $398 + 15% ≈ $457**, ≈ $293 with a borrowed Pi, ≈ $220 if the school also supplies the wire, filament and sheet |
+| **Total** | | **≈ $409 + 15% ≈ $470**, ≈ $281 with a borrowed Pi, ≈ $202 if the school also supplies the wire, filament, heat shrink and sheet |
 
 - **Why the 12 V adapter:** it powers the LED rings without any mains wiring, because the
   `phase0` tool leaves the lights on and never switches them. [Certain, `tools/phase0.py`] The
@@ -178,7 +186,7 @@ Rows marked "PHASE 0A" in BOM.csv. [Certain for the list; prices as in the BOM]
   conditions. [Certain, `checks.txt`: the jig's occluder sits 0.0 mm from the machine's, relative
   to the lens, and blocks the same share of the camera's view of the slab]
 - **The SMC cup is the real occluder.** It is in order 1b, but its lead time can be 2–8 weeks
-  [Likely]. Order it with 0A if you accept $42 at risk. Otherwise use an M10 bolt with a 25 mm
+  [Likely], and Proax shows it back-ordered. Order it with 0A if you accept $35 at risk. Otherwise use an M10 bolt with a 25 mm
   washer as a dummy and leave the flag off; the label view does not depend on it [Certain,
   `checks.txt`: nothing on the head blocks the label].
 - **With a Pi 4:** use the 15-pin camera cable that ships with the Camera Module 3, not the Pi 5
@@ -198,16 +206,20 @@ the oldest holders.
 - **Also measure one CGC, one BGS and one TAG holder** if you deal them. [Guessing: no width for
   them has been measured; BGS may be wider than PSA] Anything wider than 82.6 mm is "do not load"
   (OPERATING.md §2). CGC matters most, because the machine reads CGC normally.
-- **On two PSA slabs, measure from the slab's label-end edge to the card's top edge** (through the
-  plastic). The learned face-down check looks at a window on the card back that starts about 35 mm
-  from the slab's label-end edge (`face_down_window_mm`, y −33 … −17 mm from the cup axis). It
-  assumes the card starts about 32 mm from that edge. [Guessing] If your number is above 34 mm,
-  the window reaches the label: note it for §1.7.
+- **On two PSA slabs (and one CGC), measure from the slab's label-end edge to the card's top edge**
+  (through the plastic). The learned face-down check looks at a window on the card back from about
+  40 to 52 mm from the slab's label-end edge (`face_down_window_mm` = y −22.5 … −11.0 mm from the
+  head-camera axis, which is −27.5 … −16.0 mm from the cup axis). The CAD places it for a card top
+  34.8–37.8 mm from that edge, measured on 27 real PSA backs [Likely ±1 mm, from image scale], and
+  with the slab anywhere in its pocket play. If your number is above 37.8 mm (CGC holders: about
+  39–41 mm [Likely, 15 real backs]), note it for §1.7: the window's label-side edge may then reach
+  past the card's top edge.
 
 ### 1.3 Print the jig (about 15 h printer time)
 
 Print `phase0_base`, `phase0_tray`, `phase0_top` and `phase0_occluder_mount` in black PLA or PETG,
-and `head_foot` in PETG (settings in §3; it goes on the machine later). Black matters around the
+and `head_foot` in PETG (settings in §3; it goes on the machine later). Use the current STLs:
+`phase0_top` (the bridge) and `head_foot` changed with the head-camera offset. Black matters around the
 cameras, because it cuts stray light. Before printing `head_foot`, check the optical endstop
 board (§3.3).
 
@@ -226,10 +238,11 @@ the same software as the machine.
 2. Put the 60 mm LED ring in the base's ring seat around the lens.
 3. Push the two 2020 posts into the base sockets, down to the socket floors. Fix each with an
    M5×10 screw through the socket's cross hole into a T-nut in the post's slot.
-   - **Test the first screw:** it must pull the part tight before it bottoms in the slot. The
-     printed walls here are only about 2 mm, so a bare M5×10 can reach the profile's core first.
-     Two M5 washers under the head fix that. [Likely; I could not get a 2020 slot drawing] Do the
-     same for every M5×10 in the jig.
+   - **Use ONE M5 washer under each M5×10 head** and **test the first screw:** it must pull the
+     part tight before it bottoms in the slot. Every jig wall an M5×10 passes through is 4.0 mm, so
+     with one washer the tip ends about 5 mm inside the profile face [Certain, CAD; Guessing that
+     the slot is about 6 mm deep to the core]. If it bottoms, add a second washer. Do the same for
+     every M5×10 in the jig.
    - **Slide `phase0_occluder_mount`'s clamp onto the RIGHT post now**, with a T-nut in the post's
      outer slot, before the bridge goes on. Leave its screw loose.
 4. **Face both tray ledges with a strip of the pad microfiber** (spray adhesive): the slab's
@@ -238,6 +251,9 @@ the same software as the machine.
    140 mm minus the cloth thickness), then fix both clamps with M5 screws and T-nuts. [Certain,
    `model.py`: slab front at lens + 140]
 5. **Head camera on the bridge.** The bridge carries the board on four M2 standoffs.
+   - **The bridge is not symmetric** (it runs 30 mm toward the label end and 25 mm toward the back
+     from the slab centre): fit it with its wider side toward the tray's label end. The lens then
+     sits 5 mm toward the label from the slab centre, as on the machine. [Certain, CAD]
    - Measure your ELP board's **board-to-lens-front length L**: from the board's underside to the
      front of the M12 lens holder, with the lens roughly in focus. The CAD guessed 20 mm.
      [Guessing in the CAD]
@@ -265,8 +281,8 @@ the same software as the machine.
    4. **Height:** put a slab in the tray. Slide the mount down the post until the cup rests on the
       slab's back and the **foot's underside is 62.0 ± 0.5 mm above the slab's back**. The buffer
       is then pushed in by its 2 mm trip travel, as in the machine. Tighten the clamp screw.
-   5. The cup lands on the lens axis by construction. [Likely ± 1 mm, print tolerance] Check it by
-      eye from above.
+   5. The cup lands on the slab centre, 5 mm behind the lens axis (away from the label), as on the
+      machine, by construction. [Likely ± 1 mm, print tolerance] Check it by eye from above.
    6. **To change slabs,** push the cup up by hand, only as far as the change needs.
    7. **For the face-up pass (§1.7),** slide the whole mount 3 mm up the post. Never slide the stub
       in the mount instead: the sensor post meets the mount's beam after 2.5 mm. [Certain, CAD]
@@ -300,48 +316,72 @@ python -m slabscan phase0 --out phase0_results --lens-position 7.1 --face-up 15 
 For each slab the tool asks you to type the printed cert number, then saves both images and what
 each camera decoded. **Type the cert every time:** the typed number is how it catches a *wrong*
 read, which is the failure that matters, and GO needs every slab typed. [Certain,
-`tools/phase0.py`] Scan five 2024+ slabs (back QR) first: they teach the ITF format, in the same
-order the machine learns it.
+`tools/phase0.py`] There is nothing to teach first: the ITF payload is always the cert zero-padded
+to 8 digits [Certain, real labels], so any order works.
 
 **Include in the 30–50:**
-- new labels (2024+, 9-digit certs) and old ones (8-digit);
-- at least 3 labels from before 2017 (no back QR) and, if you have them, from before December 2015
-  (no back barcode) [Certain, RESEARCH.md label eras];
+- current PSA labels (Code128, mostly 9-digit certs) and "lighthouse" labels (QR + ITF, 8-digit);
+- at least 3 PSA labels from 2016 (back ITF, no QR) or older (no back code at all) [Certain,
+  RESEARCH.md §4];
 - the 2024+ holder and the older holder;
-- 3–5 CGC slabs;
+- CGC slabs if you deal them: 2023+ labels (back QR, front barcode), the 2020–23 blue "OG" labels
+  (cgccomics.com QR and a long back barcode) and Certified Authentic (codes on the front only);
 - scratched or scuffed labels and holders;
 - one slab with a visible ceiling-light reflection, to check the light-roof question.
 
 Type `q` when you are done. **The read-rate report (`phase0_report.txt`) is written at that point,**
 so stopping later loses nothing. [Certain, `tools/phase0.py`]
 
-**The face-up pass (optional; for the learned face-down check).** The machine can learn what a card
-*back* looks like through the slab and pick slabs without a back QR when their card window matches
-(OPERATING.md §8.4). Phase 0 measures whether that can work: how well the backs match each other,
-and how well face-up slabs match the backs.
-- **With today's head, expect HOLD.** The foot hides the card window from the head camera, in the
-  jig as on the machine [Certain, CAD ray cast; in the simulator the face-up slabs then score like
-  the backs]. The pass then tells you nothing new. Run it anyway if you want the numbers on record;
-  skip it if you are short of time.
-- Start the tool with `--face-up 15`. After `q` it asks for 15 slabs **face-up**.
+**The face-up pass (recommended; for the learned face-down check).** The machine can learn what a
+card *back* looks like through the slab and pick slabs without a back-label code when their card
+window matches (OPERATING.md §8.4). Phase 0 measures whether that can work: how well the backs match
+each other, and how well face-up slabs match the backs.
+- **With today's head the card window is clear** [Certain, CAD frustum check], so this pass decides
+  whether you can use the learned check. In the simulator it says GO (lowest back-to-back 0.82,
+  highest face-up 0.43 with the reflection copies, threshold 0.62 [Certain, sim, 22 Oct 2026]). On
+  studio scans of the 64 real slabs the same rule gave backs at 0.68 or more against face-up fronts
+  at 0.45 or less, a GO at a threshold of about 0.56 [Certain for those images; Likely optimistic,
+  because they are flat scans, not the jig's camera].
+- **Every similarity is the 2nd-best match:** the machine accepts a slab only when two card backs
+  of two different slabs agree (one odd back, a card sitting low in its holder, matched a real
+  blue Water-type front at 0.62). Each face-up frame is also scored with 4 reflections added in
+  software, because on real fronts a reflection *raised* the score [Certain, real images; Guessing
+  how the jig's reflections look].
+- Start the tool with `--face-up 15`. After `q` it asks for 15 slabs **face-up**; its prompt repeats
+  these steps.
   1. First slide the occluder mount 3 mm up the post (§1.5 step 7). The free cup then hangs 1.0 mm
      above the slab's front, so nothing touches it. [Certain, `checks.txt`] Use junk or low-value
      slabs anyway [Guessing: print tolerance could close a 1 mm gap].
-  2. Change slabs with the cup pushed up no more than about 12 mm. [Certain, `checks.txt`: 3.2 mm
+  2. Change slabs with the cup pushed up no more than about 12 mm. [Certain, `checks.txt`: 3.16 mm
      clear at 12 mm; only 0.2 mm left at the full 20 mm with the mount lifted]
   3. Use 15 different cards, face-up, label end toward you, **including at least one plain card
-     (one colour, little print) and one full-art card**: they are the hardest to tell from a back.
+     (one colour, little print), one full-art card and one blue Water-type card**: they are the
+     hardest to tell from a back (a blue front came closest to the blue card back on real slabs).
   4. `s` (or Ctrl-C) ends the pass early; the slabs so far still count. Slide the mount back down
      to 62.0 mm afterwards.
 - **Open `phase0_results/window_check.jpg`.** The red boxes are the card window
-  (`face_down_window_mm`). They must lie on the card back, clear of the label and of the cup and
-  foot. With today's head they lie on the foot. If the label shows at the *bottom* of the image
-  instead of the top, the camera is turned: put
-  `face_down_window_mm = [[-28, 17, 28, 33]]` in `config/calibration.toml` and run Phase 0 again.
-  [Guessing which way up the real camera is]
+  (`face_down_window_mm`). They must lie on the card back, clear of the label and of the cup pad
+  and foot (the CAD view is `img/face_down_view.png`). If a box reaches the label or the card's
+  edge, note it (§1.2). If the label shows at the *bottom* of the image instead of the top, the
+  camera is turned: put `face_down_window_mm = [[-27.5, 11.0, 27.5, 22.5]]` in
+  `config/calibration.toml` and run Phase 0 again. [Guessing which way up the real camera is]
+
+![Head camera view at hover, CAD](img/face_down_view.png)
 - `--save` writes `face_down_threshold` and `face_down_threshold_sig` to
   `config/calibration.toml` and the backs to `config/card_backs.npz`, **only on a GO**. Without
   `--save` it writes nothing to `config/`. [Certain, `tools/phase0.py`]
+
+**Then replay the machine's rules on your captures:**
+
+```bash
+python -m tools.real_eval --phase0 phase0_results
+```
+
+It runs the run's own reading order, consensus and face-down rule on every Phase 0 frame, with the
+certs you typed as the truth. **It must print `WRONG CERT in an 'ok' verdict: 0` and
+`FALSE FACE-DOWN proofs (a face-up slab 'proven' face-down): 0`**, and it exits 1 otherwise.
+[Certain, `tools/real_eval.py`] Phone photos of more slabs work too: list them in an `index.json`
+(the format is in `python -m tools.real_eval --help`).
 
 ### 1.8 Record what the labels actually encode
 
@@ -350,33 +390,36 @@ machine: it settles the open questions in RESEARCH.md.
 
 | Question | Where to look | Your answer |
 |---|---|---|
-| Back QR payload format (e.g. `https://www.psacard.com/cert/<n>`) | `back_reads` column, `QRCode:` entries | |
-| Front barcode symbology (ITF expected) | `front_reads`, the part before `:` | |
-| Digits in the front barcode for a 9-digit cert (10 = padded or check digit) | `front_reads` | |
-| ITF format learned | report line `ITF format learned:` (`zero_pad` or `check_digit`) | |
-| CGC QR payload | `back_reads` for CGC slabs | |
+| Back QR payload format (`http://psacard.com/cert/<n>` or `https://www.psacard.com/cert/<n>/` expected) | `back_reads` column, `QRCode:` entries | |
+| Front barcode symbology (ITF on lighthouse, 2016 and older labels; Code128 on current labels) | `front_reads`, the part before `:` | |
+| Payload formats the rules recognised | report line `payload formats:` | |
+| ITF payload lengths | report line `ITF payload lengths:` (all 8 expected: the cert zero-padded) | any other length: tell the software owner |
+| Payloads no rule reads | report line `payloads no rule reads` (none expected) | if any: the label format differs from the real ones seen so far |
+| Slabs whose back QR the head camera read | report line `slabs whose back QR the head camera read:` | low on 2017+ labels: focus, glare |
+| CGC QR payload (`cgccards.com/certlookup/<n>/<grade>/`; `cgccomics.com` on OG labels) | `back_reads` for CGC slabs | |
 | Any prefix or suffix around the cert | raw payloads | if yes, set `custom_regex` (§11.5) |
 | Time per side (`back_ms`, `front_ms`) | CSV | replaces the [Guessing] frame times in `cli.py` |
 | Cert lengths seen (8, 9 digits …) | `typed` column | set `psa_cert_digits = [8, 9]` in `calibration.toml` (§11.5) |
 | Widths of your CGC / BGS / TAG holders | your calipers (§1.2) | wider than 82.6 mm: do not load |
-| Label-end edge to the card's top edge | your calipers (§1.2) | the CAD assumes about 32 mm |
-| Card window on the card back? | `window_check.jpg` | boxes on the card / on the label / on the foot |
+| Label-end edge to the card's top edge | your calipers (§1.2) | the CAD assumes 34.8–37.8 mm (PSA) |
+| Card window on the card back? | `window_check.jpg` | boxes on the card / on the label / on the cup or foot |
 | Learned check: how well backs match each other | report line `lowest back-to-back similarity:` | |
 | Learned check: how well face-up slabs match a back | `highest face-up similarity:` | |
 | Backs unlike the others (Japanese cards, other games, CGC) | lines `slab N matches none of the other backs` | |
-| Learned check verdict | `GO for face_down_check = "learned"` with a threshold, or `HOLD for the learned check` and why | expect HOLD with today's head |
+| Learned check verdict | `GO for face_down_check = "learned"` with a threshold, or `HOLD for the learned check` and why | GO expected with today's head [Likely] |
+| Machine rules on your captures | `python -m tools.real_eval --phase0 phase0_results` | `WRONG CERT …: 0` and `FALSE FACE-DOWN …: 0` |
 
 ### 1.9 The gate
 
 | Result | Decision |
 |---|---|
-| `WRONG certs vs what you typed` is **0**, every slab typed, and `confident read (ok)` is **≥ 95 %** | **GO** [Certain: the tool's own criteria]. The report also prints the rule-of-three bound (with 0 wrong in n slabs, the true wrong-read rate is probably below 3/n) and the ok rate as if the ITF format had been learned from the start. |
+| `WRONG certs vs what you typed` is **0**, every slab typed, `confident read (ok)` is **≥ 95 %**, and `tools.real_eval --phase0` shows 0 wrong certs and 0 false face-down proofs | **GO** [Certain: the tools' own criteria]. The report also prints the rule-of-three bound (with 0 wrong in n slabs, the true wrong-read rate is probably below 3/n). |
 | Any wrong cert at all | **NO-GO.** One silent misread is worse than 20 unread slabs. Follow the steps the report prints for the failing slabs and re-run; buy nothing else until a re-run gives 0 wrong. |
 | ok below 95 % but no wrong certs | **Hold.** Look at the failing images. Typical fixes: refocus, move the ring, block room light. Then run again. |
 | Back camera fails on most post-2017 labels | **Hold.** Every one of those would need the station detour (+3–5 s each). Fix the head image first. [Likely] |
 | Glare spots over the label in the head images | Plan to build the optional light roof (CONTRACT). |
-| Learned face-down check: **HOLD**, or no face-up pass | **Does not block the build.** The machine then stops at every slab without a PSA back QR for you to check, as before. Expect HOLD with today's head. [Certain, CAD] |
-| Learned face-down check: **GO** (with `--save`) | The threshold, its sig and the seed backs are saved. GO means: on your slabs, the backs matched each other at least 0.10 better than any face-up slab matched a back; the threshold is the midpoint, never below 0.55. It is not a promise: whether 15 face-up slabs show the worst case is [Guessing]. On the machine the check still needs 5 references and a clear view of the window on 5 proven slabs before it accepts anything, and you check the back photo of every learned acceptance in the first batches (§14). |
+| Learned face-down check: **HOLD**, or no face-up pass | **Does not block the build.** The machine then stops at every slab without a back-label code (PSA 2016 and older, CGC Authentic, BGS, SGC) for you to check. |
+| Learned face-down check: **GO** (with `--save`) | The threshold, its sig and the seed backs are saved. GO means: on your slabs, the backs matched each other (2nd-best match) at least 0.10 better than any face-up slab or its reflection copies matched a back; the threshold is the midpoint, never below 0.55. It is not a promise: whether 15 face-up slabs show the worst case is [Guessing]. On the machine the check still needs 5 references and a clear view of the window on 5 proven slabs before it accepts anything, a match needs two references from two different slabs, and you check the back photo of every learned acceptance in the first batches (§14). |
 
 ### 1.10 Phase 0B: cup bench test (after 0A passes)
 
@@ -426,28 +469,36 @@ order 2 and are tested in §8.3 and §13.
 Use [BOM.md](BOM.md) and [BOM.csv](BOM.csv). Order 2 is everything not marked "PHASE 0A" or
 "PHASE 0B". Get the Misumi extrusion quote first, because it moves the total most (BOM.md).
 
+[SHOPPING_LIST.md](SHOPPING_LIST.md) has the same lines as three orders, with a product link per
+line where one was found (22 Oct 2026) and the lines that still need one.
+
 BOM.csv already has the parts this guide uses: the 285 mm drop arm, the Z spine with both ends
 tapped, the Adafruit #5648 MOSFET modules, bare SPDT microswitches, the 1 A / 3 A / 5 A branch
 fuses, 2.2 kΩ resistors and 100 nF capacitors, the I/O perfboard, mains and earth wire, the closed
 mains box, a Class 2 laser, an E-stop with two contact blocks, the 12 V adapter, the hand vacuum
-pump, the probe-flag sheet, the `M-5ALU-4` elbows, a spare SMC cup and a spare rail block.
-[Certain, BOM.csv] The upgrade lines (HIWIN rail, Z motor, counterweight, flex USB cable, VXB pump,
-branded E-stop) have qty 0: buy one only when the test its line names fails.
+pump, the flag sheet, the `M-5ALU-4` elbows, a spare SMC cup, a spare rail block, and the
+carry-height sensor's parts (its board is the second endstop board; its M5×10 button heads are the
+one new line). [Certain, BOM.csv] The upgrade lines (HIWIN rail, Z motor, constant-force spring,
+high-flex USB cable, branded pump, branded E-stop) have qty 0: buy one only when the test its line
+names fails.
 
 **Check these lines when you order:**
 
 | BOM line | What to do | Why |
 |---|---|---|
-| SMC cup + buffer `ZPT25UUK20-B5-A10` (×2, one spare) | Get the code confirmed in writing, or entered in SMC's configurator: a 25 mm flat urethane pad on a **non-rotating (K)** M10 buffer with **20 mm** stroke. The rotating `ZPT25UUJ20-B5-A10` works too. Download the STEP file while you are there and compare it with §3.3. | [Certain, SMC ZP catalog Table 2] 25 mm pads come only with 10/20/30/40/50 mm stroke, so the old 25 mm code does not exist. [Likely] this exact code is orderable. The flag, its guide and the sensor post are built on this buffer's catalog heights, so don't substitute another buffer. |
+| SMC cup + buffer `ZPT25UUK20-B5-A10` (×2, one spare) | Get the code confirmed in writing, or entered in SMC's configurator: a 25 mm flat urethane pad on a **non-rotating (K)** M10 buffer with **20 mm** stroke. The rotating `ZPT25UUJ20-B5-A10` works too. Download the STEP file while you are there and compare it with §3.3. | [Certain, SMC ZP catalog Table 2] 25 mm pads come only with 10/20/30/40/50 mm stroke, so the old 25 mm code does not exist. [Certain] Proax lists this exact code (back-ordered, no date on 22 Oct 2026). The flag, its guide and the sensor post are built on this buffer's catalog heights, so don't substitute another buffer. |
 | `M-5ALU-4` barb elbow (×2) | SMC's own part, not a push-in elbow | A push-in elbow (15.9 mm tall) reaches past the head lens at full stroke. [Certain, SMC KQ2 catalog height placed in the CAD] |
-| Z motor with lead screw | Buy one that lists 1.5–2.0 A per phase, ≤ 4 mH and an **8 mm lead** (T8×8). Not a 0.4–0.6 A "integrated" motor. | The firmware runs Z at 0.8 A and 750 rpm; a high-impedance motor stalls there, and nothing detects a Z stall. |
+| Z motor with lead screw | Buy one that lists 1.5–2.0 A per phase, ≤ 4 mH and an **8 mm lead** (T8×8). Not a 0.4–0.6 A "integrated" motor. The BOM's VXB 3-pack publishes all three (1.7 A, 3.1 mH). | The firmware runs Z at 0.8 A and 750 rpm; a high-impedance motor stalls there. The carry-height sensor stops the run after a stall, but it cannot stop the stalls. |
+| Class 2 laser | The BOM's Quarton module is 7 mm across | The left gate post now prints with a 7.2 mm hole; a post printed from an older STL needs drilling to 7.2 mm (§5.9). |
+| Dowels | The BOM's dowels are 5/16 in (7.94 mm) | Buy a 5/16 in brad-point bit and collar to match (BOM.md tools). |
 | M5 screws | M5×25 for the 16 bed bolts, M5×30 for the 4 bracket-through-plywood bolts, M5×16/20 and M5×12 button heads as the CSV notes say | An M5×30 through the bed bottoms on the profile core before it clamps (§4.3). |
 | Overfill laser | The listing must say ≤ 1 mW or Class 2. | It is on whenever the Pi is on, at face height (WIRING.md §8). |
 | Light roof (foam board, tape, 2 × 2020 posts, qty 0) | Buy only if Phase 0 showed glare (§1.9) | The roof is optional (CONTRACT). |
 
 **Lead times** [Guessing]: Amazon 2–5 days, Misumi about 1 week, AliExpress 2–4 weeks, the SMC
-cup 2–8 weeks [Likely, sibling listings]: ask for the date in writing. The Rodent showed sold out at BIQU US (BOM.md); check the BIQU AliExpress
-and Amazon stores.
+cup 2–8 weeks [Likely, sibling listings; Proax shows it back-ordered with no date]: ask for the
+date in writing. LiMo ships the rails DDP by air in 8–14 working days. The Rodent was in stock at
+BIQU on 22 Oct 2026.
 
 **When the parts arrive:**
 - check that the 4040 profile is 20-series slot 6 with **two slots per face**;
@@ -455,6 +506,8 @@ and Amazon stores.
   phase resistance: about 1–2 Ω is right; 10 Ω or more is a high-impedance motor, don't use it**;
 - measure the SMC buffer against §3.3 before you cut the flag (a K rod does not turn; a J rod
   does, and the flag guide handles it);
+- measure the optical endstop boards (slot 3.1 mm, holes 19 mm apart, header position) before you
+  print `head_foot` and `carry_sensor_mount`;
 - count the balls in the MGN12 carriages before you slide them anywhere (§6.1).
 
 ---
@@ -491,9 +544,9 @@ part's volume. Fast printers (Bambu, MK4) take roughly half. [Guessing]
 |---|---:|---|---|---|---|---:|
 | `phase0_base` | 1 | PLA/PETG black | as exported (plate down) | 3 / 25 % | none | 6.5 h |
 | `phase0_tray` | 1 | PLA/PETG | as exported (ledges down) | 3 / 25 % | none | 2.8 h |
-| `phase0_top` | 1 | PLA/PETG | as exported (ring up) | 3 / 25 % | none | 3 h |
+| `phase0_top` (61.0 cm³; reprint an older one) | 1 | PLA/PETG | as exported (ring up) | 3 / 25 % | none | 3.4 h |
 | `phase0_occluder_mount` | 1 | PLA/PETG | as exported (flat on its beam) | 4 / 30 % | none | 0.8 h |
-| `head_foot` (Phase 0A, then the machine) | 1 | PETG | as exported (foot down) | 5 / 40 % | none | 1.9 h |
+| `head_foot` (31.0 cm³; Phase 0A, then the machine) | 1 | PETG | as exported (foot down) | 5 / 40 % | none | 1.7 h |
 | `station_mount` | 1 | PETG black | as exported (base plate down) | 3 / 25 % | none; the ribbon slot bridges | 3 h |
 | `x_motor_mount` | 1 | PETG | as exported: beam face down | 5 / 40 % | none | 1.3 h |
 | `x_bumper_L` | 1 | PETG | as exported: beam face down | 4 / 40 % | none | 0.2 h |
@@ -503,19 +556,23 @@ part's volume. Fast printers (Bambu, MK4) take roughly half. [Guessing]
 | `belt_clamp` | 2 | PETG | flat | 100 % | none | 0.1 h each |
 | `z_motor_mount` | 1 | PETG | as exported: motor face down, tab up | 5 / 40 % | none | 2.5 h |
 | `z_end_cap` | 1 | PETG | as exported (lips up) | 5 / 50 % | none | 0.5 h |
-| `z_plate` | 1 | PETG | as exported: carriage face down, nut shelf up | 6 / 50 % | none | 2.3 h |
-| `camera_bracket` | 1 | PETG matte black | as exported: shelf face down | 4 / 40 % | tree supports under the ring seat if your printer sags (it bridges about 30 mm between its 4 legs) | 0.9 h |
+| `z_plate` (with 2 × 2.5 mm pilots for the carry flag arm) | 1 | PETG | as exported: carriage face down, nut shelf up | 6 / 50 % | none | 2.3 h |
+| `camera_bracket` (16.4 cm³; reprint an older one: the lens moved 5 mm) | 1 | PETG matte black | as exported: shelf face down | 4 / 40 % | tree supports under the ring seat if your printer sags (it bridges about 30 mm between its 4 legs) | 0.9 h |
+| `carry_sensor_mount` (6.2 cm³) | 1 | PETG | as exported: flat on its spine face | 4 / 40 % | none | 0.35 h |
+| `carry_flag_arm` (17.2 cm³) | 1 | PETG | as exported: on its bottom face | 4 / 40 % | none | 0.95 h |
 | `gate_post_L`, `gate_post_R` | 1 + 1 | PETG | as exported: upright on the foot, 10 mm brim (needs 230 mm Z) | 4 / 30 % | none upright; on its side: supports | 2.2 h each |
 | `drill_template` | 1 | PETG (or PLA) | as exported (plate down) | 4 walls, 50 %, bosses solid | none | 3.6 h |
 | `awl_adapter` | 1 | PETG | as exported | 100 % | none | 0.2 h |
 | `fill_gauge` | 2 | PLA | as exported (lying flat) | 3 / 20 % | none | 0.6 h each |
-| **Total** | | | | | | **≈ 40 h** (≈ 25 h after the Phase 0 prints) |
+| **Total** (751 cm³ in 25 prints) | | | | | | **≈ 42 h** (≈ 27 h after the Phase 0 prints) |
 
 **Notes**
 - **Gate posts:** slow down the last 50 mm of the upright print; a tall thin part wobbles. If your
   printer is shorter than 230 mm, lay each post on its side with supports from the build plate.
 - **`camera_bracket`:** print it shelf face down, as exported; the LED ring seat hangs between four
   legs and bridges about 30 mm. Use a brim.
+- **`camera_bracket` and `phase0_top` changed this round** (the lens sits 5 mm toward the label):
+  print them from the current `cad/out/printed/`. [Certain, CAD export]
 - **`head_foot`:** clear the 1.9 mm flag slot (in the two fins and through the foot) and the
   sensor post's board slots after printing. Use a junior hacksaw blade or a 1.5 mm needle file: a
   standard 12.7 mm hacksaw blade does not fit the slot in the foot. [Certain, CAD: that part of
@@ -534,6 +591,7 @@ gap 4] and took the others from datasheets you should check against your part:
 | ELP board-to-lens-front length (board underside to the lens holder front) | 20 mm (`HEAD_LENS_PROJ`) [Guessing] | `camera_bracket` shelf height; the `phase0_top` standoffs (§1.5) |
 | ELP lens-holder footprint | 16 mm square (a 25 mm window passes it) [Guessing] | `camera_bracket`, `phase0_top` |
 | Optical endstop board | holes = the TCST2103's flange holes, 19 mm apart with the slot midway [Certain for the sensor, Vishay drawing]; header at the +Y end; **no component taller than 4 mm within 2 mm of the slot line** [Guessing] | `head_foot` sensor post (M3 slots, ± 4 mm) |
+| Second optical endstop board (carry-height sensor) | the same: holes 19 mm apart, header assumed at the +Y end [Guessing] | `carry_sensor_mount` (M3×10 heads in pockets on the spine side) |
 | Head LED ring OD/ID | 40 mm ring: seat bore 41 mm, lip 33 mm | `camera_bracket`, `phase0_top` |
 | Station LED ring OD/ID | seat 52–60 mm | `station_mount`, `phase0_base` |
 | Camera Module 3 holes | 21 × 12.5 mm, M2 | `station_mount`, `phase0_base` |
@@ -573,6 +631,8 @@ CadQuery), or drill new holes by hand.
   - the T8 nut flange on the `z_plate` shelf, and its four M3×16 + nuts;
   - the M10 buffer body through `head_foot`;
   - the probe flag sliding freely in `head_foot`'s 1.9 mm guide slot, with the board off (§7.6);
+  - the second endstop board's M3×10 heads in `carry_sensor_mount`'s pockets, and an M3×10 turning
+    into each of the `z_plate`'s two 2.5 mm pilots for the flag arm;
   - both LED rings in their seats;
   - the `x_idler_slider` sliding between the `x_idler_mount` cheeks, its M3 nut in the slot;
   - the M3 nuts in the `x_bracket` tab's nut traps, under the `belt_clamp` caps;
@@ -597,9 +657,10 @@ From `cad/out/cut_list.csv` [Certain]. Misumi cuts to ±0.5 mm with square ends 
 | 2020 | Phase 0 jig posts | 312 | 2 |
 | 2020 | Phase 0 jig arm stub (one 5.5 mm cross hole, match-drilled through `head_foot`, §1.5) | 66 | 1 |
 | 1 mm aluminium sheet | probe flag blank, cut to `cad/out/probe_flag_blank.svg` (§7.6) | 24.4 × 55 | 1 |
+| 1 mm aluminium sheet | carry flag, flat, two 3.4 mm holes 15.9 mm from the inner edge, 6 and 18 mm below the top edge (§7.4a) | 19.9 × 36 | 1 |
 | 2020 | optional rear brace stock (§6.7) | 600 | 1 |
-| 8 mm hardwood dowel | guide rod | 236 | 82 |
-| 18 mm plywood | bed | 1416 × 289.5 | 1 |
+| 8 mm (or 5/16 in) hardwood dowel | guide rod | 236 | 82 |
+| 18 mm (3/4 in, 17.9 mm actual) plywood | bed | 1416 × 289.5 | 1 |
 
 ### 4.2 Where everything sits
 
@@ -693,9 +754,10 @@ the rods vertical. [Certain, by construction of the drill-template method]
 ### 5A. Now, before the X axis (3–4 h)
 
 **5.1 Cut the bed.**
-- Cut 1416 × 289.5 mm from the 18 mm Baltic birch blank (305 × 1524). One rip and one crosscut.
-- If you used Home Depot plywood instead, drill a test hole away from the pockets first: voids
-  ruin rod holes. (BOM.md)
+- Cut 1416 × 289.5 mm from the 3/4 in birch panel (610 × 2438 mm): one rip and one crosscut.
+  Home Depot cuts it for free; a ≥ 1.42 m Baltic birch offcut from the school is better still.
+- Birch plywood can have voids: drill a test hole away from the pockets first, because voids ruin
+  rod holes. (BOM.md)
 
 **5.2 Cut the two upright notches** at the back corners, one at each end.
 - Each notch is 41 mm along X (open to the end) by 41 mm along Y.
@@ -712,9 +774,10 @@ the rods vertical. [Certain, by construction of the drill-template method]
    and round the top to a 2–3 mm radius. This is the lead-in for slabs going in by hand.
    Thirty seconds each.
 4. Lightly chamfer the other (bottom) end so the glue isn't scraped off on insertion.
-5. **Test hole in scrap plywood:** drill 8 mm × 15 mm deep with the brad-point bit. A dowel must
-   be a firm push fit.
-   - Too loose: use a fresh bit, or a 5/16 in bit with 5/16 in dowels.
+5. **Test hole in scrap plywood:** drill 15 mm deep with the brad-point bit that matches your
+   dowels (5/16 in for the BOM's 5/16 in dowels, 8 mm for 8 mm ones). A dowel must be a firm push
+   fit.
+   - Too loose: use a fresh bit of the matching size.
    - Too tight: sand the dowel end.
 
 **5.5 Cut the pads:**
@@ -740,8 +803,8 @@ What the template does:
 Set-up:
 - Fit the `awl_adapter` in place of the cup.
 - Set its point level with where the cup face was, within 2 mm (`mark` asks for this).
-- Make a **drill guide block**: drill an 8 mm hole straight through a 30 mm hardwood block on the
-  school's drill press.
+- Make a **drill guide block**: drill a hole of the dowel size (5/16 in for the BOM's dowels)
+  straight through a 30 mm hardwood block on the school's drill press.
   - The printed template sets each hole's *position*, not its *angle*. [Certain, BOM.md] The
     block sets the angle.
   - Why it matters: a rod leaning 0.5° puts its top 1.9 mm off at 218 mm, and the slab has only
@@ -766,7 +829,7 @@ For each pocket the software:
 
 Drilling each hole:
 1. Hold the guide block on top of the template boss, hole over hole.
-2. Drill through boss and block with the 8 mm brad-point bit.
+2. Drill through boss and block with the brad-point bit (5/16 in for the BOM's dowels).
 3. **Depth collar at 57 mm from the bit's cutting lips:** 30 mm block + 12 mm boss + 15 mm into the
    plywood. [Certain, CAD for the boss and the 15 mm] The collar stops on the top of the block.
    - The brad point's centre spur goes 1–2 mm deeper than the lips, and the plywood is only
@@ -776,7 +839,7 @@ Drilling each hole:
 
 Order and the end pockets:
 - The order is pockets 1–11 first, then 0 and 12. [Certain, `mark --dry-run`]
-- One dimple of each end pocket is past the X travel. For those, push two 8 mm pins (drill bits)
+- One dimple of each end pocket is past the X travel. For those, push two pins of the hole size (drill bits)
   through the template's shared-side holes into the neighbour's finished holes. The one dimple
   you can reach is then a check: **more than 1 mm off means stop.** Either the neighbour was
   drilled off, or X lost steps.
@@ -824,6 +887,10 @@ glue's full strength, or ream the hole and re-glue.
     lift the beam to 217 mm, and a stack up to about 216 mm would then pass the overfill check.
   - Fix each post with two wood screws through the slotted foot holes (they allow about ±9° of
     yaw for aiming).
+  - **The BOM's Class 2 laser (Quarton VLM-650-03) is 7 mm across.** The left post prints with a
+    7.2 mm barrel hole for it; the right post keeps 6.2 mm for the receiver module. If your left post
+    came from an older STL with a 6.2 mm hole, drill it out to 7.2 mm (or 9/32 in), square to the
+    post. [Certain, the module's listed D7 × 21 mm; CAD `model.gate_post`]
   - Push the Class 2 laser into the left post's barrel hole and the receiver into the right one;
     lock each with an M3 set screw. Stick a "LASER - do not stare into the beam - Class 2" label
     on both posts.
@@ -958,6 +1025,8 @@ All heights below are from `cad/layout.py` and `cad/model.py`. [Certain]
 - The end cap's underside (267 mm above the pad) sweeps 49 mm over the rod tops, and everything
   fixed to the X carriage stays at least 5 mm above a held slab even at the Z top hard stop.
   [Certain, `checks.txt`]
+- Drop two slot-6 M5 T-nuts into the spine's **left (−X) face slot** now, for the carry-height
+  sensor's mount (§7.4a).
 
 **7.2 Z rail.**
 - MGN12 330 mm in the spine's right slot, 13 × M3×10 into T-nuts. Its bottom is 1 mm above the
@@ -989,6 +1058,53 @@ All heights below are from `cad/layout.py` and `cad/model.py`. [Certain]
 - On the spine top, hit by the Z plate.
 - It must click at c ≈ 258 mm: the cup face 258 above the pad top, ± 2 mm. At that point the
   `z_plate` top is still 4 mm below the `z_motor_mount`, which is the top hard stop at c = 262.
+
+**7.4a Carry-height sensor (the Z stall guard).** [Certain, CAD `carry_sensor_mount`,
+`carry_flag_arm`, `checks.txt`]
+
+The Z motor runs at about half its rated current and nothing in the controller notices a stall: a
+stalled lift leaves the head lower than the controller thinks. This sensor catches that before the
+head moves sideways. It is the second endstop board on the Z spine (fixed to the X carriage), with
+a flat aluminium flag on the `z_plate` (moving with Z). The flag's top edge enters the beam at cup
+height c = 246.5 mm and stays in it up to the top hard stop: the beam is clear at every height up to
+242 and fully blocked from 248 (both travel heights) to 262. The software reads it on GPIO 6 before
+every sideways move (it must read blocked) and before every grip (it must read clear, which is how
+a dead emitter is caught). A head that still reads blocked is at least 245.5 high, where even a
+double pick of two thick holders clears the rod tops by 2.5 mm.
+
+![Carry-height sensor: slot clear just below the trip, flag in the beam at the top stop](img/carry_sensor.png)
+
+1. **Board to mount.** Put two M3×10 through `carry_sensor_mount` from its spine side, heads in the
+   pockets, then the board on them, components away from the mount; a washer and nut on the sensor
+   flange each. The arms point away from the spine and the slot runs vertically.
+2. **Mount to the spine.** On the spine's left (−X) face, with 2 × M5×10 **button heads** into the
+   two T-nuts from §7.1, the beam about 53.5 mm below the spine top (Z 561.5 above the pad top; the
+   mount spans 537.5–585.5). Leave the screws just snug: you slide it in step 6. Button heads,
+   because the flag arm passes 4.6 mm away.
+3. **Flag arm.** Screw `carry_flag_arm` to the `z_plate` front face with 2 × M3×10 into the two
+   2.5 mm pilots (X −24, 2 and 14 mm above the Z carriage's bottom edge). Its leg runs beside the
+   spine, outside the sensor's arm tips.
+4. **Flag.** Cut it from the 1 mm sheet, flat, 19.9 × 36 mm (`cut_list.csv`), and file its **top
+   edge straight**: that edge is the trip edge. Drill two 3.4 mm holes 4 mm from the outer edge,
+   6 and 18 mm below the top edge. Fix it to the leg's end with 2 × M3×8, inner edge toward the
+   spine, top edge flush with the arm's top.
+5. **Free-run test.** Turn the lead screw by hand through the full Z travel: the flag must pass
+   through the slot without rubbing, about 1 mm clear each side (1.05 mm in the CAD).
+6. **Set the trip, after §9 (wiring) and §12.1 (`calibrate z`):**
+   1. Meter on the board's OUT (about 5 V blocked, about 0 V clear), or watch the `carry sensor`
+      line of `python -m slabscan selftest`.
+   2. `python -m slabscan jog`: move Z until the status line shows **height 246.5**. Slide the
+      mount along its slot until OUT just turns blocked. Tighten both M5 screws.
+   3. Check: **clear at height 245.5, blocked at 247.5 and at 255.**
+   4. `python -m slabscan selftest --motion` must say `carry sensor … PASS … trips at about
+      246.x mm (set 246.5, allowed +/-1)`. It homes, steps the head down over pocket 0 from 249.5
+      to 243.5 in 0.25 mm probe moves and reports where the sensor turns clear. [Certain,
+      `ops.carry_sweep`] Outside ±1 mm it fails and prints its readings: slide the mount and
+      repeat.
+- **Not checked by the CAD:** the board's real component heights and header position, and the lead
+  routing beyond the 0.2 m to the spine top (WIRING.md §6a).
+- **`jog`, `calibrate` and `mark` do not read this sensor** [Certain, `ops.py`]: only runs,
+  resumes, `focus`, the web page and `tools.bench_tests` do. Move carefully with those tools.
 
 **7.5 Drop arm, foot and cup.**
 1. **Drill the two 5.5 mm cross holes in the 2020 × 285 drop arm**, through the centres of two
@@ -1075,10 +1191,10 @@ cup is pushed up, its blade rises through the slot and blocks the beam. [Certain
    - Point the barb to the back (+Y), away from the label.
    - With a K buffer, align the blade with the slot before you tighten; with a J buffer the guide
      aligns it.
-7. **Board.** Components toward the buffer, header toward the arm. Fix it with **2 × M3×16**,
-   washers and nuts, centred in the post's slots. The CAD shows M3×12, but solder joints under the
-   board stand it off the post and leave no thread in the nut. [Likely] The longer tip clears
-   every part by more than 20 mm. [Certain, CAD]
+7. **Board.** Components toward the buffer, header toward the arm. Fix it with **2 × M3×16**, a
+   washer under each head and another under each nut, centred in the post's slots. That is what
+   the CAD models: the tip runs 3.9 mm past the nut, and a pick next to full neighbour stacks
+   still clears them by 14.5 mm. [Certain, `checks.txt`]
 8. **Free-run test.** Push the cup up by hand through the full stroke. The blade must slide with no
    rub and never touch the sensor.
 9. **Set the trip** (machine only, after §9 has wired the sensor):
@@ -1089,8 +1205,8 @@ cup is pushed up, its blade rises through the slot and blocks the beam. [Certain
       travel.
    4. Slide the board in its slots until it reads **2.0 ± 0.5 mm**. Board up = later trip.
    - The front (label-side) screw sits behind the buffer: reach it with a **2.5 mm ball-end key
-     tilted 15–20° toward the label**. A straight key hits the buffer. [Certain, CAD: 1.15 mm
-     clear at 20°] The rear screw takes a straight key.
+     tilted 15–20° toward the label**. A straight key hits the buffer. [Certain, CAD: 1.63 mm
+     clear at 20°] The rear screw takes a straight key (2.0 mm clear).
 10. **Full-stroke test.** OUT must stay high from the trip to full compression, and the flag must
     never touch the sensor.
 11. **Write the measured trip travel into `config/calibration.toml`** (after §11):
@@ -1113,7 +1229,14 @@ when you push the cup up by hand, and release when you let go.
   the buffer nuts (§7.5 step 5).
 - Fit the ELP board on the shelf (4 × M2 + nuts) and the 40 mm LED ring in the ring seat around
   the lens. The shelf height assumes a 20 mm board-to-lens-front length (§3.3).
-- The lens looks straight down on the cup axis.
+- **The lens looks straight down, 5 mm toward the label from the cup axis.** The bracket sets
+  that; there is no adjustment. [Certain, CAD `HEAD_CAM_DY`] With the lens on the cup axis, the
+  vacuum elbow 23 mm under it would hide the card window the learned face-down check needs; offset,
+  every part on the axis throws its shadow away from the label side (`img/face_down_view.png`).
+- **Keep the board square to the slab.** A tilt of more than about 0.6° toward the cup puts the cup
+  pad into the card window [Certain, CAD aim check]; §12.3 checks it on the first run. If it is
+  tilted, shim the board: one 0.3 mm M2 washer under one pair of its 32 mm-spaced holes tilts it
+  about 0.54° [Likely].
 - Run the camera USB and the ring wires along the arm in clips every 50 mm (WIRING.md §11).
 
 **7.8 Z hold test and Z lift test** (after §10; the lift test after §12.1)
@@ -1128,7 +1251,8 @@ when you push the cup up by hand, and release when you let go.
   conditional "Z counterweight" line; its mount is not in the CAD). [Guessing in DESIGN: detent
   torque should hold]
 
-**Lift test** (the Z motor runs at about half its rated current and nothing detects a stall):
+**Lift test** (the Z motor runs at about half its rated current; the carry-height sensor stops a
+run after a stall, but only a strong enough motor prevents one):
 1. One junk slab in pocket 1, pocket 0 empty, `calibrate z` done (§12.1).
 2. `python -m tools.bench_tests lifts 100`: it probes pocket 0's bare pad, does 100 full-height
    lifts at full Z speed with the slab held, puts it back and probes the pad again without homing.
@@ -1252,6 +1376,8 @@ Follow [WIRING.md](WIRING.md) section by section. The block diagram:
    - Z top switch (NC) → Z-MAX;
    - optical probe → **Y-MAX** (not the Probe connector).
    - All three are fail-safe: a cut wire reads as triggered. (CONTRACT)
+   - the carry-height sensor's OUT → 8-core core 8 → the I/O board's 10 kΩ / 20 kΩ divider → Pi
+     **GPIO 6** (pin 31) (WIRING.md §6a).
 6. **Pi side:** MOSFET modules on GPIO 17/27/22/23/24, each with a 10 kΩ SIG-to-GND pull-down
    unless you measured one already there (WIRING.md §4), the I/O board (ADS1115 at 0x48 and the
    sensor divider), and the laser gate on GPIO 5 with its 2.2 kΩ pull-up **at the receiver**. The
@@ -1334,9 +1460,18 @@ v4l2-ctl --list-devices              # the USB head camera (not /dev/video0 on a
 **Don't `pip install` numpy or OpenCV into the venv.** A pip numpy hides the apt one and breaks
 picamera2. [Certain, software README]
 
+**OCR threads.** The `--service` unit sets `OMP_THREAD_LIMIT=1`, and `decode.py` sets it for
+command-line runs too. With Tesseract's default threads, OCR timed out on every frame on a loaded
+4-CPU computer; single-threaded it read a station frame in about 3 s. [Certain, measured on the
+development computer; Guessing for the Pi]
+
 **11.4 Machine config.** `setup_pi.sh` already ran `python -m tools.gen_config`. Run it again
-whenever `cad/layout.py` changes. It writes `config/machine.toml` and never touches
-`config/calibration.toml`. [Certain]
+whenever `cad/layout.py` changes (`--check` says whether it is stale). It writes
+`config/machine.toml` and never touches `config/calibration.toml`. The face-down card window, the
+head crop (`head_roi_half_mm = 38.3`), both travel heights (248), the buffer stroke (20) and the
+carry sensor's trip (`carry_sensor_c0 = 246.5`) all come from the CAD there; the window reads
+`face_down_window_mm = [[-27.5, -22.5, 27.5, -11.0]]` (mm from the head-camera axis). [Certain,
+`config/machine.toml`]
 
 **11.5 Your own settings** go in `config/calibration.toml`. It overrides `machine.toml`, and the
 calibrate commands write there too. A misspelt key is refused when the config loads.
@@ -1349,16 +1484,17 @@ buffer_trip_tol_mm = 0.1     # once it is measured
 # lid_switch = true          # only if you fitted the optional lid switch on GPIO 25
 # custom_regex = "..."       # only if Phase 0 found a prefix/suffix around the cert (one capture group)
 # cam_head: see §12.3 (the whole table must be given if you change any part of it)
-# face_down_check = "stop"   # "learned" (default) | "stop" (back QR only) | "off" (no check, like --all-face-down)
-# face_down_threshold = 0.62         # written by phase0 --face-up 15 --save on a GO (never below 0.55) ...
+# face_down_check = "stop"   # "learned" (default) | "stop" (back-label codes only) | "off" (no check, like --all-face-down)
+# face_down_threshold = 0.56         # written by phase0 --face-up 15 --save on a GO (never below 0.55) ...
 # face_down_threshold_sig = "..."    # ... with the card window it was measured for; a threshold without it is not used
-# face_down_window_mm = [[-28, 17, 28, 33]]   # only if window_check.jpg showed the label at the bottom (§1.7)
+# face_down_window_mm = [[-27.5, 11.0, 27.5, 22.5]]   # only if window_check.jpg showed the label at the bottom (§1.7)
+# carry_sensor = false       # only to run without the carry-height sensor (then nothing sees a Z stall)
 ```
 
-- **`face_down_check`:** leave it out to keep the default, `"learned"`. With today's head it acts
-  exactly like `"stop"`: every slab without a PSA back QR stops for you (OPERATING.md §8.4).
-  [Certain, `facedown.learned_ready`] Set `"stop"` if you want that stated, for example after a
-  Phase 0 HOLD.
+- **`face_down_check`:** leave it out to keep the default, `"learned"`. Until Phase 0 has saved a
+  threshold, 5 references exist and 5 proven slabs showed the window clear, it acts exactly like
+  `"stop"`: every slab without a back-label code stops for you (OPERATING.md §8.4). [Certain,
+  `facedown.learned_ready`] Set `"stop"` if you want that stated, for example after a Phase 0 HOLD.
 - **Don't type a threshold in by hand.** One without the `face_down_threshold_sig` that Phase 0
   wrote with it is ignored, and one below 0.55 is refused. [Certain, `config.py`]
 
@@ -1367,7 +1503,8 @@ buffer_trip_tol_mm = 0.1     # once it is measured
 (`vac_baseline_kpa`): say yes with the cup empty. If you installed the boot service, stop it first
 (`sudo systemctl stop slabrail-web`): only one slabscan program may use the machine. The gate
 posts go on in §5.9, so keep `overfill_gate = false` (from §8.3) in `calibration.toml` until
-§12.5, or the `overfill beam` line fails. A `calibration` WARN is normal before §12.
+§12.5, or the `overfill beam` line fails. A `calibration` WARN is normal before §12, and so is a
+`carry sensor` FAIL from `--motion` until its trip is set (§7.4a step 6).
 
 **11.7 Learn the commands on the simulator** before touching the machine:
 `python -m slabscan sim --slabs 330` and `python -m slabscan --sim web`.
@@ -1402,6 +1539,9 @@ If it is off:
 
 **Re-run it whenever you change the cup pad.**
 
+**12.1a Carry-height sensor trip.** Now that heights are calibrated, set and measure it: §7.4a
+step 6. `selftest --motion` must report it within ±1 mm of 246.5.
+
 **12.2 `calibrate x`.** Awl fitted.
 
 ```bash
@@ -1431,23 +1571,32 @@ python -m slabscan focus head
 - Turn the M12 lens to the peak score and lock the nut.
 - The best frame is saved in `focus/`. Open it: the QR and barcode must look crisp, with no glare
   spot on the label.
-- **Check the head-camera crop.** The run crops every head frame to the pocket under the cup,
-  because the 3.6 mm lens also sees the neighbours' labels. The crop is computed from `cam_head`'s
-  `hfov_deg` (full field of view across the image width), `row_axis` (`"x"` if the image width
-  runs along the pocket row) and `lens_to_label_mm`. [Certain, `runner._head_roi`]
+- **Check the head-camera crop.** The run crops every head frame to the slab under the cup
+  (`head_roi_half_mm` = 38.3 mm either side of its centre line: the slab's half-width less its play),
+  because the 3.6 mm lens also sees the neighbours' labels and, beside the slab, the lower
+  neighbour stacks. The crop is computed from `cam_head`'s `hfov_deg` (full field of view across
+  the image width), `row_axis` (`"x"` if the image width runs along the pocket row) and
+  `lens_to_label_mm`. [Certain, `runner._head_roi`]
   - Lay a ruler across the slab along the row and read the width the saved frame shows: hfov =
     2 × atan(half that width ÷ 140 mm).
   - If the image width does not run along the row, set `row_axis = "y"`.
   - Put the whole table in `calibration.toml`, e.g.
     `cam_head = { type = "usb", device = "auto", width = 3264, height = 2448, hfov_deg = 64.0, row_axis = "x", lens_to_label_mm = 140.0 }`.
   - Too large an `hfov_deg` makes the crop too narrow and cuts the label off: every slab then
-    takes the slow station detour. Too small lets a neighbour's label in, which shows up as
-    `conflict` rows.
+    takes the slow station detour. Too small widens it past the slab (a real 70° lens configured
+    as 64° crops about ±42.9 mm), and a lower neighbour's back label can come into view. That is
+    not always visible as a `conflict`: on a slab with no back code of its own, a neighbour's QR
+    could become its cert, or a face-up slab could look face-down. The rule "codes of two certs in
+    one frame = another slab's label" stops most of it, so measure `hfov_deg` anyway. [Certain,
+    real-image composites]
 - **The learned check's card window** (after the first run, §13.1): open
   `batches/<id>/images/face_down_window.jpg` (the first slab, the window in red) and
-  `face_down_empty.jpg` (the view over an empty pocket). The red boxes must lie on the card back.
-  With today's head they lie on the foot, and the run's start line says the check is not active.
-  [Certain, CAD; the simulator shows the same]
+  `face_down_empty.jpg` (the view over an empty pocket). **The red boxes must lie on the card back,
+  about 1.4 mm (about 24 px) clear of the cup pad's edge** [Certain, CAD at hover; compare
+  `img/face_down_view.png`]. If the pad or the foot reaches into a box, the camera is tilted toward
+  the cup: shim the board (§7.7) and look again. If a box reaches past the card's top edge onto the
+  holder, note which holder (§1.2). The start line reads `face-down check: learned (…)` once Phase 0
+  has saved a threshold and 5 references exist.
 
 **12.4 `focus station --save`.**
 
@@ -1527,15 +1676,16 @@ python -m tools.bench_tests powercut 300   # hold a slab at carry height and log
    and run again.
 4. Ten runs = 100 transfers.
 - Make one of the ten runs `--front-photo always`, so the station path gets exercised too.
-- If you have them, swap in the BGS/TAG and the old-label slab for two of the runs. The old-label
-  (and any CGC) slab stops at the face-down check: check it, then `resume --face-down-ok`, which
-  confirms that one slab only. That is the expected behaviour with today's head, where the learned
-  check never becomes active (§13.8); note how often it happens.
+- If you have them, swap in the BGS/TAG and the old-label slab for two of the runs. A slab with no
+  back-label code (PSA 2016 and older, CGC Authentic, BGS) stops at the face-down check until the
+  learned check is active: check it, then `resume --face-down-ok`, which confirms that one slab
+  only. CGC 2023+ and OG slabs pass on their back QR. Note how often it stops.
 
 **Pass:**
 - 100/100 transfers with no unexplained stop;
 - every PSA/CGC slab `ok` with the **right** cert (check `certs.txt` against your list);
-- BGS/TAG lands in pocket 12 as `other_grader`, without rubbing on the rods;
+- BGS/TAG lands in pocket 12 without rubbing on the rods: BGS labels carry no code, so as `no_read`
+  or as an OCR-only `needs_review` (`other_grader` only if a BGS/TAG URL is read);
 - `count check: every stack matches` in every summary;
 - no visible marks.
 - Note `mean cycle` from the summary: that's your real speed.
@@ -1669,9 +1819,21 @@ documented in FIRMWARE.md]
 
 **C. Cut the sensor's 5 V or cover its emitter:** same as A (FIRMWARE.md step 5's fail-safe rows).
 
+**E. The carry-height sensor** (junk slabs loaded) [Certain for the messages, `runner._carry_check`;
+tested in the simulator]:
+1. Unplug its lead (or open core 8) and `run`. It must stop before the first sideways move:
+   "Z stall suspected … the carry-height sensor (GPIO 6) reads CLEAR … Right after homing this is
+   most likely the sensor itself …". Plug it back in.
+2. Push a piece of card into its slot and `run`. It must stop at the first grip: the cup comes down
+   onto the top slab of pocket 1 and stops there before it seals, with "Carry-height sensor fault
+   …: it reads BLOCKED with the head at … mm, far below its trip height (246.5 mm) …". Take the card
+   out.
+3. `selftest --motion` → `carry sensor … PASS`.
+
 **Pass:**
 - no probe move in A or C: the cup never goes below the empty travel height;
-- a clean stop in B.
+- a clean stop in B;
+- both stops in E, with nothing moved sideways and no slab gripped.
 
 Plug back in and run `selftest -i`.
 
@@ -1703,38 +1865,43 @@ and the prompt asks you to take it.
 
 ### 13.8 Face-down check
 
-(30 min; part B only after a head change)
+(30 min; part B once the learned check is active)
 
 **A. Every build.** [Certain for the expected messages, `runner._check_face_down`; tested in the
 simulator]
-1. Junk slabs in pockets 1–3. Put one junk slab **face-up** on top of pocket 2 (label end toward
-   you), and a face-down pre-2017 label (no back QR) on top of pocket 3.
+1. Junk slabs in pockets 1–4. Put one junk PSA slab **face-up** on top of pocket 2 (label end toward
+   you), a face-down pre-2016 PSA label (no back-label code) on top of pocket 3, and, if you have
+   one, a CGC 2023+ slab **face-up** on top of pocket 4.
 2. `python -m slabscan run --name facedown`. Watch the start line: `face-down check: …`.
 3. The run must stop at pocket 2 **before the cup touches the slab**: "Pocket 2: the top slab could
-   not be confirmed FACE-DOWN before touching it …". Turn the slab face-down and `resume` (no
-   flag needed if it has a back QR).
+   not be confirmed FACE-DOWN before touching it …" (a PSA front's barcode is also on the back, so it
+   proves nothing; if the learned check is active, its card window must not match). Turn the slab
+   face-down and `resume` (no flag needed if it has a back QR).
 4. It stops again at pocket 3. `resume --face-down-ok`. The slab is picked and its `face_down`
    column reads `operator`.
-5. Press **Stop after this slab** (web page) or Ctrl-C once, then try `resume --face-down-ok`.
+5. At pocket 4 it must stop with "Pocket 4: the top slab is FACE-UP (a CGC front-label barcode …
+   is visible from above, and that code is printed on the FRONT label) …". Turn it face-down and
+   `resume`: it is picked on its back QR.
+6. Press **Stop after this slab** (web page) or Ctrl-C once, then try `resume --face-down-ok`.
    It must refuse: "--face-down-ok refused: the batch did not stop at the face-down check last
    time …". Resume without it.
 
-**B. Only after a head change that leaves the card window clear** (a CAD change, a `checks.py`
-frustum check for the window, and a Phase 0 GO with `--save`):
-1. Run one batch with at least 10 slabs that have a back QR (2017+ PSA). The start line of the next
-   run must read `face-down check: learned (threshold …)`, not "not active". If it says a part of
-   the head is in the window, compare `face_down_window.jpg` with `face_down_empty.jpg`.
-2. Put 3–5 junk slabs **face-up** on top of different stacks, including a plain card and a
-   full-art card. **Each must stop untouched.**
-3. Put a pre-2017 face-down slab with an English Pokémon back on top of another stack. It must be
+**B. Once the learned check is active** (a Phase 0 GO with `--save`, 5 references, and the window
+clear on 5 proven slabs: the start line reads `face-down check: learned (threshold …)`):
+1. If the start line still says "not active", it says why. If it says a part of the head is in the
+   window, compare `face_down_window.jpg` with `face_down_empty.jpg` (§12.3).
+2. Put 3–5 junk slabs **face-up** on top of different stacks, including a plain card, a full-art
+   card and a blue Water-type card. **Each must stop untouched.**
+3. Put a pre-2016 face-down slab with an English Pokémon back on top of another stack. It must be
    picked without stopping, with `face_down` = `learned(0.xx)` in `certs.csv`, shown in bold in
-   `report.html`. Its back photo must show the card back.
-4. A Japanese-back old label should stop until a back-QR slab or three of your confirmations
-   teach that back.
+   `report.html`. Its back photo must show the card back. (A match needs two references from two
+   different slabs of that back design.)
+4. A Japanese-back old label should stop until two back-code slabs with that back, or three of your
+   confirmations, teach it.
 
 **Pass:**
-- A: the face-up slab stopped untouched; `--face-down-ok` worked after the face-down stop and was
-  refused after the other stop.
+- A: every face-up slab stopped untouched (pocket 4 with the FACE-UP message); `--face-down-ok`
+  worked after the face-down stop and was refused after the other stop.
 - B: no face-up slab was touched, and every `learned(...)` row's back photo shows a card back.
 - **Any face-up slab picked in B: set `face_down_check = "stop"` and don't use the learned check.**
 
@@ -1747,9 +1914,9 @@ frustum check for the window, and a Phase 0 GO with `--save`):
 | 13.3 Drop (destructive) | no damage, lands in the pocket | |
 | 13.4 Power cut | holds ≥ 60 s in all three cases | |
 | 13.5 Double pick | flagged with an UNREAD row, carried clear, no crash; no untaped doubles | |
-| 13.6 Sensor fault | refuses to probe; clean stop; a slab is put back after an unplanned error | |
+| 13.6 Sensor fault | refuses to probe; clean stop; a slab is put back after an unplanned error; both carry-sensor faults stop before anything moves sideways or is gripped | |
 | 13.7 Resume | every slab exactly one row | |
-| 13.8 Face-down | face-up slab stops untouched; `--face-down-ok` refused after a non-face-down stop; after a head change, no face-up slab picked and every learned row shows a card back | |
+| 13.8 Face-down | face-up slabs stop untouched (a CGC front with the FACE-UP message); `--face-down-ok` refused after a non-face-down stop; with the learned check active, no face-up slab picked and every learned row shows a card back | |
 | 7.8 Z lift | bare pad within 0.1 mm after 100 lifts | |
 
 ---
@@ -1759,9 +1926,9 @@ frustum check for the window, and a Phase 0 GO with `--save`):
 1. **Start small:** 30 low-value slabs in one pocket.
    - Before loading, record their certs another way: a phone app, a hand scanner, or by typing.
    - Then you can check the machine against something independent.
-   - Slabs without a PSA back QR (older labels, CGC) stop the run at the face-down check: check
-     each one and `resume --face-down-ok`. Use `--all-face-down` only once you trust your own
-     loading.
+   - Slabs without a back-label code (PSA 2016 and older, CGC Authentic, BGS) stop the run at the
+     face-down check until the learned check is active: check each one and
+     `resume --face-down-ok`. Use `--all-face-down` only once you trust your own loading.
    - If the learned check is active (the start line says `face-down check: learned`), open the
      back photo of **every** `learned(...)` row in `report.html` (bold in the Face-down column) in
      the first batches, and the `face_down_learned` lines in `journal.jsonl`. A wrong one:
@@ -1803,12 +1970,16 @@ frustum check for the window, and a Phase 0 GO with `--save`):
 | Stop: "contact … above the stack - something is in the way" | Slab crooked in the output pocket, or a rod leaning in | Fix the slab; slab drop test on that pocket (§5.8) |
 | Head camera vanishes or errors mid-run | USB extension through the drag chain (about 4 m) | Re-seat; check bend radius ≥ 40 mm; drag-chain-rated USB cable (BOM note). The run puts a held slab back ("Unexpected error: …"). |
 | Every slab goes to the station camera ("confirmed by OCR", slow runs) | The head crop cuts the label off: `cam_head.hfov_deg` or `row_axis` is wrong | §12.3 crop check |
-| The run stops at every older-label or CGC slab | The face-down check: they have no PSA back QR, and the learned check is not active (the start line says why; with today's head it never is) | Expected. `resume --face-down-ok` per slab, or `run --all-face-down` for stacks you checked. OPERATING.md §8.4. |
+| The run stops at every older PSA label (or CGC Authentic, BGS) | The face-down check: they have no back-label code, and the learned check is not active yet (the start line says why) | Expected until Phase 0 GO and 5 references. `resume --face-down-ok` per slab, or `run --all-face-down` for stacks you checked. OPERATING.md §8.4. |
+| Stop: "the top slab is FACE-UP" | A CGC front-label code (the Authentic QR or the front barcode) is visible from above | Turn the slab face-down, label end toward you, and resume. |
+| Stop: "Z stall suspected …" | The carry-height sensor reads clear at travel height: Z lost steps on a lift, or its lead is cut (right after homing, the lead is likelier) | Power off and move the head up and down by hand: feel for a bind. Check the Z current (§7.8), `python -m tools.bench_tests lifts 20`, `selftest --motion`. Resume homes first. OPERATING.md §8.1 for the slab. |
+| Stop: "Carry-height sensor fault …" | It reads blocked far below its trip: dirt or a card in the slot, a dead emitter, a bent flag | Clean the slot, check the flag (§7.4a), `selftest --motion`, resume |
+| `selftest --motion`: carry sensor trips outside 246.5 ± 1 | The mount slid, or it was never set | §7.4a step 6 |
 | "--face-down-ok refused" | The batch's last stop was not a face-down stop | Resume without it. If a slab the check can't confirm comes next, the run stops there and you confirm that one. |
 | "Another slabscan process is using the machine" | The boot web service, or a command in another window | `sudo systemctl stop slabrail-web`, or close the other window |
 | Station camera not found | Ribbon backwards or not latched; wrong port | Power off, re-seat per the Raspberry Pi camera guide, CAM/DISP 0 |
 | Labels read on the bench but fail on the machine | Focus moved; ring not on; glare from room lights | `focus head` / `focus station --save`; fit the light roof |
-| Many `needs_review` "ITF only; padding vs check digit not learned yet" | Not enough slabs yet where QR and ITF both read | Normal on the first batches; it learns from 3 agreeing slabs |
+| Many `needs_review` "one printed barcode only (no QR) - confirm" on pre-2016 labels | Their front barcode is their only code, and OCR of the printed digits did not confirm it | Check the `tesseract` line of `selftest`, `focus station --save`, the station ring. OPERATING.md §8.3. |
 | Overfill beam reads blocked with nothing there | Misaligned laser, receiver trimmer, a receiver wire cut (reads blocked by design) | §12.5; WIRING.md §8 |
 | Overfill beam reads clear when blocked | Room light swamps the receiver, or its GND wire is cut | Trimmer under room light; check the GND wire; light roof |
 | Controller lost (E-stop) and resume says "still not answering" | The CH340 is slow to come back | Wait 10 s and press resume again; check the USB cable and the 24 V supply |
@@ -1823,9 +1994,10 @@ frustum check for the window, and a Phase 0 GO with `--save`):
 ## Sources
 
 - **Repository files (primary for every [Certain] tag above):**
-  - `cad/layout.py`, `cad/model.py`, `cad/out/cut_list.csv`, `cad/out/checks.txt`,
-    `cad/out/printed/print_list.json`;
-  - `software/slabscan/*.py`, `software/tools/phase0.py`;
+  - `cad/layout.py`, `cad/model.py`, `cad/out/cut_list.csv`, `cad/out/checks.txt` (128/128 checks
+    passed, re-run on 22 Oct 2026), `cad/out/printed/print_list.json`;
+  - `software/slabscan/*.py`, `software/tools/phase0.py`, `software/tools/real_eval.py`,
+    `software/config/machine.toml`;
   - [CONTRACT.md](CONTRACT.md), [WIRING.md](WIRING.md), [FIRMWARE.md](FIRMWARE.md),
     [BOM.md](BOM.md), [DESIGN.md](DESIGN.md).
 - **Prusa PETG settings and the smooth-PEI warning:**

@@ -27,7 +27,7 @@ starts the web page at every boot.
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
-.venv/bin/python -m pytest -q tests        # 189 tests, about 12 minutes
+.venv/bin/python -m pytest -q tests        # 260 tests, about 12 minutes
 ```
 
 ## First-time order
@@ -72,7 +72,7 @@ All commands are `python -m slabscan <command>`. Add `--sim` to use the simulato
 | `mark [--only 0,12] [--dry-run]` | Drill-template walk (above). `--dry-run` prints the order and positions. |
 | `run [--name NAME] [--front-photo always\|fallback] [--all-face-down] [--yes]` | One batch. It refuses to start before `calibrate z` and `calibrate x` have been run. `--yes` skips the start question. `--all-face-down` turns the face-down check off for this batch (below). |
 | `resume BATCH_DIR [--accept-heights] [--face-down-ok]` | Continues a stopped batch (below). `--face-down-ok`: you checked the slab the face-down check stopped on. It is refused unless the last stop was that face-down stop, and it confirms that one slab only. |
-| `sim [--slabs N] [--face-down-check] [--jp-rate R] [--sim-head cad\|cad_r2\|open\|none]` | Full simulated batch. Prints the summary and a time estimate. `--face-down-check` keeps the check on and counts the slabs it would stop at (a simulated operator confirms each). `--jp-rate` gives that share of cards the Japanese back. `--sim-head`: `cad` (the default) is today's head (lens 5 mm toward the label, card window clear), `cad_r2` the round-2 head whose foot hides the card window, `open` a hypothetical narrow head. |
+| `sim [--slabs N] [--mix MIX] [--eras E] [--face-down-check] [--jp-rate R] [--sim-head cad\|cad_r2\|open\|none]` | Full simulated batch. Prints the summary and a time estimate. `--mix` sets the label mix per grader and era, e.g. `psa:current=0.6,psa:2017+=0.2,cgc:2023+=0.2` (kinds: `psa:current\|2017+\|2016\|old`, `cgc:2023+\|og\|authentic`, `bgs:`, `sgc:`; default: mostly PSA, some CGC, a few BGS); `--eras` is a PSA-only override. `--face-down-check` keeps the check on and counts the slabs it would stop at (a simulated operator confirms each). `--jp-rate` gives that share of cards the Japanese back. `--sim-head`: `cad` (the default) is today's head (lens 5 mm toward the label, card window clear), `cad_r2` the round-2 head whose foot hides the card window, `open` a hypothetical narrow head. |
 | `web [--port 8080]` | Phone page (below). |
 | `phase0 [--sim N] [--out DIR] [--face-up N] [--save]` | The Phase 0 camera test (same as `python -m tools.phase0`): reads 30-50 of your slabs in the Phase 0 jig before you buy any motion parts. The read-rate report is written as soon as you type `q`. The face-up pass is off unless you ask for it (`--face-up` defaults to 0); a GO for the learned face-down check needs 15 face-up slabs. `--save` writes its threshold on a GO. |
 | `refs [--drop CERT \| --drop-operator]` | Lists the learned face-down check's card-back references, with the batch, position and cert each came from. `--drop CERT` deletes one slab's reference, for example after a wrong confirmation; `--drop-operator` deletes every reference you confirmed and keeps the back-QR ones. |
@@ -131,7 +131,14 @@ The machine:
 - then moves stack 1 onto pocket 0, stack 2 onto pocket 1, and so on, reading each slab on the way.
 
 Afterwards each stack sits **one pocket to the left, in reverse order**. Pocket 12 holds the slabs
-to check by hand: unreadable ones, or graders other than PSA and CGC.
+to check by hand: unreadable ones, numbers read only by OCR (no grader), conflicts, or graders other
+than PSA and CGC.
+
+**Carry-height sensor (Z stall guard).** Before every sideways move the head must read "at carry
+height" on GPIO 6 (and "below it" at every grip, which catches a dark sensor). A Z stall that left
+the head more than about 2.5 mm low stops the run ("Z stall suspected …"): a held slab is lowered
+straight onto its own pocket, or held on the pump for you. `selftest --motion` measures where it
+trips. `jog`, `calibrate` and `mark` do not read it.
 
 **Stopping**
 - Ctrl-C once, or Stop on the web page, finishes the current slab and parks with nothing in the
@@ -173,10 +180,10 @@ It tells you which stack to put the slab back on.
 
 | File | Contents |
 |---|---|
-| `certs.csv` | One row per slab: cert, grader, status (`ok`, `needs_review`, `no_read`, `conflict`, `other_grader`), which pocket it came from and where it is now (`out_pocket`, `out_index` counted from the bottom), image paths, and `face_down`: how it was proven face-down (`qr`, `operator`, `learned(0.93)` or `off`). Written row by row, so a crash loses nothing. |
+| `certs.csv` | One row per slab: cert, grader, status (`ok`, `needs_review`, `no_read`, `conflict`, `other_grader`), which pocket it came from and where it is now (`out_pocket`, `out_index` counted from the bottom), image paths, and `face_down`: how it was proven face-down (`qr` a PSA or CGC back QR, `code` the CGC 2020-23 back barcode, `operator`, `learned(0.93)` or `off`). Written row by row, so a crash loses nothing. |
 | `certs.txt` | Only the `ok` certs, one per line, in machine order. Paste it into a spreadsheet or Card Dealer Pro. |
 | `report.html` | Every slab with its label photo and a Face-down column (learned rows in bold: check their photos). Opens on a phone. |
-| `summary.json` | Counts, duplicates, the per-stack slab count check, the ITF format learned, mean cycle time, and `face_down` (mode, counts, every learned row, the references). |
+| `summary.json` | Counts, duplicates, the per-stack slab count check, `itf_mode` (always `zero_pad`: the ITF is the cert padded to 8 digits) and `itf_evidence` (slabs where QR and ITF agreed), mean cycle time, and `face_down` (mode, counts, every learned row, the references). |
 | `journal.jsonl` | Machine log used by resume, including the face-down events (`face_down_stop` on the stop line, `face_down_confirmed`, `face_down_reference`, `face_down_learned`, `face_down_baseline`, `face_down_ok_unused`). |
 | `images/` | Back photo of every slab, plus a front photo when the station camera was used. In learned mode also `face_down_window.jpg` (the run's first slab with the card window drawn) and `face_down_empty.jpg` (the view over an empty pocket). |
 | `stop.json` | Why the last run stopped (deleted when a run finishes). |
@@ -218,9 +225,11 @@ How it behaves:
 `python -m slabscan sim --slabs 330` runs a full load in about 5 minutes on a PC. It prints:
 - the survey time,
 - the seconds per slab,
-- the total for a full load. The 22 Oct 2026 run (seed 7) gave 70 s of homing and survey, then 14.0 s per slab: about 78 min
-  for 330 slabs, all 330 read `ok`. It runs with the face-down check off and says how many slabs would have stopped (49);
-  `sim --face-down-check` runs it on.
+- the total for a full load. The 22 Oct 2026 run (seed 7, default mix, `--face-down-check`) gave 75 s of homing and survey,
+  then 14.2 s per slab: about 79 min for 330 slabs; `ok` 324, `needs_review` 6 (5 BGS slabs read only by OCR, in pocket 12,
+  and one PSA barcode that OCR read differently). Face-down: 287 by back QR, 41 by the learned card-back match, 2 confirmed
+  (the first slabs, before 5 references existed); with back-label codes only, 43 would have stopped. Without
+  `--face-down-check` the check is off and the summary says how many slabs would have stopped.
 
 Motion uses a trapezoid acceleration model. Camera frame times and the Pi's decode speed are
 **[Guessing]** values, listed at the top of `slabscan/cli.py`. Phase 0 measures the real ones.
@@ -239,4 +248,4 @@ Motion uses a trapezoid acceleration model. Camera frame times and the Pi's deco
 | `facedown.py` | Learned face-down check: card-window descriptor, card-back references, the accept rule. |
 | `simworld.py`, `sim.py` | Simulator with a crash monitor, synthetic labels, card backs and fronts, and the head parts in the head camera's view. |
 | `config.py`, `results.py`, `psa_api.py` | Config TOML, batch output files, PSA API client. |
-| `tools/gen_config.py`, `tools/enrich.py`, `tools/phase0.py`, `tools/decode_sweep.py` | Config generator, PSA enrichment, Phase 0 camera test, decode sweep. |
+| `tools/gen_config.py`, `tools/enrich.py`, `tools/phase0.py`, `tools/decode_sweep.py`, `tools/bench_tests.py`, `tools/real_eval.py` | Config generator, PSA enrichment, Phase 0 camera test, decode sweep, the acceptance bench tests, and the real-label check: the run's reading order, consensus and face-down rule on photos of real slabs (`index.json` or `--phase0 DIR`; `--machine` rescales them to the machine's cameras); exit 1 on a wrong cert in an `ok` verdict or a false face-down proof. |

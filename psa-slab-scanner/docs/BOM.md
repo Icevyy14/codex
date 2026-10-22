@@ -104,8 +104,8 @@ Nothing from order 2 has been bought at that point. [Certain, by construction of
   - **Bed:** the Woodcraft 12 × 60 in Baltic birch blank is no longer listed; the line is now a
     Home Depot 3/4 in PureBond birch 2 × 8 ft panel (17.9 mm), one rip and one crosscut.
   - **Dowels:** 5/16 in (7.94 mm) × 12 in, so the brad-point bit and collar are 5/16 in.
-  - **Class 2 laser:** the only module found (Quarton VLM-650-03) has a 7 mm body. Drill the left
-    gate post's 6.2 mm barrel hole out to 7.2 mm before fitting it (BUILD_GUIDE §5.9).
+  - **Class 2 laser:** the only module found (Quarton VLM-650-03) has a 7 mm body. The left gate
+    post now prints with a 7.2 mm barrel hole for it (BUILD_GUIDE §5.9).
   - **Pump "upgrade":** the VXB 10 L/min pump is probably the main pump itself (VXB's SKU is the
     Amazon ASIN) [Likely]. The upgrade line is now an unsourced branded pump, about $200
     [Guessing].
@@ -264,7 +264,7 @@ doesn't have one.
 | **Heat-set insert tips** (ruthex set fits 900M/T18 irons; TS100-style tips for a Pinecil) | M5 insert in `awl_adapter`, spares | $10–16 | **Buy** unless the shop has them |
 | Fine saw + miter box, or a bandsaw | Cutting 82 dowels to 236 mm | $15 | Likely |
 | Junior hacksaw or piercing saw, needle files (one about 1.5 mm thick), a vise | The probe flag and the carry flag (BUILD_GUIDE §7.4a, §7.6); clearing the 1.9 mm flag slot in `head_foot` (a standard 12.7 mm hacksaw blade does not fit it) | $15 | Likely |
-| 7.2 mm (or 9/32 in) drill | Opening the left gate post's barrel hole for the 7 mm Class 2 laser | $3 | Likely |
+| 7.2 mm (or 9/32 in) drill | Only if your left gate post was printed from an older STL with a 6.2 mm laser hole | $3 | Likely |
 | Jigsaw | 41 × 41 mm notches in the bed for the uprights (CONTRACT) | $50 | Likely |
 | M5/M3 taps + tap handle; **1/8 NPT tap** | Extrusion end taps; reservoir caps | $8 (NPT) | Taps likely; NPT maybe |
 | Dial indicator + magnetic base | Beam-twist check (DESIGN.md) | $25 | Likely (machine shop) |
@@ -348,8 +348,8 @@ These are not BOM problems, but they decide what gets bought.
      carry-height sensor.
    - Measure these parts before printing `camera_bracket`, `phase0_top`, `head_foot` and
      `carry_sensor_mount`.
-5. **[Certain, sourcing] The gate post's 6.2 mm laser hole is drawn for a 6 mm module**, and the only
-   Class 2 module found is 7 mm. Drill it to 7.2 mm (BUILD_GUIDE §5.9), or change the CAD.
+5. **[Certain, sourcing; resolved in CAD] The only Class 2 laser found is 7 mm**, so the left gate post's
+   barrel hole is now 7.2 mm (the right post keeps 6.2 mm for the receiver).
 6. **[Certain, forum report] BTT has shipped Rodents with an old FluidNC build.** Reflash the
    current FluidNC release before loading `firmware/fluidnc/config.yaml`. Also check the Rodent's
    limit and motor connector types (XH or other) before buying crimp housings.

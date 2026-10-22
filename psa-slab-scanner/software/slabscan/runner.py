@@ -365,6 +365,10 @@ class Runner:
         self._z(c_from)
         if c_to >= self.z - 0.05:  # already at the floor: nothing left to probe
             return None
+        if hasattr(self.m, "pins") and "P" in self.m.pins():
+            # The last window ended a hair above the trip point, so the probe input already reads triggered here.
+            # FluidNC would refuse the G38.3 (ALARM ProbeFailInitial); the contact is where the head stands.
+            return self.z
         if self.holding:
             self._carry_check(f"before a probe move with a slab in the cup {self._where()}")
         self.z = None
