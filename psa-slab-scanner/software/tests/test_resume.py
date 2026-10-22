@@ -26,6 +26,8 @@ def _stacks(cfg, per_pocket=2, sources=3, seed=21):
 class FaultyVacuum:
     """SimVacuum that reports 'vacuum lost' exactly once, while a slab is held, when trigger() says so."""
 
+    simulated = True
+
     def __init__(self, inner, world, trigger):
         self.inner, self.w, self.trigger, self.fired = inner, world, trigger, False
 
@@ -99,7 +101,7 @@ def test_vacuum_loss_puts_slab_back_and_resume_reads_it_again(tmp_path):
 
 
 def test_resume_refuses_changed_stacks_unless_accepted(tmp_path):
-    cfg = from_layout()
+    cfg = dataclasses.replace(from_layout(), face_down_check="off")  # the simulated BGS back is blank
     original = _stacks(cfg)
     original[3].append(SimSlab("0012345678", 8.5, grader="BGS"))  # goes to the exception pocket
     world = SimWorld(cfg, stacks={k: list(v) for k, v in original.items()})
@@ -223,14 +225,16 @@ def test_estop_with_a_slab_in_the_cup_stops_cleanly_and_resume_rehomes(tmp_path)
         r1.run()
     assert "pocket 2" in str(e.value) and "homes first" in str(e.value)
     assert motion.fired and motion.after == 0  # nothing tried to move after the loss (no put-back, no park)
-    assert not world.vacuum_on  # Pi side shut the valves
+    assert world.vacuum_on and r1.holding  # the Pi keeps pumping: closed valves alone would let the slab leak off
+    assert r1.slab_on_cup == "pocket 2"
     events = read_journal(tmp_path / "b6" / "journal.jsonl")
     assert events[-1].get("lost_controller") is True
-    # operator: slab off the cup, face-down back on top of pocket 2
+    # operator: holds the slab, vents the cup, puts the slab face-down back on top of pocket 2
     assert world.held
     for slab in reversed(world.held):
         world.stacks[2].append(slab)
     world.held, world.gripping = [], False
+    SimVacuum(world).release()
     r2 = Runner(cfg, motion, SimVacuum(world), SimLights(), SimCamera(world, "head"), SimCamera(world, "station"),
                 BatchWriter.reopen(tmp_path / "b6"), gate=SimGate(world), log=lambda *_: None)
     summary = r2.resume()  # SimMotion raises Crash on any move before homing, so this proves resume homes first

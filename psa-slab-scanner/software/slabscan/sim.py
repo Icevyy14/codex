@@ -77,7 +77,7 @@ def render_label(cert: str, side: str = "front", symbology: str = "ITF", module_
         _text(canvas, "GEM MT 10", 50, 6, 2.6)
         bar = _symbol(code_text, symbology, module_mm, height_mm=4.5)
         _paste(canvas, bar, LABEL_W_MM - 3 - bar.shape[1] / PX_PER_MM_RENDER, 8.5)
-        _text(canvas, cert, 52, 18, 2.4)
+        _text(canvas, cert, 40, 18, 2.4)  # printed cert, fully inside the label (52 mm clipped the 9th digit)
     else:
         if side != "back_itf_only":
             qr = _symbol(f"https://www.psacard.com/cert/{cert}", "QRCode", 0.42)

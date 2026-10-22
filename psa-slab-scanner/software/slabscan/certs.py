@@ -8,8 +8,11 @@ PSA labels carry the cert number in up to four places:
 
 ITF can only hold an even number of digits, and 2025+ certs have 9. PSA does not say
 whether it pads with a leading zero or appends a check digit. ``ItfModel`` learns which
-one from slabs where the QR and the ITF are both readable, and refuses to trust an
-ITF-only read until it has. Every decoded payload goes through ``parse_payload``.
+one from slabs where the QR and the ITF are both readable. Until it has, no ITF-only read
+is trusted (whatever its last digit looks like): it needs OCR of the printed digits to
+agree, or it is needs_review. ITF has no checksum of its own, so even after learning, an
+ITF-only 'ok' needs two independent sources (back barcode + front barcode, or ITF + OCR).
+Every decoded payload goes through ``parse_payload``.
 """
 
 from __future__ import annotations
@@ -63,26 +66,37 @@ class Parsed:
 def parse_payload(payload: str, symbology: str = "", custom_regex: str | None = None) -> Parsed | None:
     """Extract (grader, cert) from a decoded barcode/QR/OCR payload, or None.
 
-    ``custom_regex`` (one capture group) overrides the built-in rules for PSA. It exists
-    because PSA does not document its barcode payload. If calibration shows a prefix or
-    suffix, set it in config.yaml.
+    ``custom_regex`` (one capture group) replaces the built-in PSA rules for machine-read
+    symbols. It exists because PSA does not document its barcode payload: if Phase 0 shows a
+    prefix or suffix, set it in calibration.toml. The other graders' URL rules still run first
+    (so a CGC QR the regex happens to match is never taken for PSA), an ITF match still gets
+    its check-digit interpretation, and OCR digit runs are not passed through it.
     """
     if payload is None:
         return None
     text = payload.strip()
     if not text:
         return None
-    if custom_regex:
-        m = re.search(custom_regex, text)
-        c = canonical(m.group(1)) if m else None
-        return Parsed("PSA", c) if c else None
     for grader, rx in _URLS:
+        if grader == "PSA":
+            continue
         m = rx.search(text)
         if m:
-            if grader == "PSA":
-                c = canonical(m.group(1))
-                return Parsed("PSA", c) if c else None
             return Parsed(grader, m.group(1))
+    if custom_regex and symbology != "OCR":
+        m = re.search(custom_regex, text)
+        if not m:
+            return None
+        digits = re.sub(r"\D", "", m.group(1))
+        c = canonical(digits)
+        if not c:
+            return None
+        alt = canonical(digits[:-1]) if symbology == "ITF" and itf_check_ok(digits) else None
+        return Parsed("PSA", c, alt)
+    m = _URLS[0][1].search(text)  # PSA cert URL
+    if m:
+        c = canonical(m.group(1))
+        return Parsed("PSA", c) if c else None
     m = _KEYED_CERT_RE.search(text)
     if m:
         c = canonical(m.group(1))
@@ -156,14 +170,16 @@ class ItfModel:
         return None
 
     def resolve(self, r: CodeRead) -> str | None:
-        """Cert for an ITF read, or None while the interpretation is still ambiguous."""
-        if r.alt_cert is None:  # last digit is not a valid check digit -> it is part of the cert
-            return r.cert if self.mode != "check_digit" else None
+        """Cert for an ITF read, or None while the interpretation is still ambiguous.
+
+        Until the mode is learned every ITF read is ambiguous. A payload whose last digit is not a
+        valid mod-10 check is NOT proof of zero padding: ITF carries no checksum, so one misread
+        digit makes a real check digit look invalid too."""
         m = self.mode
         if m == "zero_pad":
             return r.cert
         if m == "check_digit":
-            return r.alt_cert
+            return r.alt_cert  # None when the last digit is not a valid check digit: a misread
         return None
 
 
@@ -176,9 +192,13 @@ def consensus(reads: list[CodeRead], itf: ItfModel | None = None, min_itf_reads:
     * no reads                                   -> no_read
     * a CGC QR (or another accepted grader)      -> ok, grader recorded
     * any read says a non-accepted grader        -> other_grader (goes to the exception pocket)
-    * machine reads disagree                     -> conflict (never guess between two codes)
+    * machine reads disagree                     -> conflict (never guess between two codes);
+      this includes a PSA/unknown code that disagrees with another grader's code
     * QR present: QR wins; ITF reads must match one of their two interpretations
-    * ITF only: needs the learned ITF mode (or OCR agreement) and >= min_itf_reads reads
+    * ITF only: needs the learned ITF mode (or OCR agreement), and either OCR agreement or
+      >= min_itf_reads DIFFERENT sources (back + front barcode). Repeated reads of one source
+      (two frames from one pose, overlapping tiles) are not independent and count once.
+      OCR that disagrees with an ITF-only result -> needs_review.
     * only OCR                                   -> needs_review
     """
     itf = itf if itf is not None else ItfModel()
@@ -191,6 +211,12 @@ def consensus(reads: list[CodeRead], itf: ItfModel | None = None, min_itf_reads:
         r = others[0]
         if len(graders) > 1 or len(certs) > 1:
             return Verdict("conflict", None, (r.source,), f"codes disagree: {sorted(graders)} {sorted(certs)}", grader=r.grader, raw=r.raw)
+        # A PSA/unknown machine code on the same slab must name the same number, else something else
+        # is in view (a neighbour's label) or one read is wrong: never pick one.
+        rest = [x for x in reads if x.grader in ("PSA", "unknown") and x.source != "ocr"]
+        bad = [x for x in rest if r.cert not in (x.cert, x.alt_cert)]
+        if bad:
+            return Verdict("conflict", None, tuple(sorted({r.source, bad[0].source})), f"{r.grader} {r.cert} vs {bad[0].grader} {bad[0].raw}", grader=r.grader, raw=r.raw)
         if r.grader in accepted:
             return Verdict("ok", r.cert, tuple(sorted({o.source for o in others})), "", grader=r.grader, raw=r.raw)
         return Verdict("other_grader", r.cert, (r.source,), f"{r.grader} slab", grader=r.grader, raw=r.raw)
@@ -234,7 +260,13 @@ def consensus(reads: list[CodeRead], itf: ItfModel | None = None, min_itf_reads:
     if len(resolved) > 1:
         return Verdict("conflict", None, srt(machine), "ITF reads disagree")
     cert = resolved.pop()
-    if len(itf_reads) < min_itf_reads and cert not in ocr_certs:
-        return Verdict("needs_review", cert, srt(machine), "single ITF read - confirm", raw=raw)
-    note = "ocr disagreed (ignored)" if ocr and cert not in ocr_certs else ""
-    return Verdict("ok", cert, srt(machine), note, raw=raw)
+    if ocr and cert not in ocr_certs:
+        # ITF has no checksum and the ITF reads are not independent: the printed digits are the only
+        # independent evidence here, so a disagreement is never ignored.
+        return Verdict("needs_review", cert, srt(machine) + ("ocr",), f"ITF {cert} but OCR read {'/'.join(sorted(ocr_certs))} - verify by eye", raw=raw)
+    if cert in ocr_certs:
+        return Verdict("ok", cert, srt(machine) + ("ocr",), "", raw=raw)
+    n_sources = len({r.source for r in itf_reads})
+    if n_sources < min_itf_reads:
+        return Verdict("needs_review", cert, srt(machine), "ITF from one source only - confirm", raw=raw)
+    return Verdict("ok", cert, srt(machine), "", raw=raw)

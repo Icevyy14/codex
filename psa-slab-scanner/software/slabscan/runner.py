@@ -12,9 +12,17 @@ height, so it goes through ``c()`` before it is sent to the controller.
 
 Fail-stop rule: anything the machine cannot explain (no vacuum seal, a stack taller than
 expected, vacuum lost in transit, contact where none should be) stops the run with the
-slab in a safe state and a message saying what to do. ``secure()`` puts a slab that is
-still in the cup back on top of the stack it came from. ``resume`` rebuilds the State
-from journal.jsonl (+ certs.csv), re-surveys every pocket, and continues.
+slab in a safe state and a message saying what to do. ``secure()`` re-reads the real head
+position, lifts straight up, and puts a slab that is still in the cup back on top of the
+stack it came from (a weakly held one is carried back slowly and probed down). Faults that
+make any motion unsafe - a failed vent, a vacuum sensor fault, a slab hanging on the cup
+before a grip, Ctrl-C twice - "freeze" instead: nothing moves, a hanging slab stays held by
+the pump, and the operator takes it off (cli.hand_off_slab / the web page's Vent button).
+``resume`` rebuilds the State from journal.jsonl (+ certs.csv), re-surveys every pocket,
+and continues.
+
+Every downward move is a probing move (G38.3): FluidNC only watches the contact sensor
+during G38.x, so a plain G1 would drive into anything unexpected below the head.
 """
 
 from __future__ import annotations
@@ -31,15 +39,30 @@ import cv2
 
 from .certs import CodeRead, ItfModel, Verdict, consensus
 from .config import Config
-from .decode import decode_frame
+from .decode import _to_gray as to_gray
+from .decode import decode_frame, ocr_digits
+from .hw import SensorFault
 from .motion import ControllerLost, SafetyViolation
 from .results import BatchWriter, SlabResult
 
 NOMINAL_T = 6.6  # mm, used only to turn heights into rough slab counts
+Z_ACCEL = 1200.0  # mm/s^2, Z acceleration in firmware/fluidnc/config.yaml (probe deceleration overshoot)
+SLOW_XY = 3000.0  # mm/min: sideways moves with a weakly held slab
+SEAL_CHECK_S = 0.15  # pump on, head still up: a seal within this time = a slab hanging on the cup
+ATM_TOL_STORED = 2.0  # kPa: atmosphere tolerance around the stored empty-cup reading (a slab hangs on to about -1.7)
+ATM_TOL_UNSTORED = 6.0  # kPa: without a stored reading (ratiometric sensor offset, as selftest allows)
+VAC_FLOOR_KPA = -95.0  # below anything the pump (-81 kPa) can pull: a sensor fault, never a 'good seal'
+VENT_HELP = ("The slab is resting there, still sealed to the cup; nothing will move. Check the vent valve (GPIO 22 MOSFET module, its coil "
+             "and wire). To free the slab: hold it and pull the vacuum tube off the cup fitting (or unscrew the cup) - never slide the slab "
+             "sideways. Then run `selftest -i` and resume (the resume survey will show where the slab is).")
 
 
 class Stop(Exception):
     """Run halted safely; message tells the operator what to do."""
+
+
+class HardStop(Stop):
+    """Ctrl-C twice: the motors were halted at once and nothing moved afterwards."""
 
 
 @dataclass
@@ -117,9 +140,10 @@ def rebuild_state(events: list[dict], rows: list[SlabResult], cfg: Config) -> tu
     return st, itf, surveyed
 
 
+
 class Runner:
     def __init__(self, cfg: Config, motion, vacuum, lights, head_cam, station_cam, writer: BatchWriter, lid=None, gate=None, log=print,
-                 should_stop: Callable[[], bool] | None = None):
+                 should_stop: Callable[[], bool] | None = None, sleep: Callable[[float], None] | None = None):
         self.cfg = cfg
         self.m = motion
         self.vac = vacuum
@@ -134,13 +158,22 @@ class Runner:
         self.st = State()
         self.itf = ItfModel()
         self.journal = writer.dir / "journal.jsonl"
-        self.z = None  # last commanded machine Z
+        self.z = None  # machine Z of the head; None while a move is in flight or after an error (secure() re-reads it)
+        self.at: tuple[float, float] | None = None  # bed XY of the last completed _go
         self.holding = False
         self.held_from: tuple[int, float] | None = None  # (source pocket, pick height s) of the slab in the cup
         self.homed = False
-        self.phase = "idle"  # idle | survey | transfer | done (for the web page)
+        # "hold" (a slab may hang on the cup: pump on), "vent_failed" (a slab rests on a stack sealed to the cup:
+        # valves shut) or "sensor" (vacuum sensor fault): after such a stop NOTHING may move.
+        self.freeze: str | None = None
+        self.baseline: float | None = None  # sensor kPa at atmosphere, measured this run before the first grip
+        self.face_down_ok_once = False  # the operator confirmed the next top slab is face-down (resume --face-down-ok)
+        self.phase = "idle"  # idle | survey | transfer | done | stopped (for the web page)
         self.current: tuple[int, int] | None = None  # (source, destination) being worked on
         self.timings: list[float] = []
+        if sleep is None:  # real dwell times on the machine; none against the simulator
+            sleep = (lambda s: None) if getattr(vacuum, "simulated", False) else time.sleep
+        self.sleep = sleep
 
     # ------------------------------------------------------------------ coordinates
     def xy(self, x: float, y: float) -> tuple[float, float]:
@@ -159,29 +192,88 @@ class Runner:
         (Z -8, CONTRACT.md). The CAD keeps the Z carriage on its rail down to c = -12."""
         return self.cfg.z_min + 0.5
 
+    def _where(self) -> str:
+        if self.at is None:
+            return "near the home position"
+        x, y = self.at
+        sx, sy = self.cfg.station_xy
+        if abs(x - sx) < 1 and abs(y - sy) < 1:
+            return "over the read station"
+        for p in self.cfg.pockets:
+            if abs(p.x - x) < 1 and abs(p.y - y) < 1:
+                return f"over pocket {p.index}"
+        return f"at bed X {x:.0f}"
+
+    @property
+    def slab_on_cup(self) -> str | None:
+        """Where the slab on the cup came from, if the run ended with one (or possibly one) on it."""
+        if self.holding:
+            return f"pocket {self.held_from[0]}" if self.held_from else "an unknown pocket"
+        if self.freeze == "hold":
+            return "an unknown pocket (check the cup)"
+        if self.freeze == "vent_failed":
+            return "the stack under the cup (the vent failed)"
+        return None
+
     # ------------------------------------------------------------------ primitives
-    def _z(self, c: float, feed: float | None = None) -> None:
+    def _z(self, c: float, feed: float | None = None, guard: bool = True) -> None:
+        """Z move. A downward move is a probing move (G38.3) at the same speed: FluidNC only watches the
+        contact sensor during G38.x, so a plain G1 would drive the head - or a held slab - into anything
+        unexpected below it. A trip on the way down is a Stop. ``self.z`` is None while a move is in
+        flight, so an error mid-move never leaves a stale height behind (secure() reads the real one).
+        ``guard=False`` only for the first move after homing (straight down from the top, off the bed)."""
         c = max(min(c, self.c(self.cfg.c_max)), self.z_floor)
-        self.m.move(feed or self.cfg.feed_z, z=c)
+        feed = feed or self.cfg.feed_z
+        if guard and self.z is not None and c < self.z - 0.01:
+            for target, f in self._descent_plan(self.z, c, feed):
+                self._down(target, f)
+            return
+        self.z = None
+        self.m.move(feed, z=c)
         self.m.wait_idle()
         self.z = c
 
-    def _go(self, x: float, y: float) -> None:
-        """XY move, only ever at a safe height."""
+    def _descent_plan(self, z0: float, c_to: float, feed: float) -> list[tuple[float, float]]:
+        """A held slab passes the rod tops slowly (feed_rod_band) from 5 mm above them (thickest slab) to
+        10 mm below them (thinnest): it rides on the cup at whatever offset it had in its source pocket,
+        so it may meet a domed rod top with no play left."""
+        if not self.holding:
+            return [(c_to, feed)]
+        cfg = self.cfg
+        top = self.c(cfg.post_h + 5 + cfg.t_thick_max)
+        bot = self.c(cfg.post_h - 10 + cfg.t_min)
+        slow = min(cfg.feed_rod_band, feed)
+        pts = [z0] + [e for e in (top, bot) if c_to < e < z0] + [c_to]
+        return [(b, slow if bot - 1e-6 <= (a + b) / 2 <= top + 1e-6 else feed) for a, b in zip(pts, pts[1:])]
+
+    def _down(self, c: float, feed: float) -> None:
+        self.z = None
+        hit = self.m.probe(c, feed)
+        if hit is not None:
+            self.z = hit
+            raise Stop(f"Unexpected contact {self._where()} at {self.s(hit):.1f} mm while moving down to {self.s(c):.1f} mm"
+                       + (" with a slab in the cup" if self.holding else "")
+                       + ": something is higher than it should be (a crooked, added or dropped slab, or a slab lying on the rods). "
+                       "The head stopped on the contact. Look before resuming.")
+        self.z = c
+
+    def _go(self, x: float, y: float, feed: float | None = None, check_vacuum: bool = True) -> None:
+        """XY move, only ever at a safe height (lifted straight up first)."""
         safe = self.c(self.cfg.c_safe_loaded if self.holding else self.cfg.c_safe_empty)
         if self.z is None or self.z < safe - 0.01:
             self._z(safe)
         mx, my = self.xy(x, y)
         if "Y" in self.cfg.axes:
-            self.m.move(self.cfg.feed_xy, x=mx, y=my)
+            self.m.move(feed or self.cfg.feed_xy, x=mx, y=my)
         else:
-            self.m.move(self.cfg.feed_xy, x=mx)
+            self.m.move(feed or self.cfg.feed_xy, x=mx)
         self.m.wait_idle()
-        if self.holding:
+        self.at = (x, y)
+        if self.holding and check_vacuum:
             self._check_vacuum("in transit")
 
     def _probe(self, c_from: float, c_to: float) -> float | None:
-        """Fast to c_from, then probe down to c_to at probe speed. Returns trigger Z or None.
+        """Guarded descent to c_from, then probe down to c_to at probe speed. Returns trigger Z or None.
 
         Callers choose c_to so the cup can never be driven more than probe_window past the
         surface it is looking for - well inside the 25 mm spring-buffer stroke.
@@ -190,23 +282,119 @@ class Runner:
         self._z(c_from)
         if c_to >= self.z - 0.05:  # already at the floor: nothing left to probe
             return None
+        self.z = None
         hit = self.m.probe(c_to, self.cfg.feed_probe)
         self.z = hit if hit is not None else c_to
         return hit
 
+    # ------------------------------------------------------------------ vacuum
+    def _kpa(self) -> float:
+        """Cup line pressure. A physically impossible reading is a sensor fault, never 'a good seal'."""
+        try:
+            k = self.vac.kpa()
+        except SensorFault as e:
+            raise self._sensor_stop(str(e)) from None
+        if k < VAC_FLOOR_KPA:
+            raise self._sensor_stop(f"it reads {k:.0f} kPa, lower than the pump can pull (about -81): an open sensor wire or a lost 5 V reads like this")
+        return k
+
+    def _sensor_stop(self, why: str) -> Stop:
+        self.freeze = "sensor"
+        return Stop(f"Vacuum sensor fault: {why}. Without it the machine cannot tell whether a slab is held or let go, so nothing moves."
+                    + (" A slab is on the cup; the pump keeps holding it." if self.holding else "")
+                    + " Fix the sensor wiring (WIRING.md section 5), run `selftest -i`, then resume.")
+
+    def _atm_ref(self) -> tuple[float, float]:
+        ref = self.cfg.vac_baseline_kpa
+        return (float(ref), ATM_TOL_STORED) if ref is not None else (0.0, ATM_TOL_UNSTORED)
+
+    def _atmosphere(self, where: str) -> float:
+        """Before anything is gripped the cup line must read atmosphere. Lower means a slab may still be stuck
+        to the cup (one hangs on down to about -1.7 kPa, far above the -25 kPa transit alarm); higher means
+        a sensor fault. The empty-cup reading stored by calibrate z / selftest -i is the reference."""
+        ks = [self._kpa() for _ in range(3)]
+        k = sum(ks) / len(ks)
+        ref, tol = self._atm_ref()
+        if k < ref - tol:
+            self.freeze = "hold"
+            raise Stop(f"The cup line holds vacuum {where} ({k:.1f} kPa; an empty cup reads {ref:.1f}): a slab may be stuck to the cup. "
+                       "Nothing will move, and the pump is switched on so such a slab cannot fall. Hold the slab, vent the cup (the command "
+                       "line asks you; the web page has a Vent button) and put it face-down back on top of the stack it came from. If the cup "
+                       "is empty, the sensor zero has drifted: run `selftest -i` to store a new zero. Then start again.")
+        if k > ref + tol:
+            raise self._sensor_stop(f"it reads {k:.1f} kPa with nothing pumping (an empty cup reads {ref:.1f})")
+        self.baseline = k
+        return k
+
     def _check_vacuum(self, where: str) -> None:
-        k = self.vac.kpa()
+        k = self._kpa()
         if k > self.cfg.vac_transit_alarm_kpa:
             raise Stop(f"Vacuum lost {where} ({k:.0f} kPa). A slab may have dropped. Check the bed and the cup, then resume.")
 
     def _wait_seal(self) -> bool:
         t0 = time.monotonic()
         while time.monotonic() - t0 < self.cfg.vac_seal_timeout_s:
-            if self.vac.kpa() <= self.cfg.vac_seal_kpa:
+            if self._kpa() <= self.cfg.vac_seal_kpa:
                 return True
             time.sleep(0.02)
-        return self.vac.kpa() <= self.cfg.vac_seal_kpa
+        return self._kpa() <= self.cfg.vac_seal_kpa
 
+    def _vent(self, where: str) -> None:
+        """Vent the cup and wait until the line is back at atmosphere. A dead vent path (one NC coil, MOSFET
+        module or wire) leaves full vacuum, and the 'empty' head would carry the slab off at travel height.
+        On failure nothing moves: the slab rests where it is, still sealed to the cup."""
+        cfg = self.cfg
+        ref = self.baseline if self.baseline is not None else self._atm_ref()[0]
+        t0 = time.monotonic()
+        self.vac.release()
+        k = self._kpa()
+        while k < ref - cfg.vent_tol_kpa:
+            if time.monotonic() - t0 > cfg.vent_timeout_s:
+                self._vent_failed()
+                raise Stop(f"Vent failed {where}: the cup line still reads {k:.1f} kPa after {cfg.vent_timeout_s:.1f} s (atmosphere {ref:.1f}). " + VENT_HELP)
+            self.vac.release()  # vent again (each call opens the vent for vent_s)
+            k = self._kpa()
+
+    def _vent_failed(self) -> None:
+        self.freeze = "vent_failed"
+        try:
+            self.vac.close()  # the slab rests on a stack: valves shut, nothing pulls on it
+        except SafetyViolation:
+            raise
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _lift_off(self, hit: float, where: str) -> None:
+        """After a verified vent: lift the first peel_mm at peel speed, then check nothing came up with the
+        cup (a slab stuck to a sealed cup pulls a little vacuum as it hangs), then go to the travel height."""
+        cfg = self.cfg
+        self._z(hit + cfg.peel_mm, cfg.feed_peel)
+        ref = self.baseline if self.baseline is not None else self._atm_ref()[0]
+        k = self._kpa()
+        if k < ref - cfg.vent_tol_kpa:
+            self._probe(self.z, hit - 3.0)  # set it straight back down
+            self._vent_failed()
+            raise Stop(f"A slab came up with the vented cup {where} ({k:.1f} kPa after the lift). It was set back down. " + VENT_HELP)
+        self._z(self.c(cfg.c_safe_empty))
+
+    def _peel(self, hit: float) -> None:
+        """Lift a gripped slab off its stack. At the probe trip the spring buffer is already compressed by
+        buffer_trip_mm, so the cup only leaves the slab once the head is that far above the trip point:
+        the slow leg is placed around that point (+/- buffer_trip_tol_mm, plus the deceleration overshoot)
+        and goes on for peel_slow_mm after it. Then the slab is held low over its own stack for
+        peel_dwell_s, so a slab clinging by an air film falls back a few mm instead of from travel height."""
+        cfg = self.cfg
+        over = (cfg.feed_probe / 60.0) ** 2 / (2 * Z_ACCEL)  # head travel past the trip point while it decelerates
+        start = cfg.buffer_trip_mm - cfg.buffer_trip_tol_mm - 0.3
+        slow_to = hit + cfg.buffer_trip_mm + cfg.buffer_trip_tol_mm + over + cfg.peel_slow_mm
+        if start > 0.05:
+            self._z(hit + start, cfg.feed_peel)  # the spring relaxes; the cup stays on the slab
+        self._z(slow_to, cfg.feed_peel_slow)  # the cup leaves the slab in here
+        self._z(max(hit + cfg.peel_mm, slow_to + 0.5), cfg.feed_peel)
+        self.sleep(cfg.peel_dwell_s)
+        self._check_vacuum("after peel")
+
+    # ------------------------------------------------------------------ cameras
     def _frames(self, cam, light: str, n: int) -> list:
         getattr(self.lights, light)(True)
         try:
@@ -214,14 +402,90 @@ class Runner:
         finally:
             getattr(self.lights, light)(False)
 
-    def _read(self, frames, camera: str) -> tuple[list[CodeRead], list[str]]:
+    def _row_half_mm(self) -> float:
+        xs = sorted(p.x for p in self.cfg.pockets)
+        return min(b - a for a, b in zip(xs, xs[1:])) / 2  # pocket centre to the wall line
+
+    def _head_roi(self, distance_mm: float) -> tuple[float, float, float, float] | None:
+        """Crop of a head-camera frame to the pocket under the cup. The 3.6 mm lens sees the neighbouring
+        pockets' labels too (they start ~57 mm off-axis); only the slab under the cup may be read."""
+        spec = self.cfg.cam_head or {}
+        cam = self.head_cam
+        if hasattr(cam, "view_half_mm"):
+            hx, hy = cam.view_half_mm(distance_mm)
+        else:
+            hfov = float(spec.get("hfov_deg", 64.0))
+            w, h = float(spec.get("width", 4)), float(spec.get("height", 3))
+            hx = distance_mm * math.tan(math.radians(hfov / 2))
+            hy = hx * h / w
+        along_x = str(spec.get("row_axis", "x")) == "x"
+        f = self._row_half_mm() / (hx if along_x else hy)
+        if f >= 1.0:
+            return None
+        return (0.5 - f / 2, 0.0, 0.5 + f / 2, 1.0) if along_x else (0.0, 0.5 - f / 2, 1.0, 0.5 + f / 2)
+
+    def _read(self, frames, camera: str, distance_mm: float | None = None) -> tuple[list[CodeRead], list[str]]:
+        """Decode frames. Head ('back') frames are cropped to the pocket under the cup. One read per
+        (symbology, payload) per frame: overlapping tiles of one frame are not separate evidence.
+        No OCR here (see _front_ocr)."""
+        roi = self._head_roi(distance_mm) if camera == "back" and distance_mm else None
         reads: list[CodeRead] = []
         unparsed: list[str] = []
-        for i, f in enumerate(frames):
-            r, u = decode_frame(f, camera, self.cfg.custom_regex, allow_ocr=self.cfg.allow_ocr and i == len(frames) - 1 and not reads)
-            reads += r
-            unparsed += u
+        for f in frames:
+            r, u = decode_frame(f, camera, self.cfg.custom_regex, allow_ocr=False, roi=roi)
+            seen = set()
+            for x in r:
+                if (x.symbology, x.raw) not in seen:
+                    seen.add((x.symbology, x.raw))
+                    reads.append(x)
+            unparsed += [x for x in u if x not in unparsed]
         return reads, unparsed
+
+    def _front_ocr(self, frames, reads: list[CodeRead]) -> list[CodeRead]:
+        """OCR of the printed digits, on the front (station) frame only: it is the one independent check of an
+        ITF-only read. Never on the head camera: through the clear slab it sees the card back's own numbers."""
+        if not self.cfg.allow_ocr or not frames or any(r.source == "ocr" for r in reads):
+            return []
+        return ocr_digits(to_gray(frames[-1]), "front")
+
+    def _decide(self, reads: list[CodeRead], held_reads: list[CodeRead]) -> Verdict:
+        """consensus() plus the run-level rules: the frame from above the stack alone never makes an 'ok'
+        (it can see a neighbour's label), a PSA cert of a length Phase 0 never saw is not 'ok', and a cert
+        already recorded in this batch is a conflict (exception pocket), never a second 'ok'."""
+        cfg = self.cfg
+        v = consensus(reads, self.itf, accepted=tuple(cfg.accepted_graders))
+        if v.status == "ok" and v.cert:
+            support = {c for r in held_reads for c in (r.cert, r.alt_cert) if c}
+            if v.cert not in support:
+                v = Verdict("needs_review", v.cert, v.sources, "read only in the frame from above the stack (a neighbour's label?) - verify by eye", v.grader, v.raw)
+        if v.status == "ok" and v.grader == "PSA" and cfg.psa_cert_digits and v.cert and len(v.cert) not in tuple(cfg.psa_cert_digits):
+            v = Verdict("needs_review", v.cert, v.sources, f"{len(v.cert)}-digit PSA cert, but Phase 0 saw only {'/'.join(map(str, cfg.psa_cert_digits))} digits - verify", v.grader, v.raw)
+        if v.cert and v.status in ("ok", "needs_review"):
+            earlier = next((r.position for r in getattr(self.w, "rows", []) if r.verdict.cert == v.cert and r.verdict.status in ("ok", "needs_review")), None)
+            if earlier is not None:
+                v = Verdict("conflict", None, v.sources, f"cert {v.cert} was already recorded at #{earlier} in this batch: a neighbour's label in view, "
+                            "or a misread - check this slab by hand", v.grader, v.raw)
+        return v
+
+    def _check_face_down(self, src: int, hover_reads: list[CodeRead]) -> None:
+        """Before the cup touches a slab: the frame from above must show a PSA back-label QR (PSA front labels
+        carry no QR). Anything else - an older label without a back QR, a face-up slab, another grader's
+        code (they sit on the front label) - stops the run untouched until the operator confirms."""
+        if self.cfg.face_down_check == "off":
+            return
+        if self.face_down_ok_once:
+            self.face_down_ok_once = False
+            self._journal({"face_down_confirmed": src, "by": "operator", "t": round(time.time(), 1)})
+            return
+        psa_back = any(r.source == "back_qr" and r.grader == "PSA" for r in hover_reads)
+        fronts = sorted({r.grader for r in hover_reads if r.grader not in ("PSA", "unknown")})
+        if psa_back and not fronts:
+            return
+        why = (f"a {'/'.join(fronts)} code is visible from above, and those sit on the FRONT label" if fronts
+               else "no PSA back-label QR was seen from above")
+        raise Stop(f"Pocket {src}: the top slab could not be confirmed FACE-DOWN before touching it ({why}). The cup must never touch a "
+                   f"slab's front, so nothing touched it. Look at the top slab of pocket {src}: if it is face-up, turn it face-down. If it is "
+                   "face-down (older labels have no back QR), resume with --face-down-ok (web page: tick 'the top slab is face-down').")
 
     def _save(self, frame, name: str) -> str:
         if frame is None:
@@ -241,30 +505,51 @@ class Runner:
         self.m.home()
         self.homed = True
         self.z = None
-        self._z(self.c(self.cfg.c_safe_empty))
+        self.at = None
+        self._z(self.c(self.cfg.c_safe_empty), guard=False)  # straight down from the top, at the home end off the bed
 
     # ------------------------------------------------------------------ survey
     def _find_top(self, p) -> float | None:
-        """Walk down over pocket p in probe windows from above the MAX line until contact.
+        """Walk down over pocket p in probe windows from the travel height until contact.
         Returns the top surface height s (None = never touched). Ends at the empty safe height."""
         cfg = self.cfg
         self._go(p.x, p.y)
-        top = None
-        c = self.c(cfg.max_line + 6)
-        floor = max(self.c(-2), self.z_floor)
+        self._atmosphere(f"over pocket {p.index}")
         self.vac.hold()  # an open cup that suddenly seals = contact the optical sensor missed
+        self.sleep(SEAL_CHECK_S)
+        k = self._kpa()
+        if k <= cfg.vac_seal_kpa / 2:
+            # sealed before the head moved down: a slab is hanging on the cup. Venting would drop it.
+            self.freeze = "hold"
+            raise Stop(f"Pocket {p.index}: the cup sealed ({k:.0f} kPa) before the head moved down - a slab is hanging on the cup. Nothing will "
+                       "move and the pump keeps holding it. Hold the slab, vent the cup (the command line asks you; the web page has a Vent "
+                       "button), put it face-down back on the stack it came from, then start again.")
+        top = None
+        c = self.z  # the first window starts at the travel height: a slab lying on the rods trips it
+        floor = max(self.c(-2), self.z_floor)
         try:
             while c > floor + 0.05:  # walk down in probe windows until contact
                 hit = self._probe(c, max(floor, c - cfg.probe_window))
                 if hit is not None:
                     top = self.s(hit)
                     break
-                if self.vac.kpa() <= cfg.vac_seal_kpa:
+                if self._kpa() <= cfg.vac_seal_kpa:
                     raise Stop(f"Pocket {p.index}: the cup sealed on something but the contact sensor did not trip. Contact sensor fault - stop and check it.")
-                c -= cfg.probe_window
-        finally:
-            self.vac.release()
-        self._z(self.c(cfg.c_safe_empty))
+                c = self.z
+        except BaseException:
+            if not self.freeze:
+                try:
+                    self.vac.release()  # the open cup may be sealed on the stack top: vent before anything lifts
+                except SafetyViolation:
+                    raise
+                except Exception:  # noqa: BLE001
+                    pass
+            raise
+        self._vent(f"on pocket {p.index}")
+        safe = self.c(cfg.c_safe_empty)
+        if self.z < safe - 0.01:
+            self._z(min(self.z + cfg.peel_mm, safe), cfg.feed_peel)
+        self._z(safe)
         return top
 
     def survey(self, expect: dict[int, float] | None = None, accept: bool = False) -> dict[int, float]:
@@ -281,7 +566,7 @@ class Runner:
             if top is None:
                 raise Stop(f"Pocket {p.index}: probe never touched anything (not even the pad). Check the contact sensor wiring and calibration.")
             if top > cfg.max_line + 1:
-                raise Stop(f"Pocket {p.index} is filled above the MAX line ({top:.0f} mm > {cfg.max_line:.0f}). Remove slabs and restart.")
+                raise Stop(f"Pocket {p.index} is filled above the MAX line ({top:.0f} mm > {cfg.max_line:.0f}), or something lies on its rods. Remove it and restart.")
             if expect is None and p.role != "source" and top > cfg.t_min / 2:
                 raise Stop(f"Pocket {p.index} ({p.role}) must start empty but is {top:.1f} mm tall.")
             measured[p.index] = max(0.0, top)
@@ -333,6 +618,7 @@ class Runner:
         t = sum(self.st.thickness_log) / len(self.st.thickness_log) if self.st.thickness_log else NOMINAL_T
         return min(max(t, self.cfg.t_min), self.cfg.t_std_max)
 
+
     # ------------------------------------------------------------------ one slab
     def transfer(self, src: int, dst: int) -> bool:
         """Move the top slab of src to dst (or exceptions). Returns False when src is empty."""
@@ -343,9 +629,17 @@ class Runner:
         s_pred = self.st.tops[src]
         if s_pred < cfg.t_min / 2:
             return False
-        # hover look before touching anything (also a first read of the back label)
-        self._z(self.c(s_pred) + cfg.approach_gap + 2)
-        hover_frames = self._frames(self.head_cam, "head", 1) if cfg.hover_check else []
+        lens = float((cfg.cam_head or {}).get("lens_to_label_mm", 140.0))
+        hover_reads: list[CodeRead] = []
+        unparsed: list[str] = []
+        if cfg.hover_check or cfg.face_down_check != "off":
+            # look before touching anything: the face-down check, and a first read of the back label
+            self._z(self.c(s_pred) + cfg.approach_gap + 2)
+            hover = self._frames(self.head_cam, "head", 1)
+            hover_reads, unparsed = self._read(hover, "back", lens + cfg.approach_gap + 2)
+            self._check_face_down(src, hover_reads)
+            if not cfg.hover_check:
+                hover_reads = []
         # bounded probe for the real top
         hit = self._probe(self.c(s_pred) + cfg.approach_gap, self.c(s_pred) - cfg.probe_window + cfg.approach_gap)
         if hit is None:  # lower than predicted: look further down to the pad
@@ -362,27 +656,29 @@ class Runner:
             self._z(self.c(cfg.c_safe_empty))
             return False
         # grip
+        self._atmosphere(f"before gripping the top slab of pocket {src}")
         self.vac.hold()
         if not self._wait_seal():
-            self.vac.release()
+            self._vent(f"on pocket {src} after a failed seal")
             self._z(hit + 3)
             hit2 = self._probe(hit + 3, hit - 4)
             if hit2 is not None:
                 self.vac.hold()
             if hit2 is None or not self._wait_seal():
-                self.vac.release()
+                self._vent(f"on pocket {src} after a failed seal")
                 self._z(self.c(cfg.c_safe_empty))
-                raise Stop(f"Pocket {src}: cup will not seal on the top slab (dirty cup, warped or face-up slab?). Fix it, then resume.")
+                raise Stop(f"Pocket {src}: cup will not seal on the top slab (dirty cup, warped slab?). Fix it, then resume.")
+            hit = hit2
         self.holding = True
         self.held_from = (src, s_top)
-        self._z(hit + cfg.peel_slow_mm, cfg.feed_peel_slow)  # very slow first mm: squeeze-film force ~ speed
-        self._z(hit + cfg.peel_mm, cfg.feed_peel)
-        time.sleep(cfg.peel_dwell_s)
-        self._check_vacuum("after peel")
+        self._peel(hit)
         self._z(self.c(cfg.c_safe_loaded))
         back = self._frames(self.head_cam, "head", cfg.frames_per_read)
-        reads, unparsed = self._read(hover_frames + back, "back")
-        verdict = consensus(reads, self.itf, accepted=tuple(cfg.accepted_graders))
+        back_reads, u = self._read(back, "back", lens)
+        unparsed += [x for x in u if x not in unparsed]
+        reads = hover_reads + back_reads
+        held_reads = list(back_reads)
+        verdict = self._decide(reads, held_reads)
         front = None
         if cfg.front_photo == "always" or verdict.status != "ok":
             sx, sy = cfg.station_xy
@@ -390,11 +686,24 @@ class Runner:
             self._z(self.c(cfg.station_read_c))
             front_frames = self._frames(self.station_cam, "station", cfg.frames_per_read)
             front = front_frames[-1]
+            self._check_vacuum("at the read station")
+            # Decode with the slab over its planned output stack, not over the bare lens: decoding (and OCR,
+            # up to 30 s) is the longest time a slab hangs, and a drop there would land face-first on the camera.
+            self._z(self.c(cfg.c_safe_loaded))
+            pd = cfg.pocket(dst)
+            self._go(pd.x, pd.y)
             f_reads, f_unparsed = self._read(front_frames, "front")
             reads += f_reads
-            unparsed += f_unparsed
-            verdict = consensus(reads, self.itf, accepted=tuple(cfg.accepted_graders))
-            self._z(self.c(cfg.c_safe_loaded))
+            held_reads += f_reads
+            unparsed += [x for x in f_unparsed if x not in unparsed]
+            verdict = self._decide(reads, held_reads)
+            itf_only = bool(reads) and all(r.symbology == "ITF" for r in reads if r.source != "ocr")
+            if verdict.status == "no_read" or (verdict.status == "needs_review" and itf_only):
+                o = self._front_ocr(front_frames, reads)
+                if o:
+                    reads += o
+                    held_reads += o
+                    verdict = self._decide(reads, held_reads)
         to_output = verdict.status == "ok" or (verdict.status == "needs_review" and cfg.needs_review_to == "output")
         target = cfg.pocket(dst) if to_output else pex
         if target.index == pex.index and self.st.tops.get(pex.index, 0.0) + 2 * cfg.t_thick_max > cfg.max_line:
@@ -411,6 +720,12 @@ class Runner:
         step = self.s(hit) - s_dst
         if step > 2.5 * cfg.t_std_max:
             raise Stop(f"Placing onto pocket {target.index}: contact {step:.1f} mm above the stack - something is in the way. Check it, then resume.")
+        if step < cfg.t_min / 2:
+            # The cup itself touched the stack: nothing is in it, whatever the vacuum sensor says.
+            self.freeze = "hold"
+            raise Stop(f"Placing onto pocket {target.index}: the cup touched {step:.1f} mm above the stack, as if nothing is in the cup. The slab from "
+                       f"pocket {src} may have fallen off on the way, or the vacuum sensor reports a seal that is not there. Nothing will move; the "
+                       "pump keeps holding whatever is on the cup. Look at the cup and the bed (rods, stacks, read station), then resume.")
         flags = []
         if step >= cfg.t_double:
             flags.append(f"DOUBLE PICK: an unread slab is directly under this one in pocket {target.index}")
@@ -418,11 +733,10 @@ class Runner:
             flags.append(f"thick holder ({step:.1f} mm)")
         elif step < cfg.t_min - 0.5:
             flags.append(f"thin/odd step {step:.1f} mm - check seating")
-        self.vac.release()
+        self._vent(f"on pocket {target.index}")
         self.holding = False
         self.held_from = None
-        self._z(hit + cfg.peel_mm, cfg.feed_peel)
-        self._z(self.c(cfg.c_safe_empty))
+        self._lift_off(hit, f"on pocket {target.index}")
         # bookkeeping
         self.st.tops[target.index] = self.s(hit)
         self.st.tops[src] = max(0.0, s_top - step)
@@ -463,16 +777,15 @@ class Runner:
         if hit is None:
             self._z(self.c(cfg.c_safe_empty))
             raise Stop(f"Pocket {pocket}: lost the slab between two probes. Check the contact sensor.")
+        self._atmosphere(f"before gripping the slab in pocket {pocket}")
         self.vac.hold()
         if not self._wait_seal():
-            self.vac.release()
+            self._vent(f"on pocket {pocket} after a failed seal")
             self._z(self.c(cfg.c_safe_empty))
             raise Stop(f"Pocket {pocket}: cup will not seal on the slab (dirty cup, or slab face-up?).")
         self.holding = True
         self.held_from = (pocket, self.s(hit))
-        self._z(hit + cfg.peel_slow_mm, cfg.feed_peel_slow)
-        self._z(hit + cfg.peel_mm, cfg.feed_peel)
-        self._check_vacuum("after peel")
+        self._peel(hit)
         self._z(self.c(cfg.c_safe_loaded))
         return self.s(hit)
 
@@ -489,36 +802,117 @@ class Runner:
         if hit is None:
             self._z(self.c(cfg.c_safe_loaded))
             raise Stop(f"Could not find the top of pocket {src} to put the slab back (expected contact at {s_pick:.1f} mm).")
-        self.vac.release()
+        self._vent(f"on top of pocket {src}")
         self.holding = False
         self.held_from = None
-        self._z(hit + cfg.peel_mm, cfg.feed_peel)
-        self._z(self.c(cfg.c_safe_empty))
+        self._lift_off(hit, f"on top of pocket {src}")
         return src
 
-    def secure(self) -> str:
-        """After a Stop: leave nothing hanging in the air. Returns a note for the operator."""
-        if not self.homed:
-            return ""
+    def _set_down_weak(self, k: float) -> str:
+        """Vacuum is low with a slab in the cup. Never let go in mid-air (over the lens, the rods or a
+        neighbour): keep pumping, carry it slowly back over its own pocket, probe down until it (or the
+        stack, if it already fell) touches, and vent there."""
+        cfg = self.cfg
+        src, s_pick = self.held_from
         try:
+            self.vac.hold()
+        except SafetyViolation:
+            raise
+        except Exception:  # noqa: BLE001
+            pass
+        p = cfg.pocket(src)
+        self._go(p.x, p.y, feed=SLOW_XY, check_vacuum=False)
+        hit = self._probe(self.c(s_pick) + 2 * cfg.approach_gap, self.c(s_pick - cfg.t_thick_max - 2))
+        if hit is None:
+            self._z(self.c(cfg.c_safe_loaded))
+            return (f"Vacuum dropped to {k:.0f} kPa with a slab from pocket {src} in the cup, and nothing was found on top of pocket {src}. "
+                    "The head waits at the safe height with the pump on. Look at the cup and the bed before touching anything.")
+        s_hit = self.s(hit)
+        on_cup = s_hit > s_pick - cfg.t_min / 2
+        self._vent(f"on top of pocket {src}")
+        self.holding = False
+        self.held_from = None
+        self._lift_off(hit, f"on top of pocket {src}")
+        self._journal({"low_vacuum_set_down": src, "contact_s": round(s_hit, 2), "slab_was_on_cup": on_cup, "t": round(time.time(), 1)})
+        if on_cup:
+            return (f"Vacuum dropped to {k:.0f} kPa while a slab was held. It was carried back slowly and set down on top of pocket {src}, where it came "
+                    "from; it will be read again on resume. Check the cup lip and the vacuum line for a leak first.")
+        return (f"Vacuum dropped to {k:.0f} kPa and the slab was NOT on the cup any more: it fell somewhere between pocket {src} and where the "
+                f"head was. Find it before resuming (on the rods, the stacks, the read station) and put it face-down on top of pocket {src}.")
+
+    def secure(self) -> str:
+        """After a Stop or an unexpected error: leave nothing hanging in the air. Returns a note for the operator.
+        The real head height is read first (an error mid-move leaves the planned one unknown), and the head
+        only ever goes straight up before it moves sideways."""
+        try:
+            if self.freeze:
+                return self._frozen()
+            if not self.homed:
+                return ""
+            self._resync()
             if self.holding and self.held_from is not None:
                 src = self.held_from[0]
-                k = self.vac.kpa()
+                k = self._kpa()
                 if k > self.cfg.vac_transit_alarm_kpa:
-                    # Do not vent and do not move: if the slab is still stuck, venting would drop it.
-                    self.vac.close()
-                    return (f"Vacuum is low ({k:.0f} kPa) and the slab may have fallen. The head was left where it is with the valves shut. "
-                            f"If a slab is still on the cup, hold it and pull it off gently. Put that slab (or the one that fell) face-down on top of pocket {src}.")
+                    return self._set_down_weak(k)
                 self.put_back()
                 return f"The slab that was in the cup was put back on top of pocket {src}; it will be read again on resume."
-            self.vac.release()
-            if self.z is None or self.z < self.c(self.cfg.c_safe_empty) - 0.01:
-                self._z(self.c(self.cfg.c_safe_empty))
+            self._vent("where the head stopped")  # the open cup may be sealed on a stack top (survey)
+            safe = self.c(self.cfg.c_safe_empty)
+            if self.z is not None and self.z < safe - 0.01:
+                self._z(min(self.z + self.cfg.peel_mm, safe), self.cfg.feed_peel)
+                self._z(safe)
             return ""
+        except SafetyViolation:
+            raise  # the simulator's safety monitor: a test must fail loudly, also during recovery
         except ControllerLost:
             return self.lost_note()
+        except Stop as e:
+            if self.freeze:
+                self._frozen()
+                return str(e)
+            return self._park_failed(e)
         except Exception as e:  # noqa: BLE001 - report, never mask the original Stop
-            return f"Could not park the machine automatically ({e}). Check the head before touching the bed."
+            return self._park_failed(e)
+
+    def _resync(self) -> None:
+        """After an error the reply stream may be one behind and the head may still be moving: wait for
+        Idle, resync, and take the real Z (so _go() lifts straight up from where the head really is)."""
+        rs = getattr(self.m, "resync", None)
+        if rs is not None:
+            rs()
+        if hasattr(self.m, "position"):
+            self.z = self.m.position()[1]
+
+    def _frozen(self) -> str:
+        """No motion at all. A slab that may hang on the cup stays held (pump on); one resting on a stack after
+        a failed vent stays as it is (valves shut); after a sensor fault with nothing held the cup is vented."""
+        try:
+            if self.freeze == "vent_failed":
+                self.vac.close()
+            elif self.holding or self.freeze == "hold":
+                self.vac.hold()
+            else:
+                self.vac.release()
+        except SafetyViolation:
+            raise
+        except Exception:  # noqa: BLE001
+            pass
+        return "Nothing moved after the stop."
+
+    def _park_failed(self, e: Exception) -> str:
+        msg = f"Could not park the machine automatically ({e})."
+        if self.holding:
+            try:
+                self.vac.hold()  # never let the valves shut on a hanging slab while the Pi has power
+            except SafetyViolation:
+                raise
+            except Exception:  # noqa: BLE001
+                pass
+            src = self.held_from[0] if self.held_from else "?"
+            msg += (f" A SLAB from pocket {src} is still on the cup; the pump keeps holding it. Hold it, vent the cup (the command line asks you; "
+                    f"the web page has a Vent button) and put it face-down on top of pocket {src}.")
+        return msg + " Check the head before touching the bed."
 
     def count_check(self) -> dict:
         """Slabs counted per source vs the source's surveyed height / mean measured thickness.
@@ -534,13 +928,17 @@ class Runner:
 
     # ------------------------------------------------------------------ whole batch
     def _preflight(self) -> None:
+        """Before homing: only checks that are valid wherever the head stopped (the beam is checked after homing)."""
         if self.lid is not None and not self.lid.closed():
             raise Stop("Close the lid to start.")
+        self._atmosphere("at the start")
+
+    def _check_gate(self) -> None:
+        """After homing (head at the top, nothing of it can cross the beam) and before any sideways move."""
         if self.gate is not None and not self.gate.clear():
-            raise Stop("The overfill light beam is blocked: a stack is above the MAX line (or something is lying on the stacks). Fix it, then start again.")
-        k = self.vac.kpa()
-        if k <= self.cfg.vac_transit_alarm_kpa:
-            raise Stop(f"The cup line is holding vacuum ({k:.0f} kPa): a slab may still be stuck to the cup. Take it off by hand, put it back on top of the stack it came from, then start again.")
+            raise Stop("The overfill light beam is blocked with the head at the top: a stack is above the MAX line, something is lying across "
+                       "the stacks, or the laser and its receiver are out of line. Take the extra slabs off (or re-aim the laser at the receiver), "
+                       "then start again.")
 
     def _check_pause(self) -> None:
         if self.lid is not None and not self.lid.closed():
@@ -549,22 +947,57 @@ class Runner:
             raise Stop("Stopped on request - nothing held. Resume to continue.")
 
     def lost_note(self) -> str:
-        """The controller lost power (E-stop) or its USB link: nothing can move. Shut the cup valves
-        from the Pi side and tell the operator what to do by hand."""
+        """The controller lost power (E-stop) or its USB link: nothing can move. Keep a held slab held from
+        the Pi side and tell the operator what to do by hand."""
         self.homed = False
         try:
-            self.vac.close()  # pump off, both NC valves shut, no vent: a held slab stays sealed on the cup
+            if self.holding:
+                self.vac.hold()  # the pump keeps it while the Pi has power; closed valves alone hold it only briefly
+            else:
+                self.vac.close()
+        except SafetyViolation:
+            raise
         except Exception:  # noqa: BLE001
             pass
-        msg = ("The controller lost power or its USB link (E-stop pressed, or the cable came out). The head stopped where it was; "
-               "the motors are off.")
+        msg = ("The controller lost power or its USB link (E-stop pressed, or the cable came out). The head stopped where it was. "
+               "If you did not press the E-stop, the motors may still be powered: press it now before reaching in.")
         if self.holding and self.held_from is not None:
             src = self.held_from[0]
-            msg += (f" A slab from pocket {src} is still on the cup (the closed valves keep it sealed for a while). Hold it, pull it off gently "
-                    f"and put it face-down on top of pocket {src}; it will be read again.")
-            self.holding = False
-            self.held_from = None
+            msg += (f" A slab from pocket {src} is still on the cup. The pump keeps holding it while the Pi has power (if the E-stop also cut the "
+                    f"pump, the closed valves hold it for a short while only: take it off now). Hold it, vent the cup (the command line asks you; "
+                    f"the web page has a Vent button) and put it face-down on top of pocket {src}; it will be read again.")
         msg += " Twist the E-stop to release it, then resume: the machine reconnects and homes first (Z straight up, then X)."
+        return msg
+
+    def hard_stop(self) -> str:
+        """Ctrl-C twice: halt the motors at once (feed hold + controller reset) and move nothing afterwards.
+        The reply stream and the planned position cannot be trusted after an asynchronous interrupt."""
+        halt = getattr(self.m, "halt", None)
+        if halt is not None:
+            try:
+                halt()
+            except SafetyViolation:
+                raise
+            except Exception:  # noqa: BLE001
+                pass
+        self.homed = False
+        try:
+            if self.holding:
+                self.vac.hold()
+            elif not self.freeze:
+                self.vac.release()  # nothing was lifted: let go of anything the open cup sealed on
+        except SafetyViolation:
+            raise
+        except Exception:  # noqa: BLE001
+            pass
+        msg = ("Hard stop (Ctrl-C twice): the motors were halted where they were and nothing moved after that. The controller was reset, "
+               "so the next run or resume homes first.")
+        if self.holding and self.held_from is not None:
+            src = self.held_from[0]
+            msg += (f" A slab from pocket {src} is on the cup; the pump keeps holding it. Hold it, vent the cup (the command line asks you; the "
+                    f"web page has a Vent button) and put it face-down on top of pocket {src}; it will be read again on resume.")
+        else:
+            msg += " Nothing is held in the cup. Check the head before touching the bed."
         return msg
 
     def _guarded(self, body: Callable[[], dict]) -> dict:
@@ -582,9 +1015,15 @@ class Runner:
             raise Stop(f"{e} {note}".strip()) from None
         except SafetyViolation:
             raise  # simulator safety monitor: let the test fail loudly
-        except (Exception, KeyboardInterrupt) as e:  # camera died, decoder bug, controller alarm, Ctrl-C ...
-            # Anything unplanned while a slab is in the cup must still end with the slab put back,
-            # never hanging on the closed valves until the line leaks down.
+        except KeyboardInterrupt:  # Ctrl-C twice = stop NOW: no automatic motion at all
+            note = self.hard_stop()
+            self._journal({"stop": "operator hard stop (Ctrl-C twice)", "holding": self.holding,
+                           "held_from": list(self.held_from) if self.held_from else None, "secured": note, "t": round(time.time(), 1)})
+            self.phase = "stopped"
+            raise HardStop(note) from None
+        except Exception as e:  # camera died, decoder bug, controller alarm or comms error ...
+            # Anything unplanned while a slab is in the cup must still end with the slab put back (after
+            # secure() has re-read the real position), never hanging on closed valves.
             note = self.secure()
             self._journal({"stop": f"unexpected {type(e).__name__}: {e}", "secured": note, "t": round(time.time(), 1)})
             self.phase = "stopped"
@@ -594,6 +1033,7 @@ class Runner:
         def body():
             self._preflight()
             self._home()
+            self._check_gate()
             self._journal({"start": round(time.time(), 1), "batch": self.w.batch_id})
             self.phase = "survey"
             self.survey()
@@ -602,9 +1042,11 @@ class Runner:
 
         return self._guarded(body)
 
-    def resume(self, accept_heights: bool = False) -> dict:
+    def resume(self, accept_heights: bool = False, face_down_ok: bool = False) -> dict:
         """Continue a stopped batch: rebuild the State from journal.jsonl + certs.csv, re-survey every
-        pocket against the heights the journal predicts, then carry on where it stopped."""
+        pocket against the heights the journal predicts, then carry on where it stopped.
+        ``face_down_ok``: the operator checked that the slab the face-down check stopped on is face-down."""
+        self.face_down_ok_once = face_down_ok
         events = read_journal(self.journal)
         st, itf, surveyed = rebuild_state(events, self.w.rows, self.cfg)
         if not surveyed:
@@ -618,6 +1060,7 @@ class Runner:
         def body():
             self._preflight()
             self._home()
+            self._check_gate()
             self.phase = "survey"
             expect = dict(self.st.tops)
             self.survey(expect=expect, accept=accept_heights)

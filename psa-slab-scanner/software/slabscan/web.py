@@ -8,7 +8,8 @@ page sends it), which stops other web pages in your browser from starting the ma
 your back, but it is not a password.
 
 One run at a time, in a background thread. Stop = finish the current slab, park with nothing in
-the cup, then halt (the same as Ctrl-C once on the command line).
+the cup, then halt (the same as Ctrl-C once on the command line). If a stop leaves a slab on the
+cup, the machine stays open with the pump holding it, and the page offers Vent (hold the slab first).
 """
 
 from __future__ import annotations
@@ -81,9 +82,11 @@ class SimProvider:
 
 # ---------------------------------------------------------------------- run manager
 class RunManager:
-    def __init__(self, cfg: Config, provider, out_dir: Path | None = None):
+    def __init__(self, cfg: Config, provider, out_dir: Path | None = None, reload=None, cal_path: Path | None = None):
         self.cfg = cfg
         self.provider = provider
+        self.reload = reload  # () -> Config: machine.toml + calibration.toml read again on every start/resume
+        self.cal_path = cal_path  # refuse to start/resume until calibrate z and x are in it (real machine)
         self.out_dir = Path(out_dir or cfg.out_dir)
         self.out_dir.mkdir(parents=True, exist_ok=True)
         self.lock = threading.Lock()
@@ -104,22 +107,60 @@ class RunManager:
     def busy(self) -> bool:
         return self.thread is not None and self.thread.is_alive()
 
+    def _fresh_cfg(self) -> Config:
+        from .cli import CALIBRATION_MISSING, is_calibrated
+
+        if self.cal_path is not None and not is_calibrated(self.cal_path):
+            raise RuntimeError(CALIBRATION_MISSING.format(cal=self.cal_path))
+        if self.reload is not None:
+            self.cfg = self.reload()
+            self.provider.cfg = self.cfg
+        if self.slab_on_cup():
+            raise RuntimeError(f"A slab is on the cup (from {self.slab_on_cup()}): hold it, press Vent, put it back on its stack first.")
+        return self.cfg
+
+    def slab_on_cup(self) -> str | None:
+        r = self.runner
+        return r.slab_on_cup if (r is not None and not self.busy()) else None
+
+    def vent(self) -> str:
+        """The operator holds the slab left on the cup; let it go."""
+        with self.lock:
+            if self.busy():
+                raise RuntimeError("the machine is running")
+            r = self.runner
+            where = r.slab_on_cup if r is not None else None
+            hw = getattr(self.provider, "hw", None)
+            if not where or hw is None or hw.vacuum is None:
+                raise RuntimeError("nothing to vent")
+            if r.freeze == "vent_failed":
+                raise RuntimeError("The vent valve failed: pull the vacuum tube off the cup fitting by hand (the slab rests on its stack).")
+            hw.vacuum.release()
+            r.holding, r.held_from = False, None
+            if r.freeze == "hold":
+                r.freeze = None
+            self._log(f"vented the cup (slab from {where}): put it face-down on top of the pocket it came from")
+            if self.state == "error":
+                self.provider.invalidate()
+            return where
+
     def start(self, name: str | None = None, front_photo: str | None = None) -> str:
         import dataclasses
 
         from .cli import new_batch_id
 
-        cfg = dataclasses.replace(self.cfg, front_photo=front_photo) if front_photo in ("always", "fallback") else self.cfg
         with self.lock:
             if self.busy():
                 raise RuntimeError("a run is already going")
+            base = self._fresh_cfg()
+            cfg = dataclasses.replace(base, front_photo=front_photo) if front_photo in ("always", "fallback") else base
             writer = BatchWriter(self.out_dir, new_batch_id(name, "sim-" if self.provider.sim else ""))
             (writer.dir / "run.json").write_text(json.dumps({"name": name, "front_photo": cfg.front_photo, "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
                                                              "sim": self.provider.sim, "via": "web"}, indent=2))
             self._launch(cfg, writer, resume=False, fresh=True)
             return writer.batch_id
 
-    def resume(self, batch_id: str, accept_heights: bool = False) -> str:
+    def resume(self, batch_id: str, accept_heights: bool = False, face_down_ok: bool = False) -> str:
         import dataclasses
 
         from .cli import run_options
@@ -127,12 +168,13 @@ class RunManager:
         if not _BATCH_RE.match(batch_id or "") or not (self.out_dir / batch_id / "journal.jsonl").exists():
             raise ValueError(f"no such batch: {batch_id}")
         opts = run_options(self.out_dir / batch_id)
-        cfg = dataclasses.replace(self.cfg, front_photo=opts["front_photo"]) if opts.get("front_photo") in ("always", "fallback") else self.cfg
         with self.lock:
             if self.busy():
                 raise RuntimeError("a run is already going")
+            base = self._fresh_cfg()
+            cfg = dataclasses.replace(base, front_photo=opts["front_photo"]) if opts.get("front_photo") in ("always", "fallback") else base
             writer = BatchWriter.reopen(self.out_dir / batch_id)
-            self._launch(cfg, writer, resume=True, fresh=False, accept_heights=accept_heights)
+            self._launch(cfg, writer, resume=True, fresh=False, accept_heights=accept_heights, face_down_ok=face_down_ok)
             return batch_id
 
     def stop(self) -> None:
@@ -141,16 +183,16 @@ class RunManager:
             self.state = "stopping"
             self._log("stop requested: finishing the current slab")
 
-    def _launch(self, cfg, writer, resume, fresh, accept_heights=False) -> None:
+    def _launch(self, cfg, writer, resume, fresh, accept_heights=False, face_down_ok=False) -> None:
         self.stop_flag.clear()
         self.writer, self.summary, self.message, self.runner = writer, None, "", None
         self.state = "running"
         self.started, self.ended = time.time(), None
         self._log(("resuming " if resume else "starting ") + writer.batch_id)
-        self.thread = threading.Thread(target=self._work, args=(cfg, writer, resume, fresh, accept_heights), daemon=True, name="slabrail-run")
+        self.thread = threading.Thread(target=self._work, args=(cfg, writer, resume, fresh, accept_heights, face_down_ok), daemon=True, name="slabrail-run")
         self.thread.start()
 
-    def _work(self, cfg, writer, resume, fresh, accept_heights) -> None:
+    def _work(self, cfg, writer, resume, fresh, accept_heights, face_down_ok=False) -> None:
         from . import cli
 
         con = Console(out=self._log)
@@ -163,7 +205,7 @@ class RunManager:
             return
         try:
             code, summary, msg = cli.execute_batch(cfg, hw, writer, con, resume=resume, accept_heights=accept_heights, stop_flag=self.stop_flag,
-                                                   on_runner=lambda r: setattr(self, "runner", r))
+                                                   on_runner=lambda r: setattr(self, "runner", r), cal_path=self.cal_path, face_down_ok=face_down_ok)
         except Exception as e:  # noqa: BLE001 - never let the worker thread die silently
             code, summary, msg = 1, None, f"{type(e).__name__}: {e}"
         self.ended = time.time()
@@ -176,7 +218,8 @@ class RunManager:
         else:
             self.state, self.message = "error", msg
             self._log("ERROR: " + msg)
-            self.provider.invalidate()
+            if not (self.runner is not None and self.runner.slab_on_cup):
+                self.provider.invalidate()  # with a slab on the cup the pump must keep running: closed after Vent
 
     # status
     def status(self) -> dict:
@@ -220,6 +263,7 @@ class RunManager:
             "mean_cycle_s": round(mean, 2) if mean else None,
             "eta_s": round(eta) if eta is not None else None,
             "summary": self.summary,
+            "slab_on_cup": self.slab_on_cup(),
             "files": [{"name": f, "url": f"/batches/{bid}/{f}"} for f in files],
             "log": list(self.log)[-15:],
         }
@@ -238,9 +282,9 @@ class RunManager:
 
 
 # ---------------------------------------------------------------------- app
-def create_app(cfg: Config, provider, out_dir: Path | None = None) -> Flask:
+def create_app(cfg: Config, provider, out_dir: Path | None = None, reload=None, cal_path: Path | None = None) -> Flask:
     app = Flask(__name__)
-    mgr = RunManager(cfg, provider, out_dir)
+    mgr = RunManager(cfg, provider, out_dir, reload=reload, cal_path=cal_path)
     app.config["MANAGER"] = mgr
 
     def guard():
@@ -282,13 +326,23 @@ def create_app(cfg: Config, provider, out_dir: Path | None = None) -> Flask:
     def api_resume():
         guard()
         b = body()
+        yes = lambda k: str(b.get(k, "")).lower() in ("1", "true", "on", "yes")  # noqa: E731
         try:
-            bid = mgr.resume(b.get("batch", ""), str(b.get("accept_heights", "")).lower() in ("1", "true", "on", "yes"))
+            bid = mgr.resume(b.get("batch", ""), yes("accept_heights"), yes("face_down_ok"))
         except ValueError as e:
             return jsonify(error=str(e)), 404
         except RuntimeError as e:
             return jsonify(error=str(e)), 409
         return jsonify(ok=True, batch_id=bid)
+
+    @app.post("/api/vent")
+    def api_vent():
+        guard()
+        try:
+            where = mgr.vent()
+        except RuntimeError as e:
+            return jsonify(error=str(e)), 409
+        return jsonify(ok=True, slab_from=where)
 
     @app.get("/batches/<batch_id>/<path:fname>")
     def batch_file(batch_id, fname):
@@ -341,6 +395,7 @@ a{color:var(--accent)}pre{white-space:pre-wrap;font-size:12px;color:var(--mute);
 </style></head><body><main>
 <h1>SlabRail <span id="state" class="badge">...</span><span id="sim" class="badge" hidden>SIM</span></h1>
 <div id="msg" class="card msg" hidden></div>
+<div id="cupcard" class="card msg" hidden><div id="cupmsg"></div><div class="row"><button class="stop" id="vent">I am holding the slab: Vent the cup</button></div></div>
 <div class="card">
   <div class="big"><span id="done">0</span><span class="mute" id="of"></span></div>
   <div class="bar"><div id="bar"></div></div>
@@ -354,6 +409,7 @@ a{color:var(--accent)}pre{white-space:pre-wrap;font-size:12px;color:var(--mute);
   <div class="row"><button class="go" id="start">Start run</button><button class="stop" id="stop">Stop after this slab</button></div>
   <div class="row"><select id="resumeSel"></select><button id="resume">Resume</button></div>
   <label class="mute"><input type="checkbox" id="accept" style="min-height:0"> accept changed stack heights on resume</label>
+  <label class="mute"><input type="checkbox" id="facedown" style="min-height:0"> the top slab it stopped on is face-down (I checked)</label>
 </div>
 <div class="card" id="imgcard" hidden><div class="mute">last label</div><img class="label" id="img" alt="last label photo"></div>
 <div class="card"><div class="mute">last 10 slabs</div><div class="tablewrap"><table><thead><tr><th>#</th><th>cert</th><th>status</th><th>now in</th></tr></thead><tbody id="rows"></tbody></table></div></div>
@@ -370,6 +426,7 @@ async function refresh(){
   let s;try{s=await (await fetch('/api/status')).json()}catch(e){$('state').textContent='offline';return}
   $('state').textContent=s.state;$('state').className='badge '+s.state;$('sim').hidden=!s.sim;
   $('msg').hidden=!s.message;$('msg').textContent=s.message||'';
+  $('cupcard').hidden=!s.slab_on_cup;$('cupmsg').textContent=s.slab_on_cup?`A slab is on the cup (from ${s.slab_on_cup}); the pump is holding it. Hold it with one hand, then press Vent, and put it face-down back on that stack.`:'';
   $('done').textContent=s.done;$('of').textContent=s.expected?` / ~${s.expected} slabs`:' slabs';
   $('bar').style.width=s.expected?Math.min(100,100*s.done/s.expected)+'%':'0';
   let w=[];if(s.batch_id)w.push('batch '+s.batch_id);if(s.phase==='survey')w.push('measuring the stacks');
@@ -394,7 +451,8 @@ async function batches(){
 }
 $('start').onclick=()=>{if(confirm('Slabs face-down, label toward you, pockets 0 and 12 empty, hands clear?'))post('/api/start',{name:$('name').value,front_photo:$('fp').value})};
 $('stop').onclick=()=>post('/api/stop');
-$('resume').onclick=()=>{const v=$('resumeSel').value;if(v&&confirm('Resume '+v+'? Hands clear?'))post('/api/resume',{batch:v,accept_heights:$('accept').checked})};
+$('resume').onclick=()=>{const v=$('resumeSel').value;if(v&&confirm('Resume '+v+'? Hands clear?'))post('/api/resume',{batch:v,accept_heights:$('accept').checked,face_down_ok:$('facedown').checked})};
+$('vent').onclick=()=>{if(confirm('Are you holding the slab? It lets go when the cup vents.'))post('/api/vent')};
 refresh();batches();setInterval(refresh,2000);setInterval(batches,10000);
 </script></body></html>
 """

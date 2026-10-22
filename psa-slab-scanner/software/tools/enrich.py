@@ -8,7 +8,8 @@ and export it as PSA_API_TOKEN (or pass --token).
 Limits it respects (see docs/RESEARCH.md):
   * free accounts get about 100 calls/day: calls are counted in a local SQLite file and the tool
     stops at --daily-limit; run it again tomorrow and it continues where it stopped;
-  * every answer is cached forever (a cert's card never changes), so re-runs cost nothing;
+  * found certs are cached forever (a cert's card never changes), so re-runs cost nothing; "no data"
+    and error answers are asked again after --retry-days (PSA may not have indexed a new cert yet);
   * since mid-2026 many new tokens get 403 "limited to approved customers": the tool stops, keeps
     what it has, and tells you to email collectors-apis@collectors.com.
 Only PSA certs are looked up (the PSA API cannot look up CGC certs).
@@ -18,34 +19,21 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
 import sys
 import urllib.error
 from pathlib import Path
 
-from slabscan.psa_api import NotApproved, PsaClient, QuotaExhausted, flatten
+from slabscan.psa_api import NotApproved, PsaClient, QuotaExhausted, classify, flatten
 
 PSA_FIELDS = ["CertNumber", "Year", "Brand", "Category", "CardNumber", "Subject", "Variety", "CardGrade", "GradeDescription", "TotalPopulation", "PopulationHigher", "LabelType", "ReverseBarCode"]
 EXTRA = ["enrich_status", "enrich_note"] + [f"psa_{k}" for k in PSA_FIELDS]
 
 
-def classify(payload: dict) -> tuple[str, str]:
-    """PSA answers 200 even when nothing matched; the body says which (PSA API documentation)."""
-    if not isinstance(payload, dict):
-        return "error", "unexpected answer"
-    cert = payload.get("PSACert")
-    if isinstance(cert, dict) and cert:
-        return "ok", ""
-    msg = str(payload.get("ServerMessage", ""))
-    if payload.get("IsValidRequest") is False:
-        return "invalid", msg or "invalid cert number"
-    if "no data" in msg.lower():
-        return "not_found", msg
-    return "error", msg or json.dumps(payload)[:120]
+__all__ = ["classify", "enrich", "main"]  # classify now lives in slabscan.psa_api (the cache needs it)
 
 
 def enrich(batch_dir: Path, token: str | None = None, daily_limit: int = 100, cache: Path | None = None, include_review: bool = False,
-           max_calls: int | None = None, interval_s: float = 1.0, log=print) -> dict:
+           max_calls: int | None = None, interval_s: float = 1.0, log=print, retry_days: float = 7.0) -> dict:
     batch_dir = Path(batch_dir)
     src = batch_dir / "certs.csv"
     if not src.exists():
@@ -59,7 +47,7 @@ def enrich(batch_dir: Path, token: str | None = None, daily_limit: int = 100, ca
     for r in rows:
         if r.get("cert") and r.get("status") in wanted_status and r.get("grader", "PSA") in ("PSA", "unknown") and r["cert"] not in todo:
             todo.append(r["cert"])
-    client = PsaClient(cache or batch_dir.parent / "psa_cache.sqlite", token=token, daily_limit=daily_limit, min_interval_s=interval_s)
+    client = PsaClient(cache or batch_dir.parent / "psa_cache.sqlite", token=token, daily_limit=daily_limit, min_interval_s=interval_s, retry_days=retry_days)
     results: dict[str, tuple[str, str, dict]] = {}
     blocked = ""
     calls = 0
@@ -71,7 +59,8 @@ def enrich(batch_dir: Path, token: str | None = None, daily_limit: int = 100, ca
             results[cert] = (st, note or "cached", hit)
             continue
         if blocked:
-            results[cert] = ("pending", blocked, {})
+            stale = client.cached(cert, stale_ok=True)  # an old 'not found' is still the best answer we have
+            results[cert] = (classify(stale)[0], "cached, could not re-check: " + blocked, stale) if stale is not None else ("pending", blocked, {})
             continue
         if max_calls is not None and calls >= max_calls:
             blocked = f"stopped at --max {max_calls} calls"
@@ -135,9 +124,10 @@ def main(argv=None) -> int:
     ap.add_argument("--cache", type=Path, default=None, help="SQLite cache (default: batches/psa_cache.sqlite, shared by all batches)")
     ap.add_argument("--include-review", action="store_true", help="also look up needs_review certs (OCR-only reads)")
     ap.add_argument("--interval", type=float, default=1.0, help="seconds between calls")
+    ap.add_argument("--retry-days", type=float, default=7.0, help="ask again about certs PSA answered 'no data' (or an error) for after this many days")
     a = ap.parse_args(argv)
     try:
-        s = enrich(a.batch_dir, a.token, a.daily_limit, a.cache, a.include_review, a.max_calls, a.interval)
+        s = enrich(a.batch_dir, a.token, a.daily_limit, a.cache, a.include_review, a.max_calls, a.interval, retry_days=a.retry_days)
     except FileNotFoundError as e:
         print(e)
         return 1

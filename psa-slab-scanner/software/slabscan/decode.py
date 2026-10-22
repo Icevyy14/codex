@@ -54,13 +54,29 @@ def _zxing_pass(gray: np.ndarray, camera: str, custom_regex: str | None) -> tupl
 _clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
 
 
-def decode_frame(img: np.ndarray, camera: str = "", custom_regex: str | None = None, allow_ocr: bool = True) -> tuple[list[CodeRead], list[str]]:
+def crop_roi(img: np.ndarray, roi: tuple[float, float, float, float] | None) -> np.ndarray:
+    """Crop to ``roi`` = (x0, y0, x1, y1) as fractions of the width/height (None = whole frame)."""
+    if roi is None:
+        return img
+    h, w = img.shape[:2]
+    x0, y0, x1, y1 = roi
+    a, b = max(0, int(round(x0 * w))), min(w, int(round(x1 * w)))
+    c, d = max(0, int(round(y0 * h))), min(h, int(round(y1 * h)))
+    if b - a < 8 or d - c < 8:
+        return img
+    return img[c:d, a:b]
+
+
+def decode_frame(img: np.ndarray, camera: str = "", custom_regex: str | None = None, allow_ocr: bool = True,
+                 roi: tuple[float, float, float, float] | None = None) -> tuple[list[CodeRead], list[str]]:
     """Return (cert reads, unparsed payloads) for one frame.
 
     ``unparsed`` holds decoded symbols that did not look like a cert. They are logged
-    so that calibration can reveal PSA's real payload format.
+    so that calibration can reveal PSA's real payload format. ``roi`` crops the frame first
+    (the head camera also sees the neighbouring pockets' labels; only the slab under the
+    cup may be read).
     """
-    gray = _to_gray(img)
+    gray = _to_gray(crop_roi(img, roi))
     all_unparsed: list[str] = []
     passes = (
         lambda g: [g],

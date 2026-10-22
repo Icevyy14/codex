@@ -158,3 +158,33 @@ def test_ocr_skips_frames_with_nothing_printed():
     t0 = time.monotonic()
     assert ocr_digits(blank, "back") == []
     assert time.monotonic() - t0 < 2.0
+
+
+def test_enrich_asks_again_about_a_cert_psa_had_not_indexed(tmp_path, monkeypatch):
+    """software-22: a 'No data found' answer was cached forever; it is asked again after retry_days."""
+    d = _batch(tmp_path)
+    urlopen, calls = _fake_urlopen(lambda cert, n: _ok(cert) if cert != "45210987" or n > 3 else {"IsValidRequest": True, "ServerMessage": "No data found"})
+    monkeypatch.setattr(psa_api.urllib.request, "urlopen", urlopen)
+    enrich.enrich(d, token="t", interval_s=0, log=lambda *_: None)
+    assert _read(d)["3"]["enrich_status"] == "not_found"
+    enrich.enrich(d, token="t", interval_s=0, log=lambda *_: None)  # within retry_days: from the cache
+    assert len(calls) == 3
+    enrich.enrich(d, token="t", interval_s=0, log=lambda *_: None, retry_days=0)  # later: asked again, now indexed
+    assert len(calls) == 4 and calls[-1] == "45210987" and _read(d)["3"]["enrich_status"] == "ok"
+    enrich.enrich(d, token="t", interval_s=0, log=lambda *_: None, retry_days=0)  # 'ok' answers are final
+    assert len(calls) == 4
+
+
+def test_phase0_report_is_honest_about_what_zero_wrong_proves():
+    """software-20 / usability-cost-15: 0 wrong of 30 only bounds the wrong-read rate below ~10%; GO needs every
+    slab typed."""
+    from slabscan.certs import CodeRead, ItfModel, Verdict
+    from tools.phase0 import phase0_report
+
+    qr = lambda c: CodeRead(c, "back_qr", "QRCode", f"https://www.psacard.com/cert/{c}")  # noqa: E731
+    rows = [(c, Verdict("ok", c, ("back_qr",)), {"back": ([qr(c)], [], 1.0), "front": ([], [], 1.0)}) for c in (str(148069831 + i) for i in range(30))]
+    rep = "\n".join(phase0_report(rows, ItfModel()))
+    assert "GO:" in rep and "HOLD" not in rep and "below about 10%" in rep
+    rows[3] = ("", rows[3][1], rows[3][2])  # one slab not typed
+    rep = "\n".join(phase0_report(rows, ItfModel()))
+    assert "HOLD:" in rep and "1 NOT typed" in rep and "instructor" in rep

@@ -55,8 +55,12 @@ spi:
 start:
   # Stay in alarm after every power-up or reset until $H has run.
   must_home: true
-  # Alarm at boot if a limit switch already reads triggered. With NC switches this also
-  # catches an unplugged or broken switch wire before anything moves.
+  # check_limits is parsed but NOT acted on by FluidNC v4.1.1 (nothing in its source reads
+  # it; at boot it only logs "Input pin(s) active on startup"). It is kept for builds that
+  # use it. What really catches a cut NC switch wire: must_home keeps the alarm, and $H
+  # then moves 3 mm away from the "pressed" switch (Z: down, at the homing feed) and fails
+  # with ALARM (homing fail pulloff). Check the $Limits line before the first $H
+  # (docs/FIRMWARE.md step 3 and step 5).
   check_limits: true
 
 axes:
@@ -70,13 +74,12 @@ axes:
     max_rate_mm_per_min: 15000.000
     acceleration_mm_per_sec2: 2000.000
     # Soft limits run from mpos_mm (22) up to 22 + 1231 = 1253 mm.
-    # Why these numbers (cad/layout.py + cad/model.py, October 2026):
+    # Why these numbers (cad/layout.py X_HARD_STOP + cad/model.py, October 2026):
     #   - Pocket centres span 42 .. 1238.
-    #   - The MGN12H carriage leaves its 1300 mm rail when the cup is below X 12.7
-    #     or above X 1267. The X bracket hits the idler mount at X 8 and the motor
-    #     mount at X 1266.
-    #   - So 22 .. 1253 keeps about 10 mm of steel on both ends and still leaves
-    #     15-20 mm of room for the calibrate-x offset.
+    #   - Printed end bumpers stop the x_bracket at cup X 15 (x_bumper_L) and X 1262
+    #     (the left end of x_motor_mount). The MGN12H carriage still has 2.3 / 5.3 mm
+    #     on its 1300 mm rail there (cad/out/checks.txt).
+    #   - So 22 .. 1253 stays 7 / 9 mm inside the bumpers.
     # If the rail length or pocket count changes, recompute both numbers.
     max_travel_mm: 1231.000
     soft_limits: true
@@ -89,7 +92,8 @@ axes:
       positive_direction: false
       # Machine X after homing and pull-off. The switch trips at about 22 - 3 = 19.
       # Mount the X switch so it clicks when the cup axis is about 23 mm left of the
-      # pocket-0 centre, i.e. 19 mm in layout X. Within +/-3 mm is fine.
+      # pocket-0 centre, i.e. 19 mm in layout X, within +/-2 mm: the left bumper is at
+      # X 15, and the switch must trip at least 2 mm before it.
       mpos_mm: 22.000
       # Slow second touch, for repeatable homing.
       feed_mm_per_min: 300.000
@@ -125,12 +129,15 @@ axes:
         step_pin: I2SO.2
         direction_pin: I2SO.1
         disable_pin: I2SO.0
-        # CHECK YOUR BOARD BEFORE THE FIRST POWER-UP (docs/FIRMWARE.md step 1).
+        # CHECK YOUR BOARD BEFORE THE FIRST POWER-UP (docs/FIRMWARE.md step 0).
         # Rodent V1.1 manual and a V1.1 owner both give 75 mOhm sense resistors
         # (marking "R075"). The V1.0 schematic and BTT's rodent.yaml give 22 mOhm
-        # ("R022"). Set the value printed on YOUR board. If this says 0.075 but the
-        # board has 0.022, the motors get 3.4x the current set below and overheat.
-        r_sense_ohms: 0.075
+        # ("R022"). This file ships with 0.022 on purpose: on an R075 board that
+        # gives 0.29x the current below (weak motors at first homing, no slab in the
+        # machine), while the opposite mistake (0.075 on an R022 board) gives 3.4x,
+        # held all the time (idle_ms 255), in PETG mounts. Change ALL FOUR
+        # r_sense_ohms lines to 0.075 only after you have READ "R075" on your board.
+        r_sense_ohms: 0.022
         # Contract: X run 1.0 A. The motor (17HS19-2004S1) is rated 2.0 A.
         run_amps: 1.000
         hold_amps: 0.500
@@ -163,7 +170,7 @@ axes:
         step_pin: I2SO.5
         direction_pin: I2SO.4
         disable_pin: I2SO.7
-        r_sense_ohms: 0.075
+        r_sense_ohms: 0.022
         run_amps: 1.000
         hold_amps: 0.500
         microsteps: 16
@@ -189,9 +196,10 @@ axes:
     # Why -8: probing the bare pad trips at about c = -2 (2 mm of buffer squeeze).
     # The software then probes up to 2 mm further, plus +/-3 mm of calibration
     # spread. The top is 255 because the contract's C_MAX is 250.
-    # cad/layout.py puts the Z carriage 243 mm above the cup face, so it stays on
-    # its rail down to c = -12 (it would leave the rail at c = -16). The -8 limit
-    # is inside that with margin (cad/out/checks.txt).
+    # cad/layout.py puts the Z carriage 295 mm above the cup face. Printed hard
+    # stops: the z_end_cap catches the carriage at c = -14 (it would leave its rail
+    # at c = -19), and the z_plate meets the z_motor_mount at c = 262 (3.6 mm of
+    # carriage still on the rail). -8 .. 255 is inside both (cad/out/checks.txt).
     max_travel_mm: 263.000
     soft_limits: true
     homing:
@@ -201,7 +209,7 @@ axes:
       # Home toward Z maximum (top).
       positive_direction: true
       # Machine Z (cup face height) after homing and pull-off. The switch trips at
-      # about c = 258. The Z carriage only runs out of rail at about c = 268.
+      # about c = 258 (+/-2), 4 mm below the top hard stop at c = 262.
       mpos_mm: 255.000
       feed_mm_per_min: 150.000
       seek_mm_per_min: 1500.000
@@ -223,8 +231,11 @@ axes:
         step_pin: I2SO.10
         direction_pin: I2SO.9
         disable_pin: I2SO.8
-        r_sense_ohms: 0.075
-        # Contract: Z run 0.8 A, hold 0.5 A, so the head stays up.
+        r_sense_ohms: 0.022
+        # Contract: Z run 0.8 A, hold 0.5 A, so the head stays up. Right for the BOM's
+        # 1.5-2.0 A, <= 4 mH motor. Keep run_amps <= 70 % and hold_amps <= 50 % of YOUR
+        # motor's rated current. A 0.4-0.6 A high-impedance "integrated lead screw"
+        # motor cannot run Z at 6000 mm/min on 24 V: do not use one (docs/BOM.csv).
         run_amps: 0.800
         hold_amps: 0.500
         microsteps: 16
@@ -252,7 +263,7 @@ axes:
         step_pin: I2SO.13
         direction_pin: I2SO.12
         disable_pin: I2SO.15
-        r_sense_ohms: 0.075
+        r_sense_ohms: 0.022
         run_amps: 0.800
         hold_amps: 0.500
         microsteps: 16
@@ -281,6 +292,15 @@ probe:
   # Active high, so no :low attribute. The 10k pull-up is on the board.
   pin: gpio.34
   check_mode_start: true
+  # Any probe trip during a move that is NOT a G38 probe (a G1 lift or traverse, a jog,
+  # homing) stops the machine at once with a critical alarm (FluidNC "Probe Hard
+  # Limit"; needs a reset and $H). The software makes every downward move a guarded
+  # G38.3 already; this also covers upward and sideways moves and lost-step cases.
+  # Validate it: FIRMWARE.md step 7, and the 300 pick/peel cycles of BUILD_GUIDE 13.2
+  # must give ZERO such alarms. If the optical flag chatters at the slot edge during
+  # the slow peel and trips it, add hysteresis to the sensor output (Schmitt buffer,
+  # BUILD_GUIDE 13.2) - or set this false and live without it.
+  probe_hard_limit: true
 
 status_outputs:
   # The board's three status LEDs (BTT pins). Useful when the Pi is not connected.

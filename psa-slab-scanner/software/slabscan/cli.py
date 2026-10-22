@@ -6,9 +6,9 @@
   calibrate z                     probe the bare pad of pocket 0 -> pad_trigger_c
   calibrate x [--no-rods]         centre the awl on pocket 0 and pocket 12 -> offset_x + scale check
   focus head|station [--save]     sharpness + decode score (station: LensPosition sweep)
-  mark [--start N]                walk the awl over every pocket for the drill template
+  mark [--start N | --only N,M]   walk the awl over every pocket for the drill template
   run [--name NAME] [--front-photo always|fallback] [--yes]
-  resume BATCH_DIR [--accept-heights]
+  resume BATCH_DIR [--accept-heights] [--face-down-ok] [--yes]
   sim [--slabs N]                 full simulated batch, no hardware
   web [--port 8080]               phone page: start/stop/resume, progress, downloads
   phase0 [--sim N] [--out DIR]    Phase 0 camera read-rate test (tools/phase0.py; its own options)
@@ -33,7 +33,7 @@ from .config import Config, from_layout, load
 from .motion import ControllerLost, MotionError
 from .ops import CalError, Console, calibrate_x, calibrate_z, focus, mark, mark_order, selftest
 from .results import BatchWriter
-from .runner import Runner, Stop
+from .runner import HardStop, Runner, Stop
 
 SOFTWARE_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = SOFTWARE_DIR / "config" / "machine.toml"
@@ -110,23 +110,38 @@ def summary_lines(summary: dict, batch_dir: Path) -> list[str]:
     return out
 
 
+CALIBRATION_MISSING = ("{cal} has no pad_trigger_c / offset_x yet. Run `calibrate z` and `calibrate x` first: an uncalibrated X offset "
+                       "larger than the 1.85 mm pocket play lowers held slabs onto the rods.")
+
+
 def execute_batch(cfg: Config, hw, writer: BatchWriter, con: Console, resume: bool = False, accept_heights: bool = False,
-                  stop_flag: threading.Event | None = None, on_runner=None) -> tuple[int, dict | None, str]:
+                  stop_flag: threading.Event | None = None, on_runner=None, cal_path: Path | None = None,
+                  face_down_ok: bool = False) -> tuple[int, dict | None, str]:
     """Run or resume one batch. Returns (exit code, summary or None, message). Writes stop.json on a halt.
-    ``on_runner(runner)`` is called before the run starts (the web page reads live progress from it)."""
+    ``on_runner(runner)`` is called before the run starts (the web page reads live progress from it).
+    ``cal_path``: refuse to move unless that calibration.toml has calibrate z and x in it (every real
+    entry point passes it: CLI run/resume and the web page)."""
+    if cal_path is not None and not is_calibrated(cal_path):
+        msg = CALIBRATION_MISSING.format(cal=cal_path)
+        write_stop(writer.dir, msg, "error")
+        return 1, None, msg
     stop_flag = stop_flag or threading.Event()
     runner = Runner(cfg, hw.motion, hw.vacuum, hw.lights, hw.head_cam, hw.station_cam, writer, lid=hw.lid, gate=hw.gate, log=con.say, should_stop=stop_flag.is_set)
     if on_runner is not None:
         on_runner(runner)
     try:
-        summary = runner.resume(accept_heights) if resume else runner.run()
+        summary = runner.resume(accept_heights, face_down_ok=face_down_ok) if resume else runner.run()
         clear_stop(writer.dir)
         return 0, summary, ""
+    except HardStop as e:
+        write_stop(writer.dir, str(e), "interrupt")
+        return 130, None, str(e)
     except Stop as e:
         write_stop(writer.dir, str(e))
         return 2, None, str(e)
     except KeyboardInterrupt:
-        msg = "Interrupted (Ctrl-C twice) in the middle of a move. A slab may be in the cup: check the head before touching the bed. Then resume."
+        msg = ("Interrupted (Ctrl-C) during the stop itself. The head may have stopped anywhere and a slab may be in the cup: check the head "
+               "before touching the bed. Then resume (it homes first).")
         write_stop(writer.dir, msg, "interrupt")
         return 130, None, msg
     except Exception as e:  # noqa: BLE001 - controller / camera failure: record it for resume and the web page
@@ -157,9 +172,9 @@ def _one_slab_on_pocket0(cfg: Config):
 
 # ---------------------------------------------------------------------- commands
 def cmd_selftest(args, con):
-    cfg, _ = load_config(args)
+    cfg, cal = load_config(args)
     hw = _hw(args, cfg, ()) if args.sim else None
-    return selftest(cfg, con, hw=hw, sim=args.sim, interactive=args.interactive, do_motion=args.motion, out_dir=Path(args.images))
+    return selftest(cfg, con, hw=hw, sim=args.sim, interactive=args.interactive, do_motion=args.motion, out_dir=Path(args.images), cal_path=cal)
 
 
 def cmd_home(args, con):
@@ -251,12 +266,54 @@ def cmd_mark(args, con):
         hw.close()
 
 
+def _hold_until_interrupt() -> None:
+    try:
+        while True:
+            time.sleep(60)
+    except KeyboardInterrupt:
+        pass
+
+
+def hand_off_slab(con, vac, runner, wait=None) -> None:
+    """A stop left a slab (or maybe one) on the cup. Keep the pump holding it while this process runs, and
+    vent only when the operator says they hold it. Never just exit: hw.close() shuts the valves and the
+    slab then hangs on the closed cup line only until it leaks off (seconds to tens of seconds)."""
+    where = getattr(runner, "slab_on_cup", None) if runner is not None else None
+    if not where or vac is None:
+        return
+    if runner.freeze == "vent_failed":
+        con.say("THE VENT FAILED: a slab rests on the stack under the cup, still sealed to it, with both valves shut. It is supported, so it "
+                "cannot fall. Hold it and pull the vacuum tube off the cup fitting (or unscrew the cup) to free it; never slide it sideways.")
+        return
+    try:
+        vac.hold()
+    except Exception:  # noqa: BLE001
+        pass
+    con.say(f"A SLAB IS (OR MAY BE) ON THE CUP - from {where}. The pump keeps holding it while this program runs: do not close it yet.")
+    while True:
+        a = con.ask("Hold the slab with one hand, then type 'vent' and press Enter (the cup lets go): ").strip().lower()
+        if a == "vent":
+            vac.release()
+            runner.holding, runner.held_from = False, None
+            if runner.freeze == "hold":
+                runner.freeze = None
+            con.say("Vented. Put the slab face-down on top of the pocket it came from; it is read again on resume.")
+            return
+        if a == "q":  # 'q' or no keyboard (end of input)
+            con.say("No answer: the pump keeps holding the slab until you press Ctrl-C here. Hold the slab first - after Ctrl-C the valves "
+                    "shut and it hangs on the closed line for a short while only.")
+            (wait or _hold_until_interrupt)()
+            return
+        con.say("Type vent (or press Ctrl-C to quit with the valves shut).")
+
+
 def _sigint_stop(con, stop_flag):
     def handler(sig, frame):
         if stop_flag.is_set():
             raise KeyboardInterrupt
         stop_flag.set()
-        con.say("Stopping after this slab (nothing will be left in the cup). Ctrl-C again = stop NOW.")
+        con.say("Stopping after this slab (nothing will be left in the cup). Ctrl-C again = halt the motors NOW, where they are "
+                "(nothing moves after that; a slab in the cup stays on it, held by the pump, and you take it off).")
 
     if threading.current_thread() is threading.main_thread():
         return signal.signal(signal.SIGINT, handler)
@@ -279,15 +336,27 @@ def cmd_run(args, con):
     writer = BatchWriter(Path(cfg.out_dir), new_batch_id(args.name, "sim-" if args.sim else ""))
     (writer.dir / "run.json").write_text(json.dumps({"name": args.name, "front_photo": cfg.front_photo, "started": time.strftime("%Y-%m-%dT%H:%M:%S"), "sim": bool(args.sim)}, indent=2))
     con.say(f"batch {writer.batch_id} -> {writer.dir}   (Ctrl-C = stop after the current slab)")
+    return _execute_and_hand_off(cfg, hw, writer, con, cal_path=None if (args.sim or args.uncalibrated) else cal)
+
+
+def _execute_and_hand_off(cfg, hw, writer, con, **kw) -> int:
+    """execute_batch with Ctrl-C handling; then, if the stop left a slab on the cup, the operator takes it
+    before the hardware is closed."""
     stop_flag = threading.Event()
-    old = _sigint_stop(con, stop_flag)
+    runners: list = []
     try:
-        code, summary, msg = execute_batch(cfg, hw, writer, con, stop_flag=stop_flag)
+        old = _sigint_stop(con, stop_flag)
+        try:
+            code, summary, msg = execute_batch(cfg, hw, writer, con, stop_flag=stop_flag, on_runner=runners.append, **kw)
+        finally:
+            if old is not None:
+                signal.signal(signal.SIGINT, old)
+        _report(con, code, summary, msg, writer)
+        if runners:
+            hand_off_slab(con, hw.vacuum, runners[0])
     finally:
-        if old is not None:
-            signal.signal(signal.SIGINT, old)
         hw.close()
-    return _report(con, code, summary, msg, writer)
+    return code
 
 
 def _report(con, code, summary, msg, writer) -> int:
@@ -301,7 +370,7 @@ def _report(con, code, summary, msg, writer) -> int:
 
 
 def cmd_resume(args, con):
-    cfg, _ = load_config(args)
+    cfg, cal = load_config(args)
     bdir = Path(args.batch_dir)
     if not (bdir / "journal.jsonl").exists() and not (bdir / "certs.csv").exists():
         con.say(f"{bdir} is not a batch folder (no journal.jsonl)")
@@ -314,18 +383,18 @@ def cmd_resume(args, con):
         cfg = dataclasses.replace(cfg, front_photo=opts["front_photo"])
     if (bdir / "stop.json").exists():
         con.say("last stop: " + json.loads((bdir / "stop.json").read_text()).get("message", ""))
+    if not is_calibrated(cal):
+        con.say(CALIBRATION_MISSING.format(cal=cal))
+        return 1
+    if not args.yes:
+        con.say("Before resuming: hands out of the machine (light roof on, if fitted). Any slab you took off the cup is back face-down on top of\n"
+                "the pocket it came from." + ("\n--face-down-ok: you checked that the top slab the face-down check stopped on IS face-down." if args.face_down_ok else ""))
+        if not con.confirm("Resume the run?"):
+            return 1
     hw = _hw(args, cfg, ("motion", "vacuum", "lights", "head_cam", "station_cam", "gate", "lid"))
     writer = BatchWriter.reopen(bdir)
     con.say(f"resuming {writer.batch_id}: {len(writer.rows)} slabs already done")
-    stop_flag = threading.Event()
-    old = _sigint_stop(con, stop_flag)
-    try:
-        code, summary, msg = execute_batch(cfg, hw, writer, con, resume=True, accept_heights=args.accept_heights, stop_flag=stop_flag)
-    finally:
-        if old is not None:
-            signal.signal(signal.SIGINT, old)
-        hw.close()
-    return _report(con, code, summary, msg, writer)
+    return _execute_and_hand_off(cfg, hw, writer, con, resume=True, accept_heights=args.accept_heights, cal_path=cal, face_down_ok=args.face_down_ok)
 
 
 class _Count:
@@ -384,6 +453,13 @@ def cmd_sim(args, con):
         cfg = dataclasses.replace(cfg, front_photo=args.front_photo)
     eras = tuple(float(x) for x in args.eras.split(","))
     stacks = sim_stacks(cfg, args.slabs, seed=args.seed, eras=eras, clingy_rate=args.clingy_rate, thick_rate=args.thick_rate)
+    unconfirmable = sum(1 for v in stacks.values() for sl in v if sl.era != "2017+" or sl.grader != "PSA")
+    if cfg.face_down_check != "off" and not args.face_down_check:
+        # Every simulated slab is face-down. On the machine, each slab without a PSA back-label QR stops the run
+        # until you confirm it (resume --face-down-ok): here that is reported instead, so the timing is for a full run.
+        cfg = dataclasses.replace(cfg, face_down_check="off")
+        con.say(f"(sim: face-down check off. On the machine {unconfirmable} of these {sum(len(v) for v in stacks.values())} slabs have no PSA "
+                "back-label QR, and each would stop the run until you confirm it is face-down: resume --face-down-ok)")
     hw = sim_hardware(cfg, stacks=stacks)
     hw.head_cam, hw.station_cam = _Count(hw.head_cam), _Count(hw.station_cam)
     hw.lights, hw.vacuum = _CountLights(hw.lights), _CountVac(hw.vacuum)
@@ -443,9 +519,11 @@ def cmd_phase0(args, con):
 def cmd_web(args, con):
     from .web import RealProvider, SimProvider, create_app, lan_address
 
-    cfg, _ = load_config(args)
+    cfg, cal = load_config(args)
     provider = SimProvider(cfg, slabs=args.sim_slabs) if args.sim else RealProvider(cfg)
-    app = create_app(cfg, provider)
+    # the real page reloads machine.toml + calibration.toml on every start/resume (calibrate z/x while the
+    # service runs must take effect) and refuses to move an uncalibrated machine
+    app = create_app(cfg, provider, reload=None if args.sim else (lambda: load_config(args)[0]), cal_path=None if args.sim else cal)
     con.say(f"SlabRail web page on http://{lan_address()}:{args.port}/  (LAN only - there is no login; anyone on this network can start the machine)")
     app.run(host=args.host, port=args.port, threaded=True, use_reloader=False)
     return 0
@@ -503,7 +581,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(fn=cmd_focus)
 
     p = sub.add_parser("mark", help="walk the awl over every pocket for the drill template")
-    p.add_argument("--start", type=int, default=0, help="skip pockets below this one")
+    p.add_argument("--start", type=int, default=None, help="continue from this pocket in the marking order (the 'order:' line; pockets 0 and 12 always come last)")
     p.add_argument("--only", help="comma-separated pockets, e.g. 0,12 (to continue after a break)")
     p.add_argument("--dry-run", action="store_true", help="only print the positions")
     p.set_defaults(fn=cmd_mark)
@@ -518,6 +596,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("resume", help="continue a stopped batch")
     p.add_argument("batch_dir")
     p.add_argument("--accept-heights", action="store_true", help="take the re-surveyed stack heights even if they changed")
+    p.add_argument("--face-down-ok", action="store_true", help="you checked the top slab the face-down check stopped on: it IS face-down")
+    p.add_argument("--yes", action="store_true", help="no 'hands clear?' question")
     p.set_defaults(fn=cmd_resume)
 
     p = sub.add_parser("sim", help="full simulated batch, no hardware")
@@ -529,6 +609,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--front-photo", choices=["always", "fallback"])
     p.add_argument("--name")
     p.add_argument("--quiet", action="store_true", help="no per-slab lines")
+    p.add_argument("--face-down-check", action="store_true", help="keep the face-down check on (it stops at every slab without a PSA back QR)")
     p.set_defaults(fn=cmd_sim)
 
     sub.add_parser("phase0", help="Phase 0 camera read-rate test, see `phase0 --help` (same as python -m tools.phase0)").set_defaults(fn=cmd_phase0)

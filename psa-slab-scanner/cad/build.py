@@ -45,6 +45,9 @@ def export_printed() -> list[dict]:
     d.mkdir(parents=True, exist_ok=True)
     rows = []
     for name, shape, qty, note in M.printed_catalog():
+        n = len(shape.solids().vals())
+        if n != 1:  # a floating island prints as spaghetti or a loose block
+            raise SystemExit(f"printed part {name} is {n} separate solids, not one: fix model.py before exporting")
         bb = shape.val().BoundingBox()
         placed = shape.translate((-bb.xmin, -bb.ymin, -bb.zmin))  # sit on the build plate
         cq.exporters.export(placed, str(d / f"{name}.stl"), tolerance=0.05, angularTolerance=0.1)

@@ -1,7 +1,9 @@
 """Phase 0: prove the cameras read YOUR slabs before buying any motion parts.
 
 Put a slab face-down in the Phase 0 jig (front toward the bottom camera, label end toward you),
-press Enter, repeat for 30-50 slabs (mix old and new PSA labels, and a few CGC).
+type its printed cert, press Enter, repeat for 30-50 slabs (mix old and new PSA labels, and a few
+CGC). Scan five 2024+ slabs (9-digit certs, back QR) FIRST: they teach the ITF format, and the
+machine learns in the same order.
 Every capture is saved, and a CSV records exactly what each camera decoded (symbology + raw
 payload), which settles the open questions about PSA's barcode format.
 
@@ -12,6 +14,7 @@ Without cameras (demo with synthetic labels):   python -m tools.phase0 --sim 10
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
 import time
 from collections import Counter
@@ -101,24 +104,48 @@ def main(argv=None) -> int:
     total = len(rows)
     if not total:
         return 0
+    report = phase0_report(rows, itf)
+    (out / "phase0_report.txt").write_text("\n".join(report) + "\n")
+    print("\n" + "\n".join(report))
+    return 0
+
+
+def phase0_report(rows: list, itf: ItfModel) -> list[str]:
+    """The GO / HOLD decision. ``rows`` = [(typed cert, verdict in scan order, {side: (reads, unparsed, ms)})]."""
+    total = len(rows)
     ok = sum(1 for _, v, _ in rows if v.status == "ok")
+    # the same reads scored again with the ITF format as finally learned (the machine itself learns in order,
+    # so the in-order number is the one that predicts a run; the second shows what scan order cost)
+    learned = copy.deepcopy(itf)
+    ok_after = sum(1 for _, _, res in rows if consensus(res["back"][0] + res["front"][0], copy.deepcopy(learned)).status == "ok")
     back_any = sum(1 for _, _, r in rows if r["back"][0])
     front_any = sum(1 for _, _, r in rows if r["front"][0])
     syms = Counter(r.symbology for _, _, res in rows for side in ("back", "front") for r in res[side][0])
     typed_rows = [(t, v) for t, v, _ in rows if t]
+    untyped = total - len(typed_rows)
     wrong = sum(1 for t, v in typed_rows if v.cert and v.cert != t.lstrip("0"))
+    n = len(typed_rows)
+    bound = (f"0 wrong in {n} only shows the true wrong-read rate is below about {300 / n:.0f}% (95% confidence, rule of three): "
+             f"at 1% a 330-slab batch would hold ~3 silent wrong certs. Cross-check 'ok' certs with tools.enrich (PSA API: the card "
+             "must match the photo), and keep testing: several hundred typed slabs before trusting unattended output."
+             if n and wrong == 0 else "")
+    go = ok >= 0.95 * total and wrong == 0 and untyped == 0 and n > 0
     report = [
         f"slabs: {total}",
-        f"confident read (ok): {ok}/{total} = {100 * ok / total:.0f}%",
+        f"confident read (ok), in scan order: {ok}/{total} = {100 * ok / total:.0f}%   (with the ITF format learned from the start: {ok_after}/{total})",
         f"back camera read something: {back_any}/{total}; front camera: {front_any}/{total}",
         f"symbologies seen: {dict(syms)}",
         f"ITF format learned: {itf.mode} (evidence {dict(itf.evidence)})",
-        f"WRONG certs vs what you typed: {wrong} of {len(typed_rows)} typed  <- must be 0",
-        "GO if: ok >= 95% and wrong == 0. Otherwise send phase0.csv + images for tuning before building.",
+        f"WRONG certs vs what you typed: {wrong} of {n} typed  <- must be 0" + (f"; {untyped} NOT typed (every slab must be typed)" if untyped else ""),
     ]
-    (out / "phase0_report.txt").write_text("\n".join(report) + "\n")
-    print("\n" + "\n".join(report))
-    return 0
+    if bound:
+        report.append(bound)
+    report.append(("GO" if go else "HOLD") + ": GO needs every slab typed, ok >= 95% in scan order, and wrong == 0.")
+    if not go:
+        report.append("Before building: re-focus (focus head / focus station), move the LED ring or add the light roof against glare, and re-scan "
+                      "the failed slabs. Still failing? Show your instructor phase0.csv and the images/ folder, or open an issue in the "
+                      "project repository with both attached.")
+    return report
 
 
 if __name__ == "__main__":

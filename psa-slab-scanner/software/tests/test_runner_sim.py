@@ -54,7 +54,7 @@ def test_small_batch_every_slab_moved_and_read(tmp_path):
 
 
 def test_old_labels_go_to_station_and_still_read(tmp_path):
-    cfg = _cfg()
+    cfg = _cfg(face_down_check="off")  # old labels have no back QR: the face-down check would stop on each
     stacks = make_batch(cfg, per_pocket=3, seed=5, eras=(0.4, 0.3, 0.3))
     w, r, summary = _run(tmp_path, cfg, stacks)
     rows = list(csv.DictReader((r.w.dir / "certs.csv").open()))
@@ -68,7 +68,7 @@ def test_old_labels_go_to_station_and_still_read(tmp_path):
 
 
 def test_check_digit_itf_is_learned(tmp_path):
-    cfg = _cfg()
+    cfg = _cfg(face_down_check="off")
     stacks = make_batch(cfg, per_pocket=3, seed=11, eras=(0.6, 0.4, 0.0))
     w, r, summary = _run(tmp_path, cfg, stacks, itf_payload="check_digit")
     truth = {s.cert.lstrip("0") for v in stacks.values() for s in v}
@@ -129,7 +129,7 @@ def test_start_pocket_must_be_empty(tmp_path):
 
 
 def test_cgc_slabs_are_read_and_stacked_normally(tmp_path):
-    cfg = _cfg()
+    cfg = _cfg(face_down_check="off")  # the simulated CGC/BGS backs are blank
     stacks = make_batch(cfg, per_pocket=2, seed=8, eras=(1.0, 0.0, 0.0))
     stacks[4][0].grader = "CGC"
     stacks[4][0].cert = "4123456001"

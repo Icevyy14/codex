@@ -16,7 +16,7 @@ import pytest
 serial = pytest.importorskip("serial")
 pty = pytest.importorskip("pty")
 
-from slabscan.motion import ControllerLost, GcodeMachine, MotionError  # noqa: E402
+from slabscan.motion import ControllerBusy, ControllerLost, GcodeMachine, MotionError  # noqa: E402
 
 
 class FakeFluidNC(threading.Thread):
@@ -30,6 +30,7 @@ class FakeFluidNC(threading.Thread):
         self.x, self.z = 0.0, 100.0
         self.g54 = [0.0, 0.0, 1.5]  # stale offset left by some G-code sender
         self.lines: list[str] = []
+        self.realtime: list[bytes] = []
         self.alive = True
 
     def out(self, s: str) -> None:
@@ -54,6 +55,12 @@ class FakeFluidNC(threading.Thread):
                 if c == b"?":
                     pins = "|Pn:P" if self.z <= self.SURFACE_Z + 1e-6 else ""
                     self.out(f"<Idle|MPos:{self.x:.3f},0.000,{self.z:.3f}|FS:0,0{pins}>")
+                elif c in (b"!", b"\x18"):  # realtime: feed hold, soft reset
+                    self.realtime.append(c)
+                    if c == b"\x18":
+                        buf = b""
+                        self.out("ALARM:3")
+                        self.out("Grbl 3.9 [FluidNC v4.1.1 (noradio) '$' for help]")
                 elif c == b"\n":
                     self.handle(buf.decode().strip())
                     buf = b""
@@ -194,3 +201,58 @@ def test_reconnect_gives_up_while_the_estop_is_still_pressed(fake):
             time.sleep(0.05)
     with pytest.raises(ControllerLost, match="still not answering"):
         m.home()
+
+
+def test_a_second_process_cannot_open_the_controller(fake):
+    """EF-10 / software-11: without exclusive=True a second slabscan process (CLI next to the web service)
+    opened the port, flushed the first one's replies and sent $X in the middle of a batch."""
+    m = GcodeMachine(fake.port, boot_s=2.0)
+    n = len(fake.lines)
+    with pytest.raises(ControllerBusy, match="controller busy"):
+        GcodeMachine(fake.port, boot_s=0.5)
+    assert len(fake.lines) == n  # the second process sent nothing
+    m.home()  # the first one still works
+    m.close()
+
+
+def test_resync_after_an_interrupted_command(fake):
+    """A Ctrl-C or timeout inside send() leaves that command's 'ok' unread: every later reply is matched to the
+    wrong command (here a probe returns without its [PRB:] report). resync() waits for Idle and drains it."""
+    m = GcodeMachine(fake.port, boot_s=2.0)
+    m.home()
+    m.move(6000, z=20.0)
+    m.wait_idle()
+    fake.out("ok")  # the reply of a command whose send() was interrupted
+    time.sleep(0.2)
+    with pytest.raises(MotionError, match="without a \\[PRB:\\] report"):
+        m.probe(10.0, 1200)
+    fake.out("ok")
+    time.sleep(0.2)
+    m.resync()
+    assert m.probe(-5.0, 1200) == pytest.approx(3.0)
+    m.close()
+
+
+def test_halt_sends_feed_hold_and_reset_and_requires_homing(fake):
+    m = GcodeMachine(fake.port, boot_s=2.0)
+    m.home()
+    m.halt(settle_s=1.0)
+    assert fake.realtime == [b"!", b"\x18"]
+    assert not m.homed
+    with pytest.raises(MotionError, match="before homing"):
+        m.move(3000, x=100.0)
+    m.home()  # the stream is clean again: the banner and ALARM:3 were drained
+    m.move(3000, x=100.0)
+    m.wait_idle()
+    assert m.position()[0] == pytest.approx(100.0)
+    m.close()
+
+
+def test_machine_lock_is_exclusive(tmp_path):
+    from slabscan.factory import MachineBusy, MachineLock
+
+    a = MachineLock(tmp_path / "slabrail.lock").acquire()
+    with pytest.raises(MachineBusy, match="Another slabscan process"):
+        MachineLock(tmp_path / "slabrail.lock").acquire()
+    a.release()
+    MachineLock(tmp_path / "slabrail.lock").acquire().release()

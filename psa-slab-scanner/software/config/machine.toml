@@ -4,7 +4,7 @@
 station_xy = [686.0, 0.0]
 station_read_c = 169.6
 c_safe_empty = 228.0
-c_safe_loaded = 243.0
+c_safe_loaded = 246.0
 c_max = 250.0
 post_h = 218.0
 stack_max = 30
@@ -23,14 +23,19 @@ max_surprise = 4.5
 peel_slow_mm = 1.0
 feed_peel_slow = 120.0
 peel_mm = 5.0
-peel_dwell_s = 0.15
+peel_dwell_s = 0.5
+feed_rod_band = 1200.0
 vac_seal_kpa = -35.0
 vac_seal_timeout_s = 0.4
 vac_transit_alarm_kpa = -25.0
 vent_s = 0.25
+vent_tol_kpa = 0.5
+vent_timeout_s = 1.5
 front_photo = "fallback"
 needs_review_to = "output"
 hover_check = true
+face_down_check = "stop"
+psa_cert_digits = []
 frames_per_read = 2
 accepted_graders = ["PSA", "CGC"]
 allow_ocr = true
@@ -42,7 +47,7 @@ overfill_gate = true
 lid_switch = false
 light_settle_s = 0.3
 out_dir = "batches"
-cam_head = { type = "usb", device = "auto", width = 3264, height = 2448 }
+cam_head = { type = "usb", device = "auto", width = 3264, height = 2448, hfov_deg = 64.0, row_axis = "x", lens_to_label_mm = 140.0 }
 cam_station = { type = "picamera", index = 0, lens_position = 7.1 }
 serial_port = "/dev/ttyUSB0"
 

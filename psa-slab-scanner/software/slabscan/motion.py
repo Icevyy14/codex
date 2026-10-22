@@ -9,6 +9,7 @@ Any grbl-compatible controller works if its config gives the same axis letters.
 
 from __future__ import annotations
 
+import errno
 import re
 import time
 from dataclasses import dataclass, field
@@ -40,6 +41,11 @@ class ControllerLost(MotionError):
     """The controller's USB serial port went away. The E-stop cuts the Rodent's 24 V, so FluidNC
     reboots and the CH340 device disappears (CONTRACT.md "E-stop"). The runner turns this into a
     clean Stop without moving anything; the next command reconnects and must home again."""
+
+
+class ControllerBusy(MotionError):
+    """Another process (the web service, or a command in another window) has the controller's serial
+    port open. Not a lost controller: nothing is retried."""
 
 
 # CONTRACT.md: firmware soft limit Z -8; CAD keeps the Z carriage on its rail down to c = -12.
@@ -88,7 +94,15 @@ class GcodeMachine:
             raise
 
     def _connect(self) -> None:
-        self.ser = self._serial.Serial(self.port, self.baud, timeout=0.2)
+        # exclusive=True takes a flock on the tty: a second slabscan process (web service + a CLI command)
+        # cannot attach mid-batch, flush the first one's replies and inject its own commands.
+        try:
+            self.ser = self._serial.Serial(self.port, self.baud, timeout=0.2, exclusive=True)
+        except self._serial.SerialException as e:
+            if getattr(e, "errno", None) in (errno.EAGAIN, errno.EWOULDBLOCK, errno.EBUSY) or "exclusively lock" in str(e):
+                raise ControllerBusy(f"controller busy: another slabscan process (the web service or another command) has {self.port} open. "
+                                     "Stop it first (sudo systemctl stop slabrail-web, or close the other window).") from None
+            raise
         self.lost = False
         self.homed = False
         self._wco = None
@@ -137,6 +151,9 @@ class GcodeMachine:
                 self._connect()
                 self.reconnects += 1
                 return
+            except ControllerBusy:
+                self.lost = True
+                raise
             except (MotionError, RuntimeError, *self._serial_errors) as e:
                 self.lost = True
                 self.close()  # a half-open port must not block the next attempt ("device busy")
@@ -234,6 +251,56 @@ class GcodeMachine:
                 raise MotionError(f"controller state {state}")
             time.sleep(0.05)
         raise MotionError("timeout waiting for Idle")
+
+    def resync(self, timeout_s: float = 60.0) -> None:
+        """Bring the reply stream back in step after an exception (or Ctrl-C) inside send(): the interrupted
+        command's 'ok' / [PRB:] may still be unread, so every later reply would be matched to the wrong
+        command. Waits until the controller is Idle (the interrupted move has finished), drops everything
+        received so far, then proves the link with a planner barrier."""
+        self._ensure()
+        deadline = time.monotonic() + timeout_s
+        while True:
+            state, _ = self.status()  # status() skips stale 'ok' lines while it looks for the report
+            if state == "Idle":
+                break
+            if state == "Alarm":
+                raise MotionError("controller in ALARM: it will not move until homed again")
+            if time.monotonic() > deadline:
+                raise MotionError(f"controller still {state} after {timeout_s:.0f} s")
+            time.sleep(0.05)
+        time.sleep(0.1)
+        try:
+            self.ser.reset_input_buffer()
+        except self._serial_errors as e:
+            self._lose(e)
+        self.send("G4 P0")
+
+    def halt(self, settle_s: float = 1.5) -> None:
+        """Stop NOW: feed hold ('!') so the axes decelerate, then a soft reset (Ctrl-X) that drops every
+        queued move. The position is lost, so homing is required again. Never raises."""
+        try:
+            self._write(b"!")
+            t0 = time.monotonic()
+            while time.monotonic() - t0 < 1.0:  # wait for the deceleration (Hold:0) so the reset loses no steps
+                try:
+                    state, _ = self.status()
+                except MotionError:
+                    break
+                if state in ("Idle", "Alarm") or "Hold:0" in getattr(self, "last_status", ""):
+                    break
+                time.sleep(0.02)
+            self._write(b"\x18")
+            t0 = time.monotonic()
+            while time.monotonic() - t0 < settle_s:  # the reset prints a banner (and maybe ALARM): read it away
+                line = self._readline()
+                if "Grbl" in line or "FluidNC" in line:
+                    break
+            time.sleep(0.2)
+            self.ser.reset_input_buffer()
+        except Exception:  # noqa: BLE001 - best effort; the port may already be gone (E-stop)
+            pass
+        self.homed = False
+        self._wco = None
 
     def home(self) -> None:
         # Z (263 mm at 1500 mm/min seek) then X (1231 mm at 3000 mm/min) is ~40 s before the slow

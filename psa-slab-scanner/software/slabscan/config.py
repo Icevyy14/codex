@@ -4,6 +4,7 @@ calibration values are written to config/calibration.toml so a re-generation nev
 from __future__ import annotations
 
 import json
+import re
 import tomllib
 from dataclasses import dataclass, field, fields
 from pathlib import Path
@@ -42,19 +43,33 @@ class Config:
     probe_window: float = 12.0  # must stay < buffer stroke (25)
     approach_gap: float = 5.0  # fast Z stops this far above the predicted contact
     max_surprise: float = 4.5  # |measured - predicted| above this aborts the stack
-    peel_slow_mm: float = 1.0  # first mm of the lift at 2 mm/s: air gets between slabs, so the next one doesn't come along
+    # The probe trips with the spring buffer already compressed (BUILD_GUIDE 7.6: 2.0 +/- 0.5 mm), so the
+    # cup only leaves the slab once the head has risen that far again. The slow leg of the peel is placed
+    # around that point: measure the trip travel and put buffer_trip_mm (and a smaller tol) in calibration.toml.
+    buffer_trip_mm: float = 2.0
+    buffer_trip_tol_mm: float = 0.5  # uncertainty of buffer_trip_mm; 0.1 once measured
+    peel_slow_mm: float = 1.0  # slow lift AFTER the cup leaves the slab (2 mm/s): air gets between slabs, so the next one doesn't come along
     feed_peel_slow: float = 120.0
     peel_mm: float = 5.0
-    peel_dwell_s: float = 0.15
+    peel_dwell_s: float = 0.5  # held low over the source: a slab clinging by an air film falls back a few mm onto its own stack
+    feed_rod_band: float = 1200.0  # Z feed while a held slab passes the rod tops (5 mm above to 10 mm below them)
     # vacuum (kPa, negative = vacuum)
     vac_seal_kpa: float = -35.0
     vac_seal_timeout_s: float = 0.4
     vac_transit_alarm_kpa: float = -25.0
     vent_s: float = 0.25
+    vent_tol_kpa: float = 0.5  # after a vent the line must be back within this of atmosphere before the head lifts
+    vent_timeout_s: float = 1.5
+    vac_baseline_kpa: float | None = None  # sensor reading at atmosphere with an empty cup (calibrate z / selftest -i write it)
     # reading
     front_photo: str = "fallback"  # fallback | always  (always = full front photo of every slab, +~3 s/slab)
     needs_review_to: str = "output"  # output | exceptions
-    hover_check: bool = True  # look at the top slab before touching it (face-down check)
+    hover_check: bool = True  # use the frame taken from above the top slab as an extra read of its back label
+    # "stop": before the cup touches a slab, the frame from above must show a PSA back-label QR (proof the
+    # slab is face-down); otherwise the run stops untouched and the operator confirms (resume --face-down-ok).
+    # "off": no check - only the operator's face-down loading protects the fronts.
+    face_down_check: str = "stop"
+    psa_cert_digits: tuple = ()  # PSA cert lengths seen in Phase 0, e.g. [8, 9]; an 'ok' of another length -> needs_review
     frames_per_read: int = 2
     custom_regex: str | None = None
     accepted_graders: tuple = ("PSA", "CGC")
@@ -70,7 +85,11 @@ class Config:
     # paths
     out_dir: str = "batches"
     # device "auto" = first /dev/v4l/by-id/usb-*-video-index0 (on a Pi 5 the CSI pipeline owns /dev/video0..7)
-    cam_head: dict = field(default_factory=lambda: {"type": "usb", "device": "auto", "width": 3264, "height": 2448})
+    # hfov_deg: full field of view across the image width; row_axis: which image axis runs along the pocket row
+    # ("x" = image width); lens_to_label_mm: lens to the held slab's back (cad/layout.py CAM_TO_SLAB). Used to crop
+    # head-camera frames to the pocket under the cup: the 3.6 mm lens also sees the neighbouring pockets' labels.
+    cam_head: dict = field(default_factory=lambda: {"type": "usb", "device": "auto", "width": 3264, "height": 2448, "hfov_deg": 64.0, "row_axis": "x",
+                                                         "lens_to_label_mm": 140.0})
     cam_station: dict = field(default_factory=lambda: {"type": "picamera", "index": 0, "lens_position": 7.1})
     serial_port: str = "/dev/ttyUSB0"  # if missing, /dev/serial/by-id, ttyUSB*, ttyACM* are tried
     # calibration: machine = bed + offset (bed coords come from the CAD layout)
@@ -95,7 +114,19 @@ class Config:
         return len(self.sources) * self.stack_max
 
 
-_TUPLE_FIELDS = ("station_xy", "accepted_graders", "x_travel")
+_TUPLE_FIELDS = ("station_xy", "accepted_graders", "x_travel", "psa_cert_digits")
+
+
+def check_custom_regex(rx: str | None) -> None:
+    """A custom cert regex must compile and have exactly one capture group (the digits)."""
+    if not rx:
+        return
+    try:
+        n = re.compile(rx).groups
+    except re.error as e:
+        raise ValueError(f"custom_regex {rx!r} is not a valid regular expression: {e}") from None
+    if n != 1:
+        raise ValueError(f"custom_regex {rx!r} must have exactly one capture group (the cert digits), it has {n}")
 
 
 def load(path: Path, calibration: Path | None = None) -> Config:
@@ -111,6 +142,9 @@ def load(path: Path, calibration: Path | None = None) -> Config:
     for k in _TUPLE_FIELDS:
         if k in raw:
             raw[k] = tuple(raw[k])
+    check_custom_regex(raw.get("custom_regex"))
+    if raw.get("face_down_check", "stop") not in ("stop", "off"):
+        raise ValueError(f"face_down_check must be \"stop\" or \"off\", not {raw['face_down_check']!r}")
     return Config(pockets=pockets, **raw)
 
 
@@ -155,7 +189,7 @@ def toml_value(v) -> str:
     raise TypeError(f"cannot write {type(v).__name__} to TOML")
 
 
-CALIBRATION_KEYS = ("offset_x", "offset_y", "rotation_deg", "pad_trigger_c")
+CALIBRATION_KEYS = ("offset_x", "offset_y", "rotation_deg", "pad_trigger_c", "vac_baseline_kpa", "buffer_trip_mm", "buffer_trip_tol_mm")
 
 
 def dumps(cfg: Config) -> str:

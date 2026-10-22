@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import glob
 import os
+import tempfile
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import cv2
@@ -24,6 +26,60 @@ import numpy as np
 from .config import Config
 
 ALL_PARTS = ("motion", "vacuum", "lights", "head_cam", "station_cam", "gate", "lid")
+
+
+class MachineBusy(RuntimeError):
+    """Another slabscan process holds the machine (the boot web service after its first run, or a command
+    in another window). Two processes on one controller read each other's replies and inject moves."""
+
+
+def default_lock_path() -> Path:
+    env = os.environ.get("SLABRAIL_LOCK")
+    if env:
+        return Path(env)
+    for d in ("/run/lock", tempfile.gettempdir()):
+        if os.path.isdir(d) and os.access(d, os.W_OK):
+            return Path(d) / "slabrail.lock"
+    return Path(tempfile.gettempdir()) / "slabrail.lock"
+
+
+class MachineLock:
+    """Exclusive, process-wide claim on the machine (an flock on a lock file; released when the process dies)."""
+
+    def __init__(self, path: Path | None = None):
+        self.path = Path(path) if path else default_lock_path()
+        self.fd: int | None = None
+
+    def acquire(self) -> "MachineLock":
+        import fcntl
+
+        fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o666)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            holder = ""
+            try:
+                holder = os.pread(fd, 32, 0).decode(errors="replace").strip()
+            except OSError:
+                pass
+            os.close(fd)
+            raise MachineBusy("Another slabscan process is using the machine" + (f" (pid {holder})" if holder else "") + ": the web service "
+                              "(stop it with: sudo systemctl stop slabrail-web) or a command in another window. Stop it first.") from None
+        os.ftruncate(fd, 0)
+        os.write(fd, f"{os.getpid()}\n".encode())
+        self.fd = fd
+        return self
+
+    def release(self) -> None:
+        if self.fd is None:
+            return
+        import fcntl
+
+        try:
+            fcntl.flock(self.fd, fcntl.LOCK_UN)
+        finally:
+            os.close(self.fd)
+            self.fd = None
 
 
 @dataclass
@@ -39,9 +95,11 @@ class Hardware:
     world: Any = None  # SimWorld when simulated
     sim: bool = False
     notes: list[str] = field(default_factory=list)
+    lock: Any = None  # MachineLock while the real machine is open
 
     def close(self) -> None:
-        # Vacuum last and with close() (valves shut, no vent): a held slab is not dropped.
+        # Vacuum last and with close() (valves shut, no vent). Callers hand a held slab to the operator
+        # BEFORE this (cli.hand_off_slab): closed valves alone hold it only for a short while.
         for part in ("head_cam", "station_cam", "lights", "motion", "vacuum"):
             dev = getattr(self, part)
             if dev is not None and hasattr(dev, "close"):
@@ -49,6 +107,9 @@ class Hardware:
                     dev.close()
                 except Exception:  # noqa: BLE001 - best effort on shutdown
                     pass
+        if self.lock is not None:
+            self.lock.release()
+            self.lock = None
 
 
 # ---------------------------------------------------------------------- real hardware
@@ -184,7 +245,7 @@ def open_hardware(cfg: Config, sim: bool = False, parts=ALL_PARTS, log=print, **
             if p not in parts:
                 setattr(hw, p, None)
         return hw
-    hw = Hardware(cfg=cfg)
+    hw = Hardware(cfg=cfg, lock=MachineLock().acquire())  # MachineBusy if another process has the machine
     try:
         for p in parts:
             setattr(hw, p, make_part(cfg, p))

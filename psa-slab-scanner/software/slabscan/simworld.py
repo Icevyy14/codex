@@ -3,7 +3,13 @@
 It models stacks of slabs in pockets, the cup + spring-buffer contact sensor, vacuum, a
 held slab, and the two cameras (synthetic label images from sim.py). It also acts as a
 SAFETY MONITOR: any move that would crash the head or a held slab into rods/stacks,
-drop a slab, or drive the cup past its buffer stroke raises ``Crash``.
+drop a slab, drive the cup past its buffer stroke, seal the cup on a slab's FRONT, or tear
+a gripped slab off its stack faster than the slow peel raises ``Crash``.
+
+Machine Z (``z``) is the head height at which the probe trips on a surface, as the real
+calibration defines it. At the trip the spring buffer is already compressed by
+``trigger_compression`` (2 mm), so a gripped slab only leaves its stack once the head has
+risen that far above the trip point.
 """
 
 from __future__ import annotations
@@ -20,6 +26,7 @@ from .sim import Degrade, slab_view
 BUFFER_STROKE = 25.0
 TRIGGER_COMPRESSION = 2.0  # buffer compression at which the optical sensor trips
 HEAD_SIDE_CLEAR = 7.0  # (pocket 84 - head envelope 70) / 2: an empty head may shift this far inside a pocket below the rod tops
+PEEL_SLOW_MIN_MM = 0.5  # after the cup leaves the slab the slow peel must go on at least this far
 
 
 class Crash(SafetyViolation):
@@ -51,6 +58,11 @@ class SimWorld:
     events: list[str] = field(default_factory=list)
     itf_payload: str = "zero_pad"  # how this simulated PSA prints odd-length certs
     rng: random.Random = field(default_factory=lambda: random.Random(1))
+    trigger_compression: float = TRIGGER_COMPRESSION  # buffer travel between first touch and the probe trip
+    # A clinging slab (double pick) held only by an air film: None = rides to placement; "peel" = falls back
+    # onto its own stack during the peel dwell; "transit" = drops off at the end of the first sideways move.
+    cling_drop: str | None = None
+    peels: list[tuple[float, float]] = field(default_factory=list)  # (feed, slow mm after separation) of every pick
 
     # ---- geometry helpers
     def pocket_at(self, x, y, tol=3.0):
@@ -95,13 +107,20 @@ class SimWorld:
         if lp < tallest + 5:
             raise Crash("XY move would sweep through a stack")
 
+    def check_descent_xy(self, z1, tol=1.5):
+        """Any downward motion (plain or probing) below the rod tops must be centred on a pocket or the station
+        (within ``tol``: 1.5 mm with a slab, whose play is 1.85; the empty head may be off by IN_POCKET_TOL)."""
+        if z1 >= self.z:
+            return
+        if z1 - self.held_thickness() < self.cfg.post_h + 5:
+            if self.pocket_at(self.x, self.y, tol=tol) is None and not self.at_station(self.x, self.y, tol=tol):
+                raise Crash(f"descending below rod tops at ({self.x:.1f},{self.y:.1f}) - not over a pocket or the station")
+
     def check_z(self, z1):
         """Downward motion into a pocket must be centred on it, and must not hit anything (non-probing)."""
         if z1 >= self.z:
             return
-        if z1 - self.held_thickness() < self.cfg.post_h + 5:
-            if self.pocket_at(self.x, self.y, tol=1.5) is None and not self.at_station(self.x, self.y, tol=1.5):
-                raise Crash(f"descending below rod tops at ({self.x:.1f},{self.y:.1f}) - not over a pocket or the station")
+        self.check_descent_xy(z1)
         surf = self.surface_below()
         if surf is not None and z1 - self.held_thickness() < surf - 0.01:
             raise Crash(f"fast move down to {z1:.1f} hits the surface at {surf + self.held_thickness():.1f} (no probe)")
@@ -138,6 +157,11 @@ class SimMotion:
         self.w.x, self.w.y = self.w.cfg.x_travel[0] - self.x_offset, 0.0  # FluidNC: X = 22 after homing (mpos_mm)
         self.homed = True
 
+    def halt(self):
+        """Feed hold + soft reset: motion stops where it is and the position must be homed again."""
+        self.log.append("HALT")
+        self.homed = False
+
     def _soft_limits(self, x=None, z=None, what="move"):
         """FluidNC soft limits (firmware/fluidnc/config.yaml, machine mm): X 22..1253, Z -8..255.
         A target outside them is an ALARM on the real controller, so the simulator calls it a crash."""
@@ -169,13 +193,15 @@ class SimMotion:
         x = None if x is None else x - self.x_offset
         y = None if y is None else y
         z = None if z is None else z - self.z_offset
+        if len(w.held) > 1 and w.cling_drop == "peel":
+            self._drop_cling("peel")  # an air-film cling lets go right after the separation, still over its own stack
         if z is not None and z != w.z:
             w.check_z(z)
             self._account(abs(z - w.z), feed, "z")
-            going_up = z > w.z
+            z0 = w.z
             w.z = z
-            if going_up:
-                self._lift()
+            if z > z0:
+                self._lift(z0, feed)
         if x is not None or y is not None:
             x1 = w.x if x is None else x
             y1 = w.y if y is None else y
@@ -183,6 +209,8 @@ class SimMotion:
                 w.check_xy_path(x1, y1)
                 self._account(((x1 - w.x) ** 2 + (y1 - w.y) ** 2) ** 0.5, feed, "x")
                 w.x, w.y = x1, y1
+                if len(w.held) > 1 and w.cling_drop == "transit":
+                    self._drop_cling("end of the first sideways move")
         self.log.append(f"G1 X{w.x:.1f} Y{w.y:.1f} Z{w.z:.1f} F{feed:.0f}")
 
     def probe(self, z_target, feed):
@@ -196,12 +224,13 @@ class SimMotion:
         z_target = z_target - self.z_offset
         if surf is None:
             raise Crash("probing with nothing below")
-        contact = surf + w.held_thickness()  # cup face height at first touch
+        w.check_descent_xy(z_target, tol=1.5 if w.held else HEAD_SIDE_CLEAR - 2.0)
+        contact = surf + w.held_thickness()  # head Z at which the probe trips (buffer compressed by trigger_compression)
         if contact > w.z + 0.01:
             raise Crash(f"probe started below the surface (cup {w.z:.1f}, surface {contact:.1f})")
         if contact > w.z - 0.01:
             raise Crash("probe started with the probe already triggered (FluidNC raises ALARM ProbeFailInitial)")
-        trip = contact - TRIGGER_COMPRESSION + TRIGGER_COMPRESSION  # trip point expressed as cup-face height
+        trip = contact
         if trip >= z_target:
             self._account(w.z - trip, feed, "z")
             w.z = trip
@@ -217,38 +246,67 @@ class SimMotion:
         self.travel_mm += dist
         self.move_time_s += trapezoid_s(dist, feed / 60.0, self.ACCEL[axis]) + self.SETTLE_S
 
-    def _lift(self):
-        """Called after any upward Z move: picks up the gripped slab (and any clinging slab)."""
+    def _lift(self, z0: float, feed: float):
+        """Called after an upward Z move from z0: the gripped slab (and any clinging slab) leaves its stack
+        once the cup leaves the surface, i.e. trigger_compression above the trip height. That moment must
+        happen during a slow move (feed_peel_slow) that goes on for PEEL_SLOW_MIN_MM: a fast tear is what
+        drags the next slab along on an air film."""
         w = self.w
-        if w.gripping and not w.held:
-            p = w.pocket_at(w.x, w.y)
-            stack = w.stacks[p.index]
-            top = stack.pop()
-            w.held = [top]
-            if stack and stack[-1].clingy and w.rng.random() < 1.0:
-                cling = stack.pop()
-                w.held.append(cling)
-                w.events.append(f"double pick of {cling.cert} under {top.cert}")
+        if not (w.gripping and not w.held):
+            return
+        p = w.pocket_at(w.x, w.y)
+        stack = w.stacks[p.index]
+        sep = w.stack_top(p.index) + w.trigger_compression  # head Z at which the cup leaves the slab
+        if w.z <= sep + 1e-9:
+            return  # the spring is only relaxing: the cup still sits on the slab
+        slow_after = w.z - max(sep, z0)
+        w.peels.append((feed, slow_after))
+        if feed > w.cfg.feed_peel_slow + 1e-6:
+            raise Crash(f"the gripped slab was torn off its stack at F{feed:.0f} (the slow peel is F{w.cfg.feed_peel_slow:.0f}): "
+                        "the peel profile does not cover the buffer compression at the trip")
+        if slow_after < PEEL_SLOW_MIN_MM - 1e-9:
+            raise Crash(f"the slow peel ended {slow_after:.2f} mm after the cup left the slab (needs {PEEL_SLOW_MIN_MM})")
+        top = stack.pop()
+        w.held = [top]
+        if stack and stack[-1].clingy:
+            cling = stack.pop()
+            w.held.append(cling)
+            w.events.append(f"double pick of {cling.cert} under {top.cert}")
+
+    def _drop_cling(self, when: str):
+        """The clinging slab lets go and lands flat on whatever is below the head (its own stack after the peel)."""
+        w = self.w
+        cling = w.held.pop()
+        p = w.pocket_at(w.x, w.y)
+        if p is None:
+            raise Crash(f"a clinging slab dropped at the {when} with no pocket below (X {w.x:.0f})")
+        w.stacks.setdefault(p.index, []).append(cling)
+        w.events.append(f"clinging slab {cling.cert} fell into pocket {p.index} at the {when}")
 
     def close(self):
         pass
 
 
 class SimVacuum:
+    simulated = True  # the runner skips real-time dwells against the simulator
+
     def __init__(self, world: SimWorld):
         self.w = world
 
     def _touching_top(self) -> bool:
         w = self.w
         p = w.pocket_at(w.x, w.y)
-        return p is not None and bool(w.stacks.get(p.index)) and w.z <= w.stack_top(p.index) + 0.05
+        return p is not None and bool(w.stacks.get(p.index)) and w.z <= w.stack_top(p.index) + w.trigger_compression + 0.05
 
     def hold(self):
         w = self.w
         w.vacuum_on = True
         if not w.held and self._touching_top():
             p = w.pocket_at(w.x, w.y)
-            w.gripping = not w.stacks[p.index][-1].seal_fails
+            top = w.stacks[p.index][-1]
+            if not top.seal_fails and not top.face_down:
+                raise Crash(f"the cup sealed on the FRONT of face-up slab {top.cert} in pocket {p.index} (visible damage)")
+            w.gripping = not top.seal_fails
 
     def release(self):
         w = self.w
@@ -303,6 +361,13 @@ class SimCamera:
         self.role = role
         self.deg = deg or Degrade(mm_per_px=0.05 if role == "head" else 0.04, blur_px=1.0, glare=0.3)
         self.n = 0
+
+    def view_half_mm(self, distance_mm: float) -> tuple[float, float]:
+        """Half the field of view (image x, image y) in mm on the label plane. The synthetic view is a fixed
+        90 x 45 mm patch around the slab under the cup, whatever the distance."""
+        from .sim import SLAB_W_MM
+
+        return (SLAB_W_MM + 10) / 2, 22.5
 
     def _blank(self):
         return np.full((400, 900), 30, np.uint8)

@@ -7,85 +7,129 @@
       130.0,
       23.0
     ],
-    "volume_cm3": 52.3,
-    "note": "PETG black, 3 walls, 25% infill"
+    "volume_cm3": 53.9,
+    "note": "PETG black, 3 walls, 25% infill; ribbon slot bridges"
   },
   {
     "part": "x_motor_mount",
     "qty": 1,
     "size_mm": [
-      52.0,
-      46.0,
-      35.0
+      56.0,
+      84.0,
+      19.0
     ],
-    "volume_cm3": 24.2,
-    "note": "PETG, 5 walls, 40% infill"
+    "volume_cm3": 23.7,
+    "note": "PETG, beam face down (as exported), 5 walls, 40% infill"
+  },
+  {
+    "part": "x_bumper_L",
+    "qty": 1,
+    "size_mm": [
+      12.0,
+      15.0,
+      19.0
+    ],
+    "volume_cm3": 2.7,
+    "note": "PETG, beam face down (as exported), 4 walls, 40% infill"
   },
   {
     "part": "x_idler_mount",
     "qty": 1,
     "size_mm": [
-      36.0,
-      41.0,
-      21.0
+      42.0,
+      46.0,
+      36.0
     ],
-    "volume_cm3": 8.7,
-    "note": "PETG, 5 walls, 40% infill"
+    "volume_cm3": 18.0,
+    "note": "PETG, foot down, 5 walls, 40% infill"
+  },
+  {
+    "part": "x_idler_slider",
+    "qty": 1,
+    "size_mm": [
+      28.0,
+      16.0,
+      31.0
+    ],
+    "volume_cm3": 5.7,
+    "note": "PETG, as exported, 5 walls, 50% infill"
   },
   {
     "part": "x_bracket",
     "qty": 1,
     "size_mm": [
       60.0,
-      113.4,
+      116.4,
       38.0
     ],
-    "volume_cm3": 70.8,
-    "note": "PETG, print flat on its back face, 6 walls, 50% infill"
+    "volume_cm3": 69.6,
+    "note": "PETG, print flat on its spine face (as exported), 6 walls, 50% infill"
+  },
+  {
+    "part": "belt_clamp",
+    "qty": 2,
+    "size_mm": [
+      18.0,
+      22.0,
+      3.0
+    ],
+    "volume_cm3": 1.1,
+    "note": "PETG, flat, 100% infill"
   },
   {
     "part": "z_motor_mount",
     "qty": 1,
     "size_mm": [
-      79.0,
-      48.0,
-      35.0
+      77.2,
+      75.2,
+      38.0
     ],
-    "volume_cm3": 16.9,
+    "volume_cm3": 44.2,
     "note": "PETG, motor face down, tab up, 5 walls, 40% infill"
+  },
+  {
+    "part": "z_end_cap",
+    "qty": 1,
+    "size_mm": [
+      44.0,
+      28.0,
+      14.0
+    ],
+    "volume_cm3": 9.5,
+    "note": "PETG, as exported (lips up), 5 walls, 50% infill"
   },
   {
     "part": "z_plate",
     "qty": 1,
     "size_mm": [
       70.0,
-      60.0,
-      23.0
+      78.0,
+      33.0
     ],
-    "volume_cm3": 35.5,
+    "volume_cm3": 41.6,
     "note": "PETG, carriage face down, nut shelf up, 6 walls, 50% infill"
   },
   {
     "part": "head_foot",
     "qty": 1,
     "size_mm": [
-      33.0,
-      62.0,
+      45.5,
+      63.5,
       37.0
     ],
-    "volume_cm3": 22.1,
+    "volume_cm3": 31.3,
     "note": "PETG, 5 walls, 40% infill"
   },
   {
     "part": "camera_bracket",
     "qty": 1,
     "size_mm": [
-      56.0,
-      75.0,
-      30.0
+      48.0,
+      71.0,
+      26.0
     ],
-    "volume_cm3": 19.1,
-    "note": "PETG matte black, supports under the ring"
+    "volume_cm3": 15.4,
+    "note": "PETG matte black, shelf face down (as exported); the ring seat bridges ~30 mm between its 4 legs (tree supports there if your printer sags)"
   },
   {
     "part": "gate_post_L",
@@ -95,7 +139,7 @@
       50.0,
       229.0
     ],
-    "volume_cm3": 39.0,
+    "volume_cm3": 38.8,
     "note": "PETG, upright on its foot (as exported), 10 mm brim, 4 walls; needs 230 mm Z height, else print lying on its side with supports"
   },
   {
@@ -106,7 +150,7 @@
       50.0,
       229.0
     ],
-    "volume_cm3": 39.0,
+    "volume_cm3": 38.8,
     "note": "PETG, upright on its foot (as exported), 10 mm brim, 4 walls; needs 230 mm Z height, else print lying on its side with supports"
   },
   {
@@ -128,7 +172,7 @@
       130.0,
       24.0
     ],
-    "volume_cm3": 118.3,
+    "volume_cm3": 116.6,
     "note": "PLA/PETG black (Phase 0 test jig)"
   },
   {
@@ -139,18 +183,18 @@
       151.0,
       20.0
     ],
-    "volume_cm3": 45.2,
-    "note": "PLA/PETG (Phase 0 test jig)"
+    "volume_cm3": 50.3,
+    "note": "PLA/PETG (Phase 0 test jig), ledges down"
   },
   {
     "part": "phase0_top",
     "qty": 1,
     "size_mm": [
       154.0,
-      56.0,
-      16.0
+      50.0,
+      11.4
     ],
-    "volume_cm3": 62.1,
+    "volume_cm3": 54.9,
     "note": "PLA/PETG (Phase 0 test jig), ring up"
   },
   {

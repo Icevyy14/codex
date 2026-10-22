@@ -19,7 +19,7 @@ from dataclasses import dataclass
 
 from dims import SLAB_H, SLAB_T, SLAB_W
 
-SLAB_T_CARRY_MAX = 7.5  # thickest slab we design the carry clearance for (CGC); PSA standard <= 7.0
+SLAB_T_THICK_MAX = 11.5  # thick-holder class bound (= software t_thick_max; PSA thick holder ~10.25)
 
 # ---- Cells ---------------------------------------------------------------------
 POCKET_W = 84.0  # interior, X. PSA 80.3 nominal -> +/-1.85 mm play. CGC/TAG/BGS fit; SGC (86.25) does not.
@@ -46,9 +46,17 @@ STATION_READ_C = STATION_LENS_Z + CAM_TO_SLAB + SLAB_T  # cup height when the he
 
 # ---- Motion envelope -----------------------------------------------------------
 CLEAR = 10.0  # vertical clearance over rod tops while moving
+CARRY_CLEAR = 5.0  # the simulator's rule: the lowest held slab face stays >= POST_H + 5 on XY moves
 C_SAFE_EMPTY = POST_H + CLEAR  # 228: cup face height for empty travel
-C_SAFE_LOADED = POST_H + CLEAR + 2 * SLAB_T_CARRY_MAX  # 243: even a double pick clears the rods by 10 mm
-C_MAX = 250.0  # top of Z travel (cup face)
+C_SAFE_LOADED = POST_H + 2 * SLAB_T_THICK_MAX + CARRY_CLEAR  # 246: a double pick of two thick holders (2 x 11.5) still clears the rods by 5 mm
+C_MAX = 250.0  # top of Z travel the software uses (cup face)
+C_MIN = -12.0  # lowest cup height the design allows (firmware soft limit -8; probing the bare pad trips near -2)
+C_HARD_BOTTOM = C_MIN - 2.0  # -14: Z carriage skirts land on the z_end_cap lips (hard stop; the buffer would bottom on the bare pad only at about -25)
+Z_SWITCH_C = C_MAX + 8.0  # 258: Z home switch trip height (firmware mpos 255 + 3 mm pull-off)
+C_HARD_TOP = Z_SWITCH_C + 4.0  # 262: z_plate top meets the z_motor_mount (hard stop, 4 mm past the switch)
+HELD_SLAB_CLEAR = 5.0  # held slab back (= cup face) to the lowest part fixed to the X carriage, even at C_HARD_TOP
+X_HOME_SWITCH = 19.0  # cup X where the X home switch trips (firmware mpos 22 - 3 mm pull-off)
+X_HARD_STOP = (15.0, 1262.0)  # cup X where the x_bracket meets the left / right end bumpers
 HEAD_ENVELOPE = (70.0, 116.0)  # X, Y footprint of everything below C+POST_H; must fit in a pocket
 PROBE_WINDOW = 12.0  # max probing travel past predicted contact (< buffer stroke 25)
 BUFFER_STROKE = 25.0
@@ -126,6 +134,7 @@ def travel_needed() -> dict[str, tuple[float, float]]:
 # ---- Gantry stack-up (derived; see docs/DESIGN.md "Side view") ------------------
 # Y offsets measured from the cup axis toward the back of the machine.
 MGN12_H = 13.0  # rail base to carriage top (MGN12H)
+MGN12_H1 = 3.0  # rail base to carriage underside (the skirts beside the rail end here)
 MGN12_RAIL_W, MGN12_RAIL_H = 12.0, 8.0
 MGN12H_L, MGN12H_W = 45.4, 27.0
 EXT20, EXT40 = 20.0, 40.0
@@ -135,13 +144,29 @@ ARM_TO_CUP = 35.0  # drop-arm centre to cup axis (Y)
 # cup axis -> X beam front face:
 #   ARM_TO_CUP (35) + arm half (10) + Z plate (8) + Z carriage (13) + Z spine (20) + X bracket (8) + X carriage (13) = 107
 Y_CUP_TO_BEAM = ARM_TO_CUP + EXT20 / 2 + Z_PLATE_T + MGN12_H + EXT20 + X_BRACKET_T + MGN12_H
-Z_SPINE_BOTTOM = POST_H + 8.0  # lowest rigid gantry part that sweeps over the bed
-Z_CARRIAGE_ABOVE_CUP = POST_H + 25.0  # Z carriage bottom edge above the cup face: carriage stays on its rail down to c = -12
-Z_SPINE_OFFSET_X = -10.0  # 2040 spine centre vs cup axis: the Z rail bolts into the spine's +10 slot, on the cup axis
-C_MIN = -12.0  # lowest cup height the rail allows (probing the bare pad trips near -2)
+# The held slab reaches Y +/-67.75 under the cup, so the Z spine (Y 66-86), Z rail (Y 58-66) and lead screw
+# all hang over its back half and do NOT rise with Z. Everything fixed to the X carriage therefore starts
+# above the highest the slab can ever be pushed (the hard top stop), not just above C_MAX.
+Z_END_CAP_T = 8.0  # printed z_end_cap under the spine's bottom end (2 x button-head M5 into the 2040 end bores)
+Z_END_CAP_LIP = 6.0  # its lips rise this far above the spine bottom, under the Z carriage skirts
+Z_SPINE_BOTTOM = C_HARD_TOP + HELD_SLAB_CLEAR + Z_END_CAP_T  # 275
 Z_SPINE_LEN = 340.0
+Z_SPINE_TOP = Z_SPINE_BOTTOM + Z_SPINE_LEN  # 615
+Z_RAIL_LEN = 330.0
+Z_RAIL_BOTTOM = Z_SPINE_BOTTOM + 1.0  # rail top ends 9 mm below the spine top
+Z_CARRIAGE_ABOVE_CUP = Z_SPINE_BOTTOM + Z_END_CAP_LIP - C_HARD_BOTTOM  # 295: Z carriage bottom edge above the cup face
+Z_PLATE_TOP = Z_SPINE_TOP - Z_CARRIAGE_ABOVE_CUP - C_HARD_TOP  # 58: z_plate top above the Z carriage bottom (top hard stop)
+Z_SPINE_OFFSET_X = -10.0  # 2040 spine centre vs cup axis: the Z rail bolts into the spine's +10 slot, on the cup axis
+Z_MOTOR_MOUNT_T = 8.0  # printed plate on the spine's top end; the Z motor face sits on it
+T8_FLANGE_D = 22.0  # brass T8 nut flange (4 x M3 on a 16 mm circle)
+Z_SCREW_DX = 24.0  # lead screw axis, X from the cup axis
+Z_SCREW_Y = ARM_TO_CUP + EXT20 / 2 - T8_FLANGE_D / 2 - 1.0  # 33: the nut flange clears the z_plate front face (Y 45)
+Z_SCREW_LEN = 340.0  # T8x8 screw length below the motor face: cut the 400 mm screw (311..356 works; a 350 fits as bought)
+Z_SCREW_TIP = Z_SPINE_TOP + Z_MOTOR_MOUNT_T - Z_SCREW_LEN  # 283
 X_BEAM_Z = 400.0  # X beam (4040) centre height
 X_RAIL_Z = X_BEAM_Z + 10.0  # rail bolts into the upper slot of the beam's front face (4040 slots are at +/-10)
+X_RAIL_LEN = 1300.0
+X_RAIL_X0 = sum(travel_needed()["x"]) / 2 - X_RAIL_LEN / 2  # -10: rail centred on the pocket row
 LABEL_TOWARD = "front"  # slabs face-down, label end toward the operator (keeps the arm out of camera view)
 
 
@@ -162,14 +187,32 @@ def check() -> list[str]:
         problems.append("probe window must be shorter than buffer stroke")
     if C_MAX < C_SAFE_LOADED:
         problems.append("Z travel cannot lift a slab clear of the rods")
+    if C_SAFE_LOADED - 2 * SLAB_T_THICK_MAX < POST_H + CARRY_CLEAR:
+        problems.append("a double pick of two thick holders does not clear the rods by CARRY_CLEAR at C_SAFE_LOADED")
     if STATION_READ_C > C_SAFE_LOADED:
         problems.append("station read height above loaded travel height")
     if not 0 < STATION_CELL < N_CELLS - 1:
         problems.append("station cell must not be at an end")
-    if Z_SPINE_BOTTOM + 1 + Z_SPINE_LEN - 10 < Z_CARRIAGE_ABOVE_CUP + C_MAX + MGN12H_L:
-        problems.append("Z rail too short for full travel")
-    if Z_CARRIAGE_ABOVE_CUP + C_MIN < Z_SPINE_BOTTOM + 1:
-        problems.append("Z carriage leaves the bottom of its rail above C_MIN")
+    if not C_MAX < Z_SWITCH_C < C_HARD_TOP:
+        problems.append("Z switch must trip between C_MAX and the hard top stop")
+    if not -BUFFER_STROKE + 2 <= C_HARD_BOTTOM < C_MIN:
+        problems.append("Z bottom hard stop must lie below C_MIN and >= 2 mm before the buffer bottoms on the bare pad")
+    lowest_fixed = min(Z_SPINE_BOTTOM - Z_END_CAP_T, Z_SCREW_TIP, Z_RAIL_BOTTOM)
+    if lowest_fixed < C_HARD_TOP + HELD_SLAB_CLEAR:
+        problems.append("a held slab at the Z hard top stop reaches the spine / rail / lead screw")
+    if Z_CARRIAGE_ABOVE_CUP + C_HARD_BOTTOM < Z_RAIL_BOTTOM + 2:
+        problems.append("Z carriage is not >= 2 mm on its rail at the bottom hard stop")
+    if Z_CARRIAGE_ABOVE_CUP + C_HARD_TOP + MGN12H_L > Z_RAIL_BOTTOM + Z_RAIL_LEN - 2:
+        problems.append("Z carriage is not >= 2 mm on its rail at the top hard stop")
+    if Z_RAIL_BOTTOM + Z_RAIL_LEN > Z_SPINE_TOP - 1:
+        problems.append("Z rail longer than the spine")
+    nut_low = Z_CARRIAGE_ABOVE_CUP + C_HARD_BOTTOM + 36.0  # T8 nut body bottom (flange on the shelf at z_plate local Z 48)
+    if Z_SCREW_TIP > nut_low - 5:
+        problems.append("lead screw too short: the T8 nut runs off it near the bottom hard stop")
+    if not X_RAIL_X0 + MGN12H_L / 2 + 2 <= X_HARD_STOP[0] < X_HOME_SWITCH - 1:
+        problems.append("left X bumper must stop the carriage >= 2 mm on its rail and below the home switch")
+    if not travel_needed()["x"][1] + 15 + 2 <= X_HARD_STOP[1] <= X_RAIL_X0 + X_RAIL_LEN - MGN12H_L / 2 - 2:
+        problems.append("right X bumper must lie beyond the soft limit and stop the carriage >= 2 mm on its rail")
     return problems
 
 
@@ -178,3 +221,5 @@ if __name__ == "__main__":
         print(p)
     print("station", station_xy(), "capacity", capacity(), "travel", travel_needed(), "rods", len(rods()))
     print("checks:", check() or "OK", "| nominal slab", SLAB_W, SLAB_H, SLAB_T, "| C_SAFE_LOADED", C_SAFE_LOADED)
+    print("Z: spine", Z_SPINE_BOTTOM, "..", Z_SPINE_TOP, "| carriage above cup", Z_CARRIAGE_ABOVE_CUP, "| hard stops", C_HARD_BOTTOM, C_HARD_TOP,
+          "| screw tip", Z_SCREW_TIP, "| rail", Z_RAIL_BOTTOM, "..", Z_RAIL_BOTTOM + Z_RAIL_LEN)

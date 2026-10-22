@@ -31,6 +31,9 @@ from .motion import ControllerLost
 
 IN_POCKET_TOL = 5.0  # mm: (pocket 84 - head envelope 70) / 2 = 7 mm per side, minus 2 mm margin
 DIMPLE_DX = 40.0  # drill_template alignment dimples at cell centre +/- 40 mm on the row centre line (cad/model.py)
+TEMPLATE_HOLES = 8  # drill_template: 2 holes on each side wall line (shared with the neighbour cell) + 2 front + 2 back
+SIDE_HOLES = 2
+MARK_FEED_X = 1500.0  # mm/min: every sideways move during `mark` (the operator's hands and drill are near the bed)
 
 
 class CalError(Exception):
@@ -405,6 +408,16 @@ def calibrate_z(cfg: Config, hw, con: Console, cal_path: Path, yes: bool = False
     m.wait_idle()
     updates: dict = {"pad_trigger_c": round(pad, 3)}
     notes = [f"calibrate z {time.strftime('%Y-%m-%d %H:%M')}: pad trigger at Z {pad:.3f} (repeat spread {spread:.3f} mm), Z travel above the pad {travel:.1f} mm"]
+    if vac is not None:
+        # The cup is known empty and vented here: this is the sensor's atmosphere reading. The run compares
+        # against it before every grip (a slab still stuck to the cup reads only a little below it).
+        vac.release()
+        k_atm = sum(vac.kpa() for _ in range(5)) / 5
+        if -6.0 <= k_atm <= 6.0:
+            updates["vac_baseline_kpa"] = round(k_atm, 2)
+            notes.append(f"vacuum sensor zero (empty cup, vented) {k_atm:.2f} kPa")
+        else:
+            con.say(f"WARNING: the vacuum sensor reads {k_atm:.1f} kPa with an empty, vented cup (expect about 0). Not stored: check its 5 V supply and the 10k/20k divider (selftest).")
     if travel < cfg.c_max:
         if travel - 1.0 < cfg.c_safe_loaded + 1.0:
             raise CalError(f"Z travel above the pad is only {travel:.1f} mm; the machine needs {cfg.c_safe_loaded + 2:.0f} mm to carry a slab over the rods. "
@@ -485,17 +498,57 @@ def mark_positions(cfg: Config) -> list[dict]:
     return out
 
 
-def mark_order(cfg: Config, start: int = 0, only: list[int] | None = None) -> list[dict]:
+def mark_order(cfg: Config, start: int | None = None, only: list[int] | None = None) -> list[dict]:
     """Pockets to mark, in order: those whose two dimples are both inside the X travel first, then the
-    end pockets (one dimple is past the travel limit), so their neighbour's shared holes exist by then."""
+    end pockets (one dimple is past the travel limit), so their neighbour's shared holes exist by then.
+
+    ``start``: continue from that pocket IN THIS ORDER (after a break). The end pockets 0 and 12 come
+    last in the order, so `--start 6` still ends with 0 and 12. ``only``: just these pockets."""
     lo, hi = cfg.x_travel
-    rows = [r for r in mark_positions(cfg) if (only is None and r["pocket"] >= start) or (only is not None and r["pocket"] in only)]
+    rows = mark_positions(cfg)
     for r in rows:
         r["reach"] = [k for k in ("left", "right") if lo <= r[k] <= hi]
-    return [r for r in rows if len(r["reach"]) == 2] + [r for r in rows if len(r["reach"]) < 2]
+    order = [r for r in rows if len(r["reach"]) == 2] + [r for r in rows if len(r["reach"]) < 2]
+    if only is not None:
+        return [r for r in order if r["pocket"] in only]
+    if start is not None:
+        i = next((n for n, r in enumerate(order) if r["pocket"] == start), None)
+        if i is None:
+            raise CalError(f"--start {start}: there is no pocket {start}")
+        return order[i:]
+    return order
 
 
-def mark(cfg: Config, hw, con: Console, start: int = 0, only: list[int] | None = None) -> list[int]:
+def shared_sides(cfg: Config, pocket: int) -> dict[str, int]:
+    """Side wall lines of this pocket's cell whose two holes belong to the neighbour pocket that comes
+    EARLIER in the full marking order (so they are already drilled when this one is marked).
+    {'left': 4} = the left-hand side holes are pocket 4's. The station cell has no pocket, so the
+    pockets beside it share nothing on that side."""
+    order = mark_order(cfg)
+    rank = {r["pocket"]: n for n, r in enumerate(order)}
+    by_cell = {r["cell"]: r["pocket"] for r in order}
+    me = next(r for r in order if r["pocket"] == pocket)
+    out = {}
+    for side, dc in (("left", -1), ("right", 1)):
+        nb = by_cell.get(me["cell"] + dc)
+        if nb is not None and rank[nb] < rank[pocket]:
+            out[side] = nb
+    return out
+
+
+def drill_instruction(cfg: Config, pocket: int) -> str:
+    """What to drill through the template on this pocket: never the bosses over a neighbour's holes."""
+    shared = shared_sides(cfg, pocket)
+    if not shared:
+        return f"Drill all {TEMPLATE_HOLES} rod holes square to the bed (drill guide)."
+    new = TEMPLATE_HOLES - SIDE_HOLES * len(shared)
+    skip = " and ".join(f"the {SIDE_HOLES} {side.upper()}-hand side bosses (over pocket {nb}'s holes)" for side, nb in shared.items())
+    return (f"Drill only the {new} NEW rod holes, square to the bed (drill guide). Skip {skip}: those holes are already drilled, and "
+            "drilling them again through this template would re-cut them oval (the template is placed by its dimples, a few tenths "
+            "of a mm off the neighbour's) and the dowels would lean.")
+
+
+def mark(cfg: Config, hw, con: Console, start: int | None = None, only: list[int] | None = None) -> list[int]:
     """Walk the awl over every pocket so the printed drill_template is aligned to the machine's own X axis:
     the awl drops into the template's left dimple, then its right dimple (centre +/- 40 mm), the operator
     clamps the template and drills the 8 rod holes. Holes drilled this way sit exactly where the machine
@@ -503,7 +556,12 @@ def mark(cfg: Config, hw, con: Console, start: int = 0, only: list[int] | None =
 
     Pocket 0's left dimple and pocket 12's right dimple are outside the X travel. Those two pockets are
     done last: two 8 mm pins through the template's shared-side holes into the neighbour's holes set it,
-    and the one reachable dimple checks it."""
+    and the one reachable dimple checks it.
+
+    Every template is placed by its own dimples (referenced to the machine), so a side whose holes a
+    neighbour already drilled is never drilled again (see drill_instruction). The head only moves on to
+    the next pocket after the operator types 'clear' (drill and hands off the bed), and every sideways
+    move is slow (MARK_FEED_X): the motors stay energised (Z must hold), the drill is right there."""
     allpos = mark_positions(cfg)
     rows = mark_order(cfg, start, only)
     con.say("mark: for drilling the rod holes. The bed must have NO rods and nothing taller than the template on it -\n"
@@ -534,21 +592,21 @@ def mark(cfg: Config, hw, con: Console, start: int = 0, only: list[int] | None =
         con.say(f"=== pocket {i} (cell {r['cell']}, bed X {r['bed_x']:.1f}, machine X {r['centre']:.2f}, dimples at {r['left']:.2f} / {r['right']:.2f})")
         jog.move_z(jog.top())
         if len(r["reach"]) == 2:
-            jog.move_x(r["left"], cfg.feed_xy)
+            jog.move_x(r["left"], MARK_FEED_X)
             con.ask("Put the template on this cell with its LEFT dimple under the awl point. Press Enter - the awl comes down until it touches ")
             hit = touch("template")
             if z_touch is None:
                 z_touch = hit
             con.ask("Nudge the template until the point sits IN the left dimple. Press Enter ")
             jog.move_z(z_touch + 15.0)
-            jog.move_x(r["right"])
+            jog.move_x(r["right"], MARK_FEED_X)
             jog.move_z(z_touch - 4.0)  # probe move: stops in (or on) the right dimple
             con.ask("Swing the template (pivot on the left dimple) until the RIGHT dimple is under the point. Clamp it. Press Enter ")
         elif len(r["reach"]) == 1:
             side = r["reach"][0]
             nb = i + 1 if side == "right" else i - 1
             shared = "right" if side == "right" else "left"
-            jog.move_x(r[side], cfg.feed_xy)
+            jog.move_x(r[side], MARK_FEED_X)
             con.ask(f"Put the template on this cell. Push two 8 mm pins (drill bits) through its {shared.upper()}-hand guide holes into pocket {nb}'s "
                     f"already-drilled {'left' if shared == 'right' else 'right'}-hand holes. Press Enter - the awl comes down onto the {side} dimple ")
             hit = touch(f"{side} dimple")
@@ -562,14 +620,23 @@ def mark(cfg: Config, hw, con: Console, start: int = 0, only: list[int] | None =
         jog.move_z(jog.top())
         away = [q for q in allpos if abs(q["pocket"] - i) >= 3]
         if away:  # park the head 3 pockets away so the drill has room
-            jog.move_x(min(away, key=lambda q: abs(q["pocket"] - i))["centre"], cfg.feed_xy)
-        a = con.ask("Drill the rod holes square to the bed (drill guide), then press Enter for the next pocket (s = stop here) ").strip().lower()
+            jog.move_x(min(away, key=lambda q: abs(q["pocket"] - i))["centre"], MARK_FEED_X)
+        con.say(drill_instruction(cfg, i))
+        answer = ""
+        while answer not in ("clear", "s", "q"):
+            answer = con.ask("When the drill and your hands are OFF the bed, type 'clear' - the head then moves to the next pocket "
+                             "(s = drilled, stop here; q = stop): ").strip().lower()
+            if answer not in ("clear", "s", "q"):
+                con.say("The head does not move until you type 'clear'.")
+        if answer == "q":  # also end of input: nobody confirmed the bed is clear, so nothing moves any more
+            con.say(f"stopped at pocket {i} (not recorded as drilled: if you did drill it, do not mark it again)")
+            break
         done.append(i)
-        if a == "s":
+        if answer == "s":
             break
     left = [r["pocket"] for r in rows if r["pocket"] not in done]
     if left:
-        con.say(f"not marked yet: {left}; continue with: python -m slabscan mark --only {','.join(map(str, left))}")
+        con.say(f"not marked yet: {left}; continue with: python -m slabscan mark --start {left[0]}  (or --only {','.join(map(str, left))})")
     con.say(f"marked pockets {done}. The station cell needs no holes of its own.")
     return done
 
@@ -624,7 +691,8 @@ def focus(cfg: Config, hw, con: Console, which: str, out_dir: Path, motion: bool
         if settle:
             time.sleep(settle)
         if which == "station" and hasattr(cam, "set_lens_position"):
-            result.update(_lens_sweep(cfg, cam, con, side, out_dir, lens_from, lens_to, lens_step, settle))
+            check = (lambda: r._check_vacuum("during the focus sweep")) if r is not None and r.holding else None
+            result.update(_lens_sweep(cfg, cam, con, side, out_dir, lens_from, lens_to, lens_step, settle, check))
             if save and cal_path is not None:
                 spec = {**cfg.cam_station, "lens_position": round(result["recommended"], 2)}
                 write_overrides(cal_path, {"cam_station": spec}, f"focus station {time.strftime('%Y-%m-%d %H:%M')}: LensPosition {spec['lens_position']}")
@@ -652,14 +720,16 @@ def focus(cfg: Config, hw, con: Console, which: str, out_dir: Path, motion: bool
         light(False)
         # after a lost controller (E-stop) nothing may move: the error that got us here is reported instead
         if r is not None and getattr(hw.motion, "homed", True) and not getattr(hw.motion, "lost", False):
-            if r.holding:
-                r.put_back()
+            if r.holding or r.freeze:
+                note = r.secure()  # puts the slab back (or sets a weakly held one down) - or, after a fault, moves nothing
+                if note:
+                    con.say(note)
             elif r.homed:
                 r._z(r.c(cfg.c_safe_empty))
     return result
 
 
-def _lens_sweep(cfg, cam, con, side, out_dir, lens_from, lens_to, lens_step, settle) -> dict:
+def _lens_sweep(cfg, cam, con, side, out_dir, lens_from, lens_to, lens_step, settle, check=None) -> dict:
     rng = cam.lens_range() if hasattr(cam, "lens_range") else None
     centre = float(cfg.cam_station.get("lens_position") or 1 / 0.14)
     lo = lens_from if lens_from is not None else centre - 2.0
@@ -670,6 +740,8 @@ def _lens_sweep(cfg, cam, con, side, out_dir, lens_from, lens_to, lens_step, set
     rows = []
     con.say(f"sweeping LensPosition {lo:.2f} .. {hi:.2f} dioptres in {lens_step} steps (1/0.14 m = 7.14)")
     for i in range(max(1, n)):
+        if check is not None:
+            check()  # the slab hangs over the bare lens for the whole sweep: stop (and put it back) if the vacuum drops
         lp = round(lo + i * lens_step, 3)
         cam.set_lens_position(lp)
         if settle:
@@ -707,13 +779,19 @@ class SelfTest:
         return any(s == "FAIL" for _, s, _ in self.results)
 
 
-def selftest(cfg: Config, con: Console, hw=None, sim: bool = False, interactive: bool = False, do_motion: bool = False, out_dir: Path = Path("selftest")) -> int:
-    """Check every part on its own; a failing part does not stop the others. Exit code 1 if anything FAILs."""
-    from .factory import make_part
+def selftest(cfg: Config, con: Console, hw=None, sim: bool = False, interactive: bool = False, do_motion: bool = False, out_dir: Path = Path("selftest"),
+             cal_path: Path | None = None) -> int:
+    """Check every part on its own; a failing part does not stop the others. Exit code 1 if anything FAILs.
+    ``cal_path``: with -i, the empty-cup vacuum reading can be stored there as the sensor zero."""
+    from .factory import MachineLock, make_part
 
     t = SelfTest(con)
     out_dir.mkdir(parents=True, exist_ok=True)
     opened = []
+    lock = None
+    if hw is None and not sim:
+        lock = MachineLock()
+        lock.acquire()  # raises MachineBusy if the web service or another command has the machine
 
     def part(name):
         if hw is not None:
@@ -765,6 +843,13 @@ def selftest(cfg: Config, con: Console, hw=None, sim: bool = False, interactive:
     vac = part("vacuum")
     if vac:
         try:
+            # Read BEFORE venting: after a stop that left a slab sealed on the cup, a vent would drop it.
+            k_pre = sum(vac.kpa() for _ in range(5)) / 5
+            ref = cfg.vac_baseline_kpa
+            low = k_pre < (ref - 2.0 if ref is not None else -6.0)
+            if low and not (interactive and con.confirm(f"The cup line reads {k_pre:.1f} kPa, below an empty cup. Is the cup EMPTY (no slab on it)?")):
+                raise CalError(f"the cup line holds vacuum ({k_pre:.1f} kPa): a slab may be on the cup. Not vented. Hold the slab, then vent by hand "
+                               "(OPERATING.md 8.2); run selftest again with the cup empty")
             vac.release()
             k0 = sum(vac.kpa() for _ in range(5)) / 5
             if -6 <= k0 <= 6:
@@ -773,6 +858,9 @@ def selftest(cfg: Config, con: Console, hw=None, sim: bool = False, interactive:
                 t.rec("vacuum sensor", "FAIL", f"{k0:.0f} kPa at atmosphere = 0 V input: sensor unpowered, ADS1115 A0 not connected, or divider open")
             else:
                 t.rec("vacuum sensor", "WARN", f"{k0:.1f} kPa at atmosphere (expect about 0): check the sensor supply is 5 V and the divider is 10k/20k")
+            if interactive and cal_path is not None and -6 <= k0 <= 6 and con.confirm(f"Store {k0:.2f} kPa as the empty-cup sensor zero (the cup is empty and vented)?", default=True):
+                write_overrides(cal_path, {"vac_baseline_kpa": round(k0, 2)}, f"selftest {time.strftime('%Y-%m-%d %H:%M')}: empty-cup vacuum sensor zero {k0:.2f} kPa")
+                t.rec("vacuum zero", "PASS", f"stored vac_baseline_kpa = {k0:.2f} in {cal_path}")
             vac.hold()
             time.sleep(0.8)
             k1 = vac.kpa()
@@ -790,11 +878,17 @@ def selftest(cfg: Config, con: Console, hw=None, sim: bool = False, interactive:
                 a = vac.kpa()
                 time.sleep(2.0)
                 b = vac.kpa()
-                t.rec("leak", "PASS" if b - a < 5 else "WARN", f"{(b - a) / 2:.1f} kPa/s with the valves shut (cup, check valve and fittings)")
+                rate = (b - a) / 2
+                hang = f"; a slab would hang about {(-1.7 - b) / rate:.0f} s on the closed line (it falls near -1.7 kPa)" if rate > 0.01 and b < -1.7 else ""
+                t.rec("leak", "PASS" if b - a < 5 else "WARN", f"{rate:.1f} kPa/s with the valves shut (cup, check valve and fittings){hang}")
                 con.ask("Keep holding the slab; press Enter to vent (it will let go) ")
                 vac.release()
                 kv = vac.kpa()
-                t.rec("vent valve", "PASS" if kv > -6 else "FAIL", f"{kv:.1f} kPa after venting")
+                # the slab only lets go near -1.7 kPa (at -5 kPa the cup still holds ~3x its weight): the vent must
+                # bring the line back to atmosphere, not just 'mostly'
+                t.rec("vent valve", "PASS" if kv > k0 - 1.0 else "FAIL", f"{kv:.1f} kPa after venting (atmosphere {k0:.1f}; must be within 1 kPa)")
+        except CalError as e:
+            t.rec("vacuum", "FAIL", str(e))
         except Exception as e:  # noqa: BLE001
             t.rec("vacuum", "FAIL", str(e))
 
@@ -860,6 +954,8 @@ def selftest(cfg: Config, con: Console, hw=None, sim: bool = False, interactive:
                 dev.close()
             except Exception:  # noqa: BLE001
                 pass
+    if lock is not None:
+        lock.release()
     bad = [n for n, s, _ in t.results if s == "FAIL"]
     con.say("SELFTEST " + ("FAILED: " + ", ".join(bad) if bad else "PASSED") + f" (images in {out_dir}/)")
     return 1 if bad else 0

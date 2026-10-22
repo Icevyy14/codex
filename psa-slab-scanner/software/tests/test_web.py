@@ -6,8 +6,15 @@ import pytest
 
 pytest.importorskip("flask")
 
-from slabscan.config import from_layout  # noqa: E402
+import dataclasses  # noqa: E402
+
+from slabscan.config import from_layout as _layout  # noqa: E402
 from slabscan.web import SimProvider, create_app  # noqa: E402
+
+
+def from_layout():
+    """The simulated mix includes older labels without a back QR; the face-down check would stop on each."""
+    return dataclasses.replace(_layout(), face_down_check="off")
 
 H = {"X-SlabRail": "1"}
 
@@ -123,10 +130,36 @@ def test_estop_shows_the_stop_message_and_resume_rehomes(tmp_path):
     world = provider.hw.world
     assert world.held  # the slab is still on the cup; the message names its pocket
     src = int(s["message"].split("A slab from pocket ")[1].split()[0])
-    for slab in reversed(world.held):  # operator puts it back, face-down, on top of that pocket
+    assert s["slab_on_cup"] == f"pocket {src}" and world.vacuum_on  # the pump keeps holding it; the page offers Vent
+    r = c.post("/api/resume", json={"batch": bid}, headers=H)
+    assert r.status_code == 409 and "slab is on the cup" in r.get_json()["error"]  # not before the cup is cleared
+    for slab in reversed(world.held):  # operator holds it, presses Vent, puts it back face-down on that pocket
         world.stacks[src].append(slab)
     world.held, world.gripping = [], False
+    assert c.post("/api/vent", headers=H).status_code == 200 and not world.vacuum_on
+    assert c.get("/api/status").get_json()["slab_on_cup"] is None
     assert c.post("/api/resume", json={"batch": bid}, headers=H).status_code == 200
     s = _wait(c)
     assert s["state"] == "finished", s["message"]
     assert s["done"] == 3 and s["counts"] == {"ok": 3}
+
+
+def test_web_refuses_an_uncalibrated_machine_and_reloads_the_config(tmp_path):
+    """software-10: the web page started runs on an uncalibrated machine and kept the config it booted with."""
+    from slabscan.config import write_overrides
+
+    cfg = from_layout()
+    cal = tmp_path / "calibration.toml"
+    loads = []
+
+    def reload():
+        loads.append(1)
+        return from_layout()
+
+    app = create_app(cfg, SimProvider(cfg, slabs=2), out_dir=tmp_path / "batches", reload=reload, cal_path=cal)
+    c = app.test_client()
+    r = c.post("/api/start", json={}, headers=H)
+    assert r.status_code == 409 and "calibrate z" in r.get_json()["error"]
+    write_overrides(cal, {"pad_trigger_c": 0.0, "offset_x": 0.0})
+    assert c.post("/api/start", json={}, headers=H).status_code == 200
+    assert _wait(c)["state"] == "finished" and loads == [1]

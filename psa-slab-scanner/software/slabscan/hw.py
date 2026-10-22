@@ -4,9 +4,16 @@ Wiring (see docs/WIRING.md): each load is switched by a logic-level MOSFET modul
 The vacuum sensor (XGZP6847A, -100..0 kPa, 0.5-4.5 V out at 5 V supply) feeds an ADS1115 ADC
 through a 10k/20k divider, so the ADC never sees more than ~3 V.
 
-Valve logic is fail-safe: both solenoid valves are normally closed. On power loss both close, so
-the cup line stays sealed (vacuum valve shut, vent shut) and a held slab is not dropped instantly.
-The check valve keeps the reservoir from leaking back through the stopped pump.
+Valve logic: both solenoid valves are normally closed. On power loss (or ``close()``) both close,
+so the cup line stays sealed and a held slab is not dropped instantly. But the reservoir sits on
+the PUMP side of the vacuum valve (BUILD_GUIDE 8.1), so once that valve closes only the few cm3 of
+cup-side tubing hold the slab: it hangs for seconds to tens of seconds, depending on the leak, not
+minutes. The software therefore never calls ``close()`` while a slab hangs on the cup and the Pi
+still has power: it keeps the pump running (``hold()``) until the operator vents it by hand.
+(Re-plumbing the reservoir to the cup side of the valve would make a power cut survivable too.)
+
+A sensor reading outside the sensor's own 0.5-4.5 V output range is a wiring/supply fault (an open
+OUT wire or a lost 5 V reads as a perfect vacuum): ``kpa()`` raises ``SensorFault`` instead.
 """
 
 from __future__ import annotations
@@ -22,9 +29,14 @@ PIN_LED_STATION = 24
 PIN_LID = 25  # lid interlock switch (closed = lid shut), input with pull-up
 PIN_GATE = 5  # overfill light-beam receiver: HIGH = beam received (nothing above the MAX line)
 
+class SensorFault(RuntimeError):
+    """The vacuum sensor reading is physically impossible (broken wire, lost supply, bad divider)."""
+
+
 ADS_ADDR = 0x48
 DIVIDER = 2.0 / 3.0  # 20k/(10k+20k)
 SENSOR_V0, SENSOR_V1 = 0.5, 4.5  # volts at -100 kPa .. 0 kPa (XGZP6847A "negative" range)
+A0_MIN_V, A0_MAX_V = 0.25, 3.25  # ADC input outside this = outside the sensor's 0.5..4.5 V (x 2/3 = 0.33..3.0 V)
 
 
 class PiVacuum:
@@ -60,7 +72,11 @@ class PiVacuum:
         raw = (hi << 8) | lo
         if raw > 0x7FFF:
             raw -= 0x10000
-        v = raw * 4.096 / 32768 / DIVIDER
+        a0 = raw * 4.096 / 32768
+        if not A0_MIN_V <= a0 <= A0_MAX_V:
+            raise SensorFault(f"vacuum sensor input {a0:.2f} V is outside its 0.33-3.0 V range: sensor OUT wire, 10k/20k divider "
+                              "or the sensor's 5 V supply is broken (an open input reads as a perfect vacuum)")
+        v = a0 / DIVIDER
         return -100.0 + (v - SENSOR_V0) / (SENSOR_V1 - SENSOR_V0) * 100.0
 
     def close(self) -> None:

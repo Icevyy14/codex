@@ -49,6 +49,7 @@ def test_calibrate_z_finds_the_pad(tmp_path):
     raw = tomllib.loads(cal.read_text())
     assert raw["pad_trigger_c"] == pytest.approx(3.25, abs=0.01)
     assert "c_max" not in raw  # full travel available in the sim
+    assert raw["vac_baseline_kpa"] == pytest.approx(0.0)  # empty, vented cup: the run's atmosphere reference
 
 
 def test_calibrate_x_offset_and_low_move_refusal(tmp_path):
@@ -153,13 +154,36 @@ def test_mark_walks_every_pocket_on_a_bare_bed():
             if z1 < self.z and z1 < self.surface_below() - 0.01:
                 raise Crash("fast move into the template")
 
+        def check_descent_xy(self, z1, tol=1.5):
+            pass  # no rods yet: the awl may go down anywhere
+
     cfg = from_layout()
     world = BareBed(cfg, stacks={})
-    hw = Hardware(cfg=cfg, motion=SimMotion(world), world=world, sim=True)
-    con = ScriptedConsole(["y"] + [""] * 80)
+    motion = SimMotion(world)
+    hw = Hardware(cfg=cfg, motion=motion, world=world, sim=True)
+    con = ClearConsole()
     done = mark(cfg, hw, con)
     assert sorted(done) == list(range(13)) and done[-2:] == [0, 12]
     assert not any("Refused" in ln for ln in con.lines)
+    assert not any(ln.endswith(f" F{cfg.feed_xy:.0f}") for ln in motion.log), "every sideways move during mark is slow"
+
+
+class ClearConsole(ScriptedConsole):
+    """Answers 'y' to the first question, 'clear' to every 'type clear' prompt, Enter to everything else."""
+
+    def __init__(self, extra=None):
+        super().__init__([])
+        self.first = True
+        self.extra = list(extra or [])
+
+    def _next(self, prompt):
+        self.lines.append(prompt)
+        if self.first:
+            self.first = False
+            return "y"
+        if "'clear'" in prompt:
+            return self.extra.pop(0) if self.extra else "clear"
+        return ""
 
 
 def test_calibrate_z_low_pad_keeps_probe_targets_inside_the_soft_limit(tmp_path):
@@ -175,7 +199,7 @@ def test_phase0_from_the_cli(tmp_path):
     code, _ = _run(["phase0", "--sim", "2", "--out", str(tmp_path)])
     assert code == 0
     assert (tmp_path / "phase0.csv").exists()
-    assert "confident read (ok): 2/2" in (tmp_path / "phase0_report.txt").read_text()
+    assert "confident read (ok), in scan order: 2/2" in (tmp_path / "phase0_report.txt").read_text()
 
 
 def test_jog_after_estop_rehomes_before_moving():
@@ -215,3 +239,96 @@ def test_jog_after_estop_rehomes_before_moving():
     assert jog.x == pytest.approx(cfg.x_travel[0])  # at the home position, p 5 was not run
     jog.execute("p 3")
     assert jog.x == pytest.approx(x3)
+
+
+def test_mark_drills_only_new_holes_over_a_neighbours_side():
+    """mechanical-12: re-drilling a neighbour's holes through a dimple-placed template ovalises them."""
+    from slabscan.ops import drill_instruction, shared_sides
+
+    cfg = from_layout()
+    assert shared_sides(cfg, 1) == {}  # pocket 0 is marked last
+    assert shared_sides(cfg, 3) == {"left": 2}
+    assert shared_sides(cfg, 7) == {}  # its left neighbour is the station cell, which drills nothing
+    assert shared_sides(cfg, 8) == {"left": 7}
+    assert shared_sides(cfg, 0) == {"right": 1} and shared_sides(cfg, 12) == {"left": 11}
+    assert "all 8 rod holes" in drill_instruction(cfg, 1)
+    text = drill_instruction(cfg, 3)
+    assert "only the 6 NEW" in text and "LEFT-hand side bosses (over pocket 2's holes)" in text
+
+
+def test_mark_start_continues_in_the_marking_order():
+    """usability-cost-19: --start N dropped every pocket below N, so pocket 0 (marked last) was never asked for."""
+    from slabscan.ops import mark_order
+
+    cfg = from_layout()
+    assert [r["pocket"] for r in mark_order(cfg)] == list(range(1, 12)) + [0, 12]
+    assert [r["pocket"] for r in mark_order(cfg, start=6)] == [6, 7, 8, 9, 10, 11, 0, 12]
+    assert [r["pocket"] for r in mark_order(cfg, start=0)] == [0, 12]
+    assert [r["pocket"] for r in mark_order(cfg, start=12)] == [12]
+
+
+def test_mark_moves_on_only_after_clear_and_stops_on_no_input():
+    """mechanical-20: an accidental Enter (or end of input) used to drive the head toward the drill."""
+    from slabscan.factory import Hardware
+    from slabscan.ops import mark
+    from slabscan.simworld import SimMotion, SimWorld
+
+    class BareBed(SimWorld):
+        def surface_below(self):
+            return 1.0
+
+        def check_xy_path(self, x1, y1):
+            pass
+
+        def check_z(self, z1):
+            pass
+
+        def check_descent_xy(self, z1, tol=1.5):
+            pass
+
+    cfg = from_layout()
+    world = BareBed(cfg, stacks={})
+    motion = SimMotion(world)
+    hw = Hardware(cfg=cfg, motion=motion, world=world, sim=True)
+    seen = []
+
+    class Recorder(ClearConsole):
+        def _next(self, prompt):
+            if "'clear'" in prompt:
+                seen.append(len(motion.log))
+            return super()._next(prompt)
+
+    con = Recorder(extra=["", "yes", "clear"])
+    assert mark(cfg, hw, con, only=[3, 4]) == [3, 4]
+    assert seen[0] == seen[1] == seen[2], "nothing moved while the answer was not 'clear'"
+    assert any("does not move until you type 'clear'" in ln for ln in con.lines)
+
+    class NoInput(ClearConsole):
+        def _next(self, prompt):
+            if "'clear'" in prompt:
+                seen.append(len(motion.log))
+                self.lines.append(prompt)
+                raise EOFError
+            return super()._next(prompt)
+
+    seen.clear()
+    con = NoInput()
+    assert mark(cfg, hw, con, only=[3, 4]) == []
+    assert len(motion.log) == seen[0], "end of input = stop: the head stays where it is"
+
+
+def test_resume_needs_calibration_and_a_hands_clear_answer(tmp_path):
+    """software-10: CLI resume had no calibration check and no confirmation."""
+    from tools import gen_config
+
+    m = tmp_path / "machine.toml"
+    gen_config.main(["--out", str(m)])
+    cal = tmp_path / "calibration.toml"
+    bdir = tmp_path / "b1"
+    bdir.mkdir()
+    (bdir / "journal.jsonl").write_text("")
+    code, out = _run(["--config", str(m), "--calibration", str(cal), "resume", str(bdir)], ["y"])
+    assert code == 1 and "calibrate z" in out
+    cal.write_text("pad_trigger_c = 0.5\noffset_x = 0.25\n")
+    code, out = _run(["--config", str(m), "--calibration", str(cal), "resume", str(bdir)], ["n"])
+    assert code == 1 and "Resume the run?" in out and "slabs already done" not in out  # refused before the machine was opened
