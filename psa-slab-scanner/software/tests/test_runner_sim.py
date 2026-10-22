@@ -143,3 +143,43 @@ def test_cgc_slabs_are_read_and_stacked_normally(tmp_path):
     assert rows["4123456001"]["out_pocket"] == "3"
     bgs = [row for row in rows.values() if row["grader"] == "BGS"]
     assert bgs and bgs[0]["status"] == "other_grader" and bgs[0]["out_pocket"] == str(cfg.exceptions.index)
+
+
+class _FlakyCamera(SimCamera):
+    """Head camera that dies on its Nth frame (USB unplugged, driver crash)."""
+
+    def __init__(self, world, fail_at):
+        super().__init__(world, "head")
+        self.fail_at = fail_at
+
+    def capture(self):
+        if self.n + 1 >= self.fail_at:
+            raise RuntimeError("camera head returned no frame")
+        return super().capture()
+
+
+def test_unexpected_error_with_slab_in_cup_puts_it_back(tmp_path):
+    cfg = _cfg()
+    stacks = make_batch(cfg, per_pocket=3, seed=9, eras=(1.0, 0.0, 0.0))
+    n_before = {k: len(v) for k, v in stacks.items()}
+    w = SimWorld(cfg, stacks={k: list(v) for k, v in stacks.items()})
+    # frame 1 = hover of the first slab, frames 2-3 = back read after lifting -> fail while held
+    r = Runner(cfg, SimMotion(w), SimVacuum(w), SimLights(), _FlakyCamera(w, 2), SimCamera(w, "station"), BatchWriter(tmp_path), gate=SimGate(w), log=lambda *_: None)
+    with pytest.raises(Stop, match="Unexpected error.*put back"):
+        r.run()
+    assert not w.held, "slab left hanging on the cup"
+    assert {k: len(v) for k, v in w.stacks.items() if v} == {k: n for k, n in n_before.items() if n}
+
+
+def test_double_pick_gets_an_unread_row(tmp_path):
+    cfg = _cfg()
+    stacks = make_batch(cfg, per_pocket=3, seed=2, eras=(1.0, 0.0, 0.0))
+    stacks[2][1].clingy = True
+    w, r, summary = _run(tmp_path, cfg, stacks)
+    rows = list(csv.DictReader((r.w.dir / "certs.csv").open()))
+    assert len(rows) == sum(len(v) for v in stacks.values())  # every physical slab has a row
+    unread = [row for row in rows if row["note"].startswith("UNREAD")]
+    assert len(unread) == 1 and unread[0]["status"] == "no_read"
+    main = next(row for row in rows if "DOUBLE PICK" in row["note"])
+    assert int(unread[0]["out_index"]) == int(main["out_index"]) - 1
+    assert int(unread[0]["source_index"]) == int(main["source_index"]) + 1

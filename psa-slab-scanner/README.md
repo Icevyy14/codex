@@ -19,8 +19,8 @@ other moves it up and down.
 - **[Certain] It has not touched a real slab yet.** The geometry, the motion plan and the decoding
   were verified in CAD and in a simulator (below). Real PSA label payloads and real cup
   behaviour still need to be tested. That is why the build starts with a **Phase 0** camera
-  test that costs about $100, before you buy any motion parts.
-- **Build effort:** a real mechatronics project, roughly 40–60 hours of hands-on work plus
+  test (about $150 if you borrow a school Raspberry Pi, about $300 if you buy one) before you buy any motion parts.
+- **Build effort:** a real mechatronics project, roughly 60–85 hours of hands-on work plus
   printing. Plan to use your school's instructors for the 120 V wiring, crimping and
   calibration.
 
@@ -91,7 +91,7 @@ The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Build order
 
-1. **Phase 0, about $100, one evening.** Build the camera test jig (`docs/img/phase0_jig.png`)
+1. **Phase 0, about $150–300, one or two evenings.** Build the camera test jig (`docs/img/phase0_jig.png`)
    and run `python -m tools.phase0` on 30–50 of your own slabs. Go ahead only if at least 95%
    read and 0 come out wrong.
 2. Order from the BOM. Print the parts in `cad/out/printed/`.

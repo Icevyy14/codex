@@ -20,6 +20,10 @@ _STATUS_RE = re.compile(r"<(\w+)(?::\d+)?\|(MPos|WPos):([-\d.]+),([-\d.]+),([-\d
 _PINS_RE = re.compile(r"\|Pn:([A-Za-z]+)")
 
 
+class SafetyViolation(Exception):
+    """Raised by the simulator's safety monitor. Never caught by the runner: a test must fail loudly."""
+
+
 class MotionError(Exception):
     pass
 

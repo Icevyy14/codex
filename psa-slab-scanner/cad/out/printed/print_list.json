@@ -92,22 +92,22 @@
     "qty": 1,
     "size_mm": [
       22.0,
-      226.0,
-      50.0
+      50.0,
+      229.0
     ],
-    "volume_cm3": 38.5,
-    "note": "PETG, lying on its side (as exported), 4 walls"
+    "volume_cm3": 39.0,
+    "note": "PETG, upright on its foot (as exported), 10 mm brim, 4 walls; needs 230 mm Z height, else print lying on its side with supports"
   },
   {
     "part": "gate_post_R",
     "qty": 1,
     "size_mm": [
       22.0,
-      226.0,
-      50.0
+      50.0,
+      229.0
     ],
-    "volume_cm3": 38.5,
-    "note": "PETG, lying on its side (as exported), 4 walls"
+    "volume_cm3": 39.0,
+    "note": "PETG, upright on its foot (as exported), 10 mm brim, 4 walls; needs 230 mm Z height, else print lying on its side with supports"
   },
   {
     "part": "drill_template",
@@ -150,7 +150,7 @@
       56.0,
       16.0
     ],
-    "volume_cm3": 59.6,
+    "volume_cm3": 62.1,
     "note": "PLA/PETG (Phase 0 test jig), ring up"
   },
   {
@@ -161,18 +161,18 @@
       14.0,
       18.0
     ],
-    "volume_cm3": 2.5,
+    "volume_cm3": 2.4,
     "note": "PETG (build tool) + M5 heat-set insert + 3 mm steel pin"
   },
   {
     "part": "fill_gauge",
     "qty": 2,
     "size_mm": [
+      30.0,
       214.0,
-      4.0,
-      30.0
+      4.0
     ],
     "volume_cm3": 10.5,
-    "note": "PLA (loading tool)"
+    "note": "PLA, flat (as exported) (loading tool)"
   }
 ]

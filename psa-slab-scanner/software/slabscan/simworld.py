@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .config import Config
+from .motion import SafetyViolation
 from .sim import Degrade, slab_view
 
 BUFFER_STROKE = 25.0
@@ -21,7 +22,7 @@ TRIGGER_COMPRESSION = 2.0  # buffer compression at which the optical sensor trip
 HEAD_SIDE_CLEAR = 7.0  # (pocket 84 - head envelope 70) / 2: an empty head may shift this far inside a pocket below the rod tops
 
 
-class Crash(Exception):
+class Crash(SafetyViolation):
     pass
 
 

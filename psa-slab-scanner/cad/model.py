@@ -154,7 +154,7 @@ def bed_parts() -> list[Part]:
         parts.append(Part(f"rod_{i:02d}", cyl((x, y, Z_BED_TOP - L.ROD_EMBED), L.ROD_D, rod_h), DOWEL, "wood", "static"))
     parts.append(Part("station", station_mount().translate((SX, SY, 0)), PETG, "printed", "static"))
     for side, x in (("L", GATE_X[0]), ("R", GATE_X[1])):
-        parts.append(Part(f"gate_post_{side}", gate_post(side).translate((x, L.Y_ROW, 0)), PETG, "printed", "static"))
+        parts.append(Part(f"gate_post_{side}", gate_post(side).translate((x, L.Y_ROW, Z_BED_TOP)), PETG, "printed", "static"))
     parts.append(Part("gate_beam", cyl((GATE_X[0], L.Y_ROW, L.GATE_Z), 1.2, GATE_X[1] - GATE_X[0], (1, 0, 0)), (1.0, 0.1, 0.1, 0.6), "purchased", "static", note="laser beam (not a part)"))
     parts.append(Part("station_camera", cbox(SX, SY, 14, 25, 24, 6).union(cyl((SX, SY, 17), 9, 6)), GREEN, "purchased", "static", note="Pi Camera Module 3"))
     return parts
@@ -175,13 +175,15 @@ def station_mount() -> cq.Workplane:
 
 def gate_post(side: str) -> cq.Workplane:
     """Holds the laser module (left) or the laser-receiver module (right) at GATE_Z on the row centre line.
-    Local origin: beam axis at (0, 0, GATE_Z) projected to the bed."""
+    It stands on the bare plywood (no pad there), so its foot is at Z = -PAD_T and the barrel hole is
+    GATE_Z + PAD_T above the foot. Local origin: foot underside, on the beam axis."""
     s = -1 if side == "L" else 1  # posts stand outside the row
+    hz = L.GATE_Z + L.PAD_T
     foot = cbox(s * 4, 0, 1.5, 22, 50, 3)
     foot = holes_z(foot, [(s * 4, -18), (s * 4, 18)], 4.5)
-    post = cbox(s * 4, 0, L.GATE_Z / 2 + 6, 10, 16, L.GATE_Z + 12)
-    post = post.cut(cyl((s * 15, 0, L.GATE_Z), 6.2, 30, (-s, 0, 0)))  # 6 mm laser / receiver barrel
-    post = post.cut(cbox(s * 4, 0, L.GATE_Z + 9, 12, 2, 5))  # wire slot
+    post = cbox(s * 4, 0, hz / 2 + 6, 10, 16, hz + 12)
+    post = post.cut(cyl((s * 15, 0, hz), 6.2, 30, (-s, 0, 0)))  # 6 mm laser / receiver barrel
+    post = post.cut(cbox(s * 4, 0, hz + 9, 12, 2, 5))  # wire slot
     return foot.union(post)
 
 
@@ -355,7 +357,7 @@ def drill_template() -> cq.Workplane:
 def awl_adapter() -> cq.Workplane:
     """Screws onto the spring buffer in place of the cup; holds a 3 mm steel pin with a sharp point
     on the cup axis (used to align the drill template)."""
-    body = cyl((0, 0, 0), 14, 18).cut(cyl((0, 0, 10), 5.0, 9))  # M5 heat-set insert pocket at the top
+    body = cyl((0, 0, 0), 14, 18).cut(cyl((0, 0, 9), 6.4, 10))  # M5 heat-set insert pocket (6.4 mm, e.g. ruthex M5x9.5)
     body = body.cut(cyl((0, 0, -1), 3.1, 12))
     return body
 
@@ -400,7 +402,7 @@ def phase0_top() -> cq.Workplane:
     bar = holes_z(bar, [(dx, dy) for dx in (-16, 16) for dy in (-16, 16)], 2.2)
     ring = cyl((0, 0, -8), 56, 8).cut(cyl((0, 0, -9), 46, 10))
     for sx in (-1, 1):
-        bar = bar.cut(cbox(sx * span / 2, 0, 4, 20.4, 20.4, 10))  # post tops slot in
+        bar = bar.cut(cbox(sx * span / 2, 0, 2.5, 20.4, 20.4, 5))  # blind sockets: the bridge rests on the post tops
     return bar.union(ring)
 
 
@@ -488,12 +490,12 @@ def printed_catalog() -> list[tuple[str, cq.Workplane, int, str]]:
         ("z_plate", z_plate().rotate((0, 0, 0), (1, 0, 0), -90), 1, "PETG, carriage face down, nut shelf up, 6 walls, 50% infill"),
         ("head_foot", head_foot(off), 1, "PETG, 5 walls, 40% infill"),
         ("camera_bracket", camera_bracket(off), 1, "PETG matte black, supports under the ring"),
-        ("gate_post_L", gate_post("L").rotate((0, 0, 0), (1, 0, 0), 90), 1, "PETG, lying on its side (as exported), 4 walls"),
-        ("gate_post_R", gate_post("R").rotate((0, 0, 0), (1, 0, 0), 90), 1, "PETG, lying on its side (as exported), 4 walls"),
+        ("gate_post_L", gate_post("L"), 1, "PETG, upright on its foot (as exported), 10 mm brim, 4 walls; needs 230 mm Z height, else print lying on its side with supports"),
+        ("gate_post_R", gate_post("R"), 1, "PETG, upright on its foot (as exported), 10 mm brim, 4 walls; needs 230 mm Z height, else print lying on its side with supports"),
         ("drill_template", drill_template(), 1, "PLA/PETG, 0.2 mm, 100% infill bosses (build tool)"),
         ("phase0_base", phase0_base(), 1, "PLA/PETG black (Phase 0 test jig)"),
         ("phase0_tray", phase0_tray(), 1, "PLA/PETG (Phase 0 test jig)"),
         ("phase0_top", phase0_top().rotate((0, 0, 0), (1, 0, 0), 180), 1, "PLA/PETG (Phase 0 test jig), ring up"),
         ("awl_adapter", awl_adapter(), 1, "PETG (build tool) + M5 heat-set insert + 3 mm steel pin"),
-        ("fill_gauge", fill_gauge().rotate((0, 0, 0), (0, 1, 0), 90), 2, "PLA (loading tool)"),
+        ("fill_gauge", fill_gauge().rotate((0, 0, 0), (1, 0, 0), 90), 2, "PLA, flat (as exported) (loading tool)"),
     ]

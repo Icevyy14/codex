@@ -32,7 +32,7 @@ import cv2
 from .certs import CodeRead, ItfModel, Verdict, consensus
 from .config import Config
 from .decode import decode_frame
-from .motion import ControllerLost
+from .motion import ControllerLost, SafetyViolation
 from .results import BatchWriter, SlabResult
 
 NOMINAL_T = 6.6  # mm, used only to turn heights into rough slab counts
@@ -109,11 +109,11 @@ def rebuild_state(events: list[dict], rows: list[SlabResult], cfg: Config) -> tu
     t_est = sum(st.thickness_log) / len(st.thickness_log) if st.thickness_log else NOMINAL_T
     for r in rows:
         if r.position > st.position:
-            st.picked_from[r.source_pocket] = r.source_index
-            st.out_count[r.out_pocket] = r.out_index
+            st.picked_from[r.source_pocket] = max(st.picked_from.get(r.source_pocket, 0), r.source_index)
+            st.out_count[r.out_pocket] = max(st.out_count.get(r.out_pocket, 0), r.out_index)
             st.tops[r.source_pocket] = max(0.0, st.tops.get(r.source_pocket, 0.0) - t_est)
             st.tops[r.out_pocket] = st.tops.get(r.out_pocket, 0.0) + t_est
-            st.position = r.position
+    st.position = max([st.position] + [r.position for r in rows])
     return st, itf, surveyed
 
 
@@ -435,7 +435,13 @@ class Runner:
         pos = self.st.position
         img_b = self._save(back[-1] if back else None, f"{pos:04d}_back.jpg")
         img_f = self._save(front, f"{pos:04d}_front.jpg") if front is not None else ""
-        self.w.add(SlabResult(pos, src, self.st.picked_from[src], target.index, self.st.out_count[target.index], verdict, img_f, img_b))
+        double = step >= cfg.t_double
+        if double:
+            # The slab that came along underneath was never seen: give it its own row so nothing is
+            # silently missing from the list. It sits directly under the read slab in the output pocket.
+            unread = Verdict("no_read", None, (), f"UNREAD: lifted together with #{pos}; it is directly under that slab in pocket {target.index} - scan it by hand")
+            self.w.add(SlabResult(pos, src, self.st.picked_from[src], target.index, self.st.out_count[target.index] - 1, unread))
+        self.w.add(SlabResult(pos, src, self.st.picked_from[src] - (1 if double else 0), target.index, self.st.out_count[target.index], verdict, img_f, img_b))
         self._journal({"pos": pos, "src": src, "dst": target.index, "cert": verdict.cert, "status": verdict.status, "step": round(step, 2),
                        "s_src": round(self.st.tops[src], 2), "s_dst": round(self.st.tops[target.index], 2),
                        "src_index": self.st.picked_from[src], "out_index": self.st.out_count[target.index],
@@ -574,6 +580,15 @@ class Runner:
             self._journal({"stop": str(e), "secured": note, "t": round(time.time(), 1)})
             self.phase = "stopped"
             raise Stop(f"{e} {note}".strip()) from None
+        except SafetyViolation:
+            raise  # simulator safety monitor: let the test fail loudly
+        except (Exception, KeyboardInterrupt) as e:  # camera died, decoder bug, controller alarm, Ctrl-C ...
+            # Anything unplanned while a slab is in the cup must still end with the slab put back,
+            # never hanging on the closed valves until the line leaks down.
+            note = self.secure()
+            self._journal({"stop": f"unexpected {type(e).__name__}: {e}", "secured": note, "t": round(time.time(), 1)})
+            self.phase = "stopped"
+            raise Stop(f"Unexpected error: {type(e).__name__}: {e}. {note}".strip()) from e
 
     def run(self) -> dict:
         def body():
