@@ -100,7 +100,20 @@ class SimWorld:
             raise Crash(f"fast move down to {z1:.1f} hits the surface at {surf + self.held_thickness():.1f} (no probe)")
 
 
+def trapezoid_s(dist: float, v_max: float, accel: float) -> float:
+    """Time for a point-to-point move that starts and ends at rest (trapezoidal profile)."""
+    if dist <= 0:
+        return 0.0
+    d_acc = v_max * v_max / accel
+    if dist < d_acc:
+        return 2.0 * (dist / accel) ** 0.5
+    return dist / v_max + v_max / accel
+
+
 class SimMotion:
+    ACCEL = {"x": 2000.0, "z": 1200.0}  # mm/s^2, as in firmware/fluidnc/config.yaml
+    SETTLE_S = 0.03  # command latency + settle per move
+
     def __init__(self, world: SimWorld):
         self.w = world
         self.log: list[str] = []
@@ -122,7 +135,7 @@ class SimMotion:
         w = self.w
         if z is not None and z != w.z:
             w.check_z(z)
-            self._account(abs(z - w.z), feed)
+            self._account(abs(z - w.z), feed, "z")
             going_up = z > w.z
             w.z = z
             if going_up:
@@ -132,7 +145,7 @@ class SimMotion:
             y1 = w.y if y is None else y
             if (x1, y1) != (w.x, w.y):
                 w.check_xy_path(x1, y1)
-                self._account(((x1 - w.x) ** 2 + (y1 - w.y) ** 2) ** 0.5, feed)
+                self._account(((x1 - w.x) ** 2 + (y1 - w.y) ** 2) ** 0.5, feed, "x")
                 w.x, w.y = x1, y1
         self.log.append(f"G1 X{w.x:.1f} Y{w.y:.1f} Z{w.z:.1f} F{feed:.0f}")
 
@@ -147,19 +160,19 @@ class SimMotion:
             raise Crash(f"probe started below the surface (cup {w.z:.1f}, surface {contact:.1f})")
         trip = contact - TRIGGER_COMPRESSION + TRIGGER_COMPRESSION  # trip point expressed as cup-face height
         if trip >= z_target:
-            self._account(w.z - trip, feed)
+            self._account(w.z - trip, feed, "z")
             w.z = trip
             return trip
         # no trigger before z_target: if we passed the surface, the buffer compresses
         if z_target < contact - BUFFER_STROKE + 0.01:
             raise Crash("probe drove the cup past the buffer stroke")
-        self._account(w.z - z_target, feed)
+        self._account(w.z - z_target, feed, "z")
         w.z = z_target
         return None
 
-    def _account(self, dist, feed):
+    def _account(self, dist, feed, axis="x"):
         self.travel_mm += dist
-        self.move_time_s += dist / (feed / 60.0) + 0.05  # + accel/settle overhead
+        self.move_time_s += trapezoid_s(dist, feed / 60.0, self.ACCEL[axis]) + self.SETTLE_S
 
     def _lift(self):
         """Called after any upward Z move: picks up the gripped slab (and any clinging slab)."""
