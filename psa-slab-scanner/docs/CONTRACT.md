@@ -34,11 +34,45 @@ Every document and file must agree with this page. If something here is wrong, f
   - It is the FluidNC `probe` pin.
   - Probing uses `G38.3` (no alarm on a miss) with a bounded target.
 
+## CAD decisions after the build review (binding)
+- **Rails on slots:**
+  - The X rail centre is at Z = 410, on the 4040 beam's upper front slot. It is fixed with M3
+    screws into M3 T-nuts.
+  - The Z spine (2040) sits 10 mm to the LEFT of the cup axis, so the Z rail is in its right
+    slot, on the cup axis.
+- **Z carriage:** its bottom is 243 mm above the cup face. It stays on its rail down to
+  c = −12 mm, which matches the firmware soft limit of Z −8 with margin.
+- **Bed:** the plywood has 41 × 41 mm notches at the two upright positions. The uprights pass
+  through to the base rail.
+- **Drop arm (2020 × 236 mm):** drill two 5.5 mm cross holes, matching the head_foot and
+  camera_bracket clamp holes.
+- **Light roof:** OPTIONAL. Add it only if Phase 0 or the first runs show room-light glare on
+  labels. If you do, it's black foam board on two 2020 posts bolted to the back of the uprights.
+  The CAD model leaves it out by default.
+- **Guide rods:** 82 dowels at 12 mm from each pocket corner, which leaves a 52 mm finger gap
+  front and back.
+
 ## Controller
-- **Board:** BTT Rodent V1.x running FluidNC (official BTT/FluidNC Rodent config as the base).
-- **Connection:** USB serial at 115200 baud to the Raspberry Pi (`/dev/ttyACM0` or `/dev/ttyUSB0`).
-- **Unused features:** no Y axis is defined, and no spindle or coolant pins are used.
-- **Firmware files:** `firmware/fluidnc/config.yaml`.
+- **Board:** BTT Rodent V1.x (V1.1 assumed) running FluidNC v4.1.1 or newer. BTT's official
+  `rodent.yaml` is the base.
+  - Set `r_sense_ohms` to the board's resistor marking: R075 → 0.075, R022 → 0.022.
+- **Connection:** CH340 USB serial at 115200 baud to the Raspberry Pi: `/dev/ttyUSB0`, by-id
+  `/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0`.
+- **Unused features:** no Y axis is defined, and no spindle or coolant pins are used. FluidNC
+  still reports three axes (`MPos:x,0.000,z`).
+- **Driver sockets:** X motor → socket X, Z motor → socket Z. Sockets Y and E are configured as
+  ganged spares for X and Z, because the SPI chain needs all four. Leave them empty.
+- **Inputs, all fail-safe (a cut wire reads as triggered):**
+  - X home switch (NC) → X-MAX connector, gpio.35.
+  - Z top switch (NC) → Z-MAX connector, gpio.33.
+  - Optical contact probe → **Y-MAX connector, gpio.34** (not the board's Probe connector).
+- **Soft limits (machine mm):** X 22…1253, Z −8…255.
+  - After homing: X = 22, Z = 255.
+  - Probe targets must stay above Z −8.
+  - CAD must keep the Z carriage on its rail down to c = −12.
+- **E-stop:** cuts the Rodent's 24 V, so FluidNC reboots and the USB serial device disappears.
+  The software must treat a lost port as a stop, then reconnect and home again.
+- **Firmware files:** `firmware/fluidnc/config.yaml`. Bring-up steps: `docs/FIRMWARE.md`.
 - **Wiring:** `docs/WIRING.md` and `docs/img/wiring.svg`.
 
 ## Raspberry Pi 5 (4 GB), Raspberry Pi OS Bookworm 64-bit, Python 3.11

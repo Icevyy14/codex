@@ -1,0 +1,290 @@
+# SlabRail - FluidNC machine config for the BTT Rodent V1.1
+#
+# Two axes only: X (belt, along the pocket row) and Z (lead screw, up/down).
+# There is no Y axis and no spindle, coolant or laser output in this file.
+#
+# Base: BTT's official rodent.yaml (github.com/bigtreetech/Rodent, "04.12.2024 by BTT").
+# Pins, I2S shift-register bits and the SPI bus below are copied from that file.
+# Checked against the FluidNC v4.1.1 source. Use FluidNC v4.1.1 or newer: an unknown key
+# puts FluidNC into a config alarm, so an older build may refuse this file.
+#
+# Interface contract: docs/CONTRACT.md. Bring-up steps: docs/FIRMWARE.md.
+# Wiring: docs/WIRING.md.
+#
+# Comments are kept on their own lines. FluidNC v4.1.1 also accepts "value  # note",
+# but whole-line comments are the safest form for any FluidNC parser.
+#
+# Machine coordinates (what FluidNC reports as MPos):
+#   X = cup axis position in cad/layout.py millimetres (pocket 0 centre = 42, pocket 12 = 1238).
+#       calibrate x stores the small remaining error as offset_x in config/calibration.toml.
+#   Z = cup-face height "c" above the pad top, in mm. calibrate z stores pad_trigger_c.
+#   Keep the G54 work offset at zero. The software sends machine-frame numbers.
+
+board: BTT Rodent V1.1
+name: SlabRail
+meta: SlabRail X+Z v1 (docs/FIRMWARE.md)
+
+kinematics:
+  Cartesian:
+
+stepping:
+  # The Rodent drives STEP/DIR/EN through an I2S shift register (I2SO.n pins), so the
+  # engine must be one of the I2S engines. I2S_STREAM is what BTT ships.
+  engine: I2S_STREAM
+  # 255 = never switch the motors off when idle. This is a safety setting: the Z lead
+  # screw (T8x8, 8 mm per turn) can be back-driven, so Z must always hold.
+  # Do not change it to "cool the motors". Lower hold_amps instead.
+  idle_ms: 255
+  # Max step rate is about 1e6 / (2 x 4 + 1) = 111 kHz. Z needs 40 kHz at 6000 mm/min.
+  pulse_us: 4
+  dir_delay_us: 1
+  disable_delay_us: 0
+
+i2so:
+  # Shift register that carries every STEP, DIR and EN signal (BTT pins).
+  bck_pin: gpio.22
+  data_pin: gpio.21
+  ws_pin: gpio.17
+
+spi:
+  # SPI bus for the four TMC2160 drivers (one shared chip-select, daisy chain).
+  miso_pin: gpio.19
+  mosi_pin: gpio.23
+  sck_pin: gpio.18
+
+start:
+  # Stay in alarm after every power-up or reset until $H has run.
+  must_home: true
+  # Alarm at boot if a limit switch already reads triggered. With NC switches this also
+  # catches an unplugged or broken switch wire before anything moves.
+  check_limits: true
+
+axes:
+  shared_stepper_disable_pin: NO_PIN
+
+  # ---------------------------------------------------------------------------------
+  # X: GT2 belt, 20T pulley = 40 mm per turn. 200 steps x 16 microsteps / 40 = 80 steps/mm.
+  x:
+    steps_per_mm: 80.000
+    # 15000 mm/min = 250 mm/s = 20 kHz step rate.
+    max_rate_mm_per_min: 15000.000
+    acceleration_mm_per_sec2: 2000.000
+    # Soft limits run from mpos_mm (22) up to 22 + 1231 = 1253 mm.
+    # Why these numbers (cad/layout.py + cad/model.py, October 2026):
+    #   - Pocket centres span 42 .. 1238.
+    #   - The MGN12H carriage leaves its 1300 mm rail when the cup is below X 12.7
+    #     or above X 1267. The X bracket hits the idler mount at X 8 and the motor
+    #     mount at X 1266.
+    #   - So 22 .. 1253 keeps about 10 mm of steel on both ends and still leaves
+    #     15-20 mm of room for the calibrate-x offset.
+    # If the rail length or pocket count changes, recompute both numbers.
+    max_travel_mm: 1231.000
+    soft_limits: true
+    homing:
+      # Z homes first (cycle 1) so the head is above the rods before X moves.
+      cycle: 2
+      # Never home X on its own: $HX with the head down would drag it through the rods.
+      allow_single_axis: false
+      # Home toward X minimum (left end).
+      positive_direction: false
+      # Machine X after homing and pull-off. The switch trips at about 22 - 3 = 19.
+      # Mount the X switch so it clicks when the cup axis is about 23 mm left of the
+      # pocket-0 centre, i.e. 19 mm in layout X. Within +/-3 mm is fine.
+      mpos_mm: 22.000
+      # Slow second touch, for repeatable homing.
+      feed_mm_per_min: 300.000
+      # Fast first approach, 50 mm/s.
+      seek_mm_per_min: 3000.000
+      settle_ms: 250
+      seek_scaler: 1.100
+      feed_scaler: 1.100
+
+    # Driver in the socket labelled X (first chip in the SPI chain).
+    motor0:
+      # X-MAX connector on the board, despite its name. NC microswitch between
+      # the signal pin and GND. Not pressed = switch closed = input reads low.
+      # Pressed OR wire broken = input reads high = triggered. That is why the pin
+      # has no :low attribute. The 10k pull-up is on the board; GPIO35 has no
+      # internal pull resistor.
+      limit_neg_pin: gpio.35
+      limit_pos_pin: NO_PIN
+      limit_all_pin: NO_PIN
+      # Hitting the switch outside homing raises ALARM:1 at once. Normal moves stop
+      # 3 mm short of it because of the soft limit.
+      hard_limits: true
+      pulloff_mm: 3.000
+      # The chips are TMC2160. FluidNC's tmc_5160 class is the one BTT ships, and
+      # FluidNC's own tmc_2160 class is a direct copy of it.
+      tmc_5160:
+        # This motor carries the chip-select for the whole daisy chain.
+        cs_pin: gpio.5
+        # Chain position. BTT's order is X=1, Y=2, Z=3, E=4 from MOSI. FluidNC needs
+        # every physical chip in the chain to have an entry, or SPI reads go out of
+        # step. So the Y and E chips are kept as ganged spares below.
+        spi_index: 1
+        step_pin: I2SO.2
+        direction_pin: I2SO.1
+        disable_pin: I2SO.0
+        # CHECK YOUR BOARD BEFORE THE FIRST POWER-UP (docs/FIRMWARE.md step 1).
+        # Rodent V1.1 manual and a V1.1 owner both give 75 mOhm sense resistors
+        # (marking "R075"). The V1.0 schematic and BTT's rodent.yaml give 22 mOhm
+        # ("R022"). Set the value printed on YOUR board. If this says 0.075 but the
+        # board has 0.022, the motors get 3.4x the current set below and overheat.
+        r_sense_ohms: 0.075
+        # Contract: X run 1.0 A. The motor (17HS19-2004S1) is rated 2.0 A.
+        run_amps: 1.000
+        hold_amps: 0.500
+        microsteps: 16
+        # CoolStep here means spreadCycle chopping, with no StallGuard and no current
+        # reduction. It keeps more torque at speed than StealthChop.
+        run_mode: CoolStep
+        homing_mode: CoolStep
+        use_enable: false
+        toff_disable: 0
+        toff_stealthchop: 5
+        toff_coolstep: 3
+        tpfd: 4
+        stallguard: 0
+        stallguard_debug: false
+
+    # Driver in the socket labelled Y: a spare X driver. No motor is plugged in.
+    # It gets the same step pulses as X. If the X driver ever dies, move the X motor
+    # plug here and nothing else changes. Never plug a second motor into it.
+    motor1:
+      limit_neg_pin: NO_PIN
+      limit_pos_pin: NO_PIN
+      limit_all_pin: NO_PIN
+      hard_limits: false
+      pulloff_mm: 3.000
+      tmc_5160:
+        # Only the first chain member defines cs_pin.
+        cs_pin: NO_PIN
+        spi_index: 2
+        step_pin: I2SO.5
+        direction_pin: I2SO.4
+        disable_pin: I2SO.7
+        r_sense_ohms: 0.075
+        run_amps: 1.000
+        hold_amps: 0.500
+        microsteps: 16
+        run_mode: CoolStep
+        homing_mode: CoolStep
+        use_enable: false
+        toff_disable: 0
+        toff_stealthchop: 5
+        toff_coolstep: 3
+        tpfd: 4
+        stallguard: 0
+        stallguard_debug: false
+
+  # ---------------------------------------------------------------------------------
+  # Z: NEMA17 with an integrated T8x8 lead screw (8 mm per turn).
+  # 200 x 16 / 8 = 400 steps/mm.
+  z:
+    steps_per_mm: 400.000
+    # 6000 mm/min = 100 mm/s = 750 rpm = 40 kHz step rate.
+    max_rate_mm_per_min: 6000.000
+    acceleration_mm_per_sec2: 1200.000
+    # Soft limits run from 255 - 263 = -8 up to mpos_mm (255).
+    # Why -8: probing the bare pad trips at about c = -2 (2 mm of buffer squeeze).
+    # The software then probes up to 2 mm further, plus +/-3 mm of calibration
+    # spread. The top is 255 because the contract's C_MAX is 250.
+    # WARNING: in cad/layout.py as of October 2026, the Z carriage reaches the
+    # bottom end of its rail at c = -4. The CAD must give at least c = -12 on
+    # the rail before this machine is built (see docs/FIRMWARE.md "Open issues").
+    max_travel_mm: 263.000
+    soft_limits: true
+    homing:
+      # Z homes first, straight up, which is always safe.
+      cycle: 1
+      allow_single_axis: true
+      # Home toward Z maximum (top).
+      positive_direction: true
+      # Machine Z (cup face height) after homing and pull-off. The switch trips at
+      # about c = 258. The Z carriage only runs out of rail at c = 280.
+      mpos_mm: 255.000
+      feed_mm_per_min: 150.000
+      seek_mm_per_min: 1500.000
+      settle_ms: 250
+      seek_scaler: 1.100
+      feed_scaler: 1.100
+
+    # Driver in the socket labelled Z (third chip in the chain).
+    motor0:
+      # Z-MAX connector. NC microswitch at the top of the Z spine, same logic as X.
+      limit_neg_pin: NO_PIN
+      limit_pos_pin: gpio.33
+      limit_all_pin: NO_PIN
+      hard_limits: true
+      pulloff_mm: 3.000
+      tmc_5160:
+        cs_pin: NO_PIN
+        spi_index: 3
+        step_pin: I2SO.10
+        direction_pin: I2SO.9
+        disable_pin: I2SO.8
+        r_sense_ohms: 0.075
+        # Contract: Z run 0.8 A, hold 0.5 A, so the head stays up.
+        run_amps: 0.800
+        hold_amps: 0.500
+        microsteps: 16
+        run_mode: CoolStep
+        homing_mode: CoolStep
+        use_enable: false
+        toff_disable: 0
+        toff_stealthchop: 5
+        toff_coolstep: 3
+        tpfd: 4
+        stallguard: 0
+        stallguard_debug: false
+
+    # Driver in the socket labelled E (fourth and last chip in the chain): a spare Z
+    # driver. No motor is plugged in. It must exist so that the chain length is 4.
+    motor1:
+      limit_neg_pin: NO_PIN
+      limit_pos_pin: NO_PIN
+      limit_all_pin: NO_PIN
+      hard_limits: false
+      pulloff_mm: 3.000
+      tmc_5160:
+        cs_pin: NO_PIN
+        spi_index: 4
+        step_pin: I2SO.13
+        direction_pin: I2SO.12
+        disable_pin: I2SO.15
+        r_sense_ohms: 0.075
+        run_amps: 0.800
+        hold_amps: 0.500
+        microsteps: 16
+        run_mode: CoolStep
+        homing_mode: CoolStep
+        use_enable: false
+        toff_disable: 0
+        toff_stealthchop: 5
+        toff_coolstep: 3
+        tpfd: 4
+        stallguard: 0
+        stallguard_debug: false
+
+probe:
+  # Slotted optical endstop on the cup's spring buffer, plugged into the Y-MAX
+  # connector. The Y-MAX input is free because there is no Y axis.
+  # Why not the board's "Probe" connector: its opto input is the other way round.
+  # The sensor would have to SOURCE about 4 mA at rest, but these boards only drive
+  # high through a weak pull-up resistor. The flag would also have to sit in the
+  # slot at rest, so a dead emitter LED would read "not touching".
+  # On a limit-type input, the sensor SINKS current at rest (slot clear, light on).
+  # A cut wire, lost sensor power or a dead emitter LED all read TRIGGERED, which is
+  # the contract's fail-safe rule.
+  # Rest (buffer extended): slot clear, sensor output low, input reads low.
+  # Contact (buffer squeezed): flag in the slot, output high, input reads high = triggered.
+  # Active high, so no :low attribute. The 10k pull-up is on the board.
+  pin: gpio.34
+  check_mode_start: true
+
+status_outputs:
+  # The board's three status LEDs (BTT pins). Useful when the Pi is not connected.
+  report_interval_ms: 500
+  idle_pin: I2SO.11:low
+  run_pin: I2SO.14:low
+  alarm_pin: I2SO.3:low

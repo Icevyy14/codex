@@ -1,0 +1,255 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1120" viewBox="0 0 1500 1120" role="img" aria-labelledby="ttl dsc">
+<title id="ttl">SlabRail wiring block diagram</title>
+<desc id="dsc">Power chain from mains through the 24 V supply, E-stop and fuses to the Rodent and the MOSFET modules; Raspberry Pi 5 control and sensor wiring; Rodent to motors, switches, probe and the drag chain. Wire numbers match docs/WIRING.md.</desc>
+<style>
+  text { font-family: "DejaVu Sans", Helvetica, Arial, sans-serif; font-size: 13px; fill: #1b1b1b; }
+  .b { font-weight: 700; }
+  .s { font-size: 12px; fill: #333333; }
+  .h1 { font-size: 22px; font-weight: 700; }
+  .h2 { font-size: 16px; font-weight: 700; }
+  .box { fill: #ffffff; stroke: #4a4a4a; stroke-width: 1.4; }
+  .hot { fill: #fff3f2; stroke: #d62828; stroke-width: 2.4; }
+  .bus { fill: #fdeceb; stroke: #d62828; stroke-width: 1.6; }
+  .gnd { fill: #efefef; stroke: #222222; stroke-width: 1.6; }
+  .pibox { fill: #eef4fd; stroke: #1f5fbf; stroke-width: 1.6; }
+  .hdrfill { fill: #e9e6de; stroke: none; }
+  .panel { fill: #f3f1ec; stroke: #c9c3b6; stroke-width: 1.2; }
+  .group { fill: #fbfaf7; stroke: #7b2cbf; stroke-width: 1.6; stroke-dasharray: 8 5; }
+  .w3 { fill: none; stroke-width: 3; stroke-linejoin: round; }
+  .w2 { fill: none; stroke-width: 2.2; stroke-linejoin: round; }
+</style>
+<rect x="0" y="0" width="1500" height="1120" fill="#fbfaf7"/>
+<text x="24" y="38" class="h1" text-anchor="start">SlabRail wiring: block diagram</text>
+<text x="24" y="62" class="s" text-anchor="start">Wire numbers (W…) match docs/WIRING.md. Lines that cross without a dot are not connected. Every box on the 24 V side also has a black 0 V wire to the 0 V bus.</text>
+<rect x="16" y="80" width="740" height="520" rx="10" class="panel"/>
+<text x="32" y="106" class="h2" text-anchor="start">A   Power</text>
+<text x="120" y="106" class="s" text-anchor="start">(mains side: have an instructor check it)</text>
+<rect x="40" y="125" width="200" height="34" rx="6" class="box"/>
+<text x="140.0" y="146.5" class="b" text-anchor="middle">Wall socket (mains)</text>
+<rect x="40" y="185" width="200" height="52" rx="6" class="box"/>
+<text x="140.0" y="206.5" class="b" text-anchor="middle">IEC C14 inlet</text>
+<text x="140.0" y="224.5" class="" text-anchor="middle">fuse T3.15A + rocker</text>
+<rect x="40" y="265" width="200" height="74" rx="6" class="box"/>
+<text x="140.0" y="288.5" class="b" text-anchor="middle">Mean Well LRS-150-24</text>
+<text x="140.0" y="306.5" class="" text-anchor="middle">24 V · set to 24.5 V</text>
+<text x="140.0" y="324.5" class="" text-anchor="middle">set 115/230 switch first</text>
+<rect x="40" y="370" width="200" height="56" rx="6" class="hot"/>
+<text x="140.0" y="393.5" class="b" text-anchor="middle">E-STOP (NC, latching)</text>
+<text x="140.0" y="411.5" class="" text-anchor="middle">+24 V line · W7, W8</text>
+<rect x="40" y="452" width="200" height="62" rx="6" class="gnd"/>
+<text x="140.0" y="469.5" class="b" text-anchor="middle">0 V bus (Wago)</text>
+<text x="140.0" y="487.5" class="" text-anchor="middle">LRS −V (W9)</text>
+<text x="140.0" y="505.5" class="" text-anchor="middle">one bond to FG (W6)</text>
+<rect x="40" y="540" width="200" height="40" rx="6" class="box"/>
+<text x="140.0" y="564.5" class="b" text-anchor="middle">Frame earth (W5)</text>
+<rect x="290" y="370" width="140" height="56" rx="6" class="bus"/>
+<text x="360.0" y="393.5" class="b" text-anchor="middle">24 V switched bus</text>
+<text x="360.0" y="411.5" class="" text-anchor="middle">(Wago 221)</text>
+<rect x="470" y="280" width="80" height="32" rx="6" class="box"/>
+<text x="510.0" y="300.5" class="b" text-anchor="middle">F1  5 A</text>
+<rect x="470" y="382" width="80" height="32" rx="6" class="box"/>
+<text x="510.0" y="402.5" class="b" text-anchor="middle">F2  3 A</text>
+<rect x="470" y="484" width="80" height="32" rx="6" class="box"/>
+<text x="510.0" y="504.5" class="b" text-anchor="middle">F3  1 A</text>
+<rect x="580" y="266" width="160" height="62" rx="6" class="box"/>
+<text x="660.0" y="283.5" class="b" text-anchor="middle">Rodent VIN 24 V</text>
+<text x="660.0" y="301.5" class="" text-anchor="middle">motors + logic</text>
+<text x="660.0" y="319.5" class="" text-anchor="middle">W10, W11</text>
+<rect x="580" y="365" width="160" height="66" rx="6" class="box"/>
+<text x="660.0" y="384.5" class="b" text-anchor="middle">Q1–Q3 module V+</text>
+<text x="660.0" y="402.5" class="" text-anchor="middle">pump, vac valve,</text>
+<text x="660.0" y="420.5" class="" text-anchor="middle">vent valve (W20)</text>
+<rect x="580" y="470" width="75" height="60" rx="6" class="box"/>
+<text x="617.5" y="495.5" class="b" text-anchor="middle">24→12 V</text>
+<text x="617.5" y="513.5" class="" text-anchor="middle">buck</text>
+<rect x="665" y="470" width="75" height="60" rx="6" class="box"/>
+<text x="702.5" y="495.5" class="b" text-anchor="middle">Q4, Q5</text>
+<text x="702.5" y="513.5" class="" text-anchor="middle">V+ 12 V</text>
+<rect x="270" y="538" width="470" height="46" rx="6" class="pibox"/>
+<text x="505.0" y="556.5" class="" text-anchor="middle">Pi 5: own 27 W USB-C supply in its own wall socket.</text>
+<text x="505.0" y="574.5" class="" text-anchor="middle">Never powered from the 24 V system (stays on during E-stop).</text>
+<text x="290" y="460" class="s" text-anchor="start">Black 0 V wires from the</text>
+<text x="290" y="477" class="s" text-anchor="start">Rodent, buck and Q1–Q5</text>
+<text x="290" y="494" class="s" text-anchor="start">all go to the 0 V bus.</text>
+<path d="M140,159 L140,185" class="w3" stroke="#8a5a2b"/>
+<path d="M115,237 L115,265" class="w3" stroke="#8a5a2b"/>
+<path d="M165,237 L165,265" class="w3" stroke="#2f8f3a" stroke-dasharray="7 4"/>
+<text x="248" y="249" class="s" text-anchor="start">W2 L, W3 N</text>
+<text x="248" y="264" class="s" text-anchor="start">W4 PE (dashed)</text>
+<path d="M140,339 L140,370" class="w3" stroke="#d62828"/>
+<text x="248" y="358" class="s" text-anchor="start">W7  +V</text>
+<path d="M240,398 L290,398" class="w3" stroke="#d62828"/>
+<path d="M430,398 L450,398" class="w3" stroke="#d62828"/>
+<path d="M450,296 L450,500" class="w3" stroke="#d62828"/>
+<path d="M450,296 L470,296" class="w3" stroke="#d62828"/>
+<path d="M450,398 L470,398" class="w3" stroke="#d62828"/>
+<path d="M450,500 L470,500" class="w3" stroke="#d62828"/>
+<circle cx="450" cy="398" r="3.2" fill="#d62828"/>
+<path d="M550,296 L580,296" class="w3" stroke="#d62828"/>
+<path d="M550,398 L580,398" class="w3" stroke="#d62828"/>
+<path d="M550,500 L580,500" class="w3" stroke="#d62828"/>
+<path d="M655,500 L665,500" class="w3" stroke="#e07b00"/>
+<path d="M40,316 L32,316 L32,483 L40,483" class="w3" stroke="#222222"/>
+<path d="M40,332 L24,332 L24,560 L40,560" class="w3" stroke="#2f8f3a" stroke-dasharray="7 4"/>
+<rect x="772" y="80" width="712" height="520" rx="10" class="panel"/>
+<text x="788" y="106" class="h2" text-anchor="start">B   Raspberry Pi 5: control and sensors</text>
+<rect x="790" y="125" width="262" height="330" rx="6" class="pibox"/>
+<text x="800" y="147" class="b" text-anchor="start">Raspberry Pi 5 (4 GB)</text>
+<text x="800" y="180.5" class="" text-anchor="start">pin 11  GPIO17 → Q1 pump</text>
+<text x="800" y="202.5" class="" text-anchor="start">pin 13  GPIO27 → Q2 vac valve</text>
+<text x="800" y="224.5" class="" text-anchor="start">pin 15  GPIO22 → Q3 vent valve</text>
+<text x="800" y="246.5" class="" text-anchor="start">pin 16  GPIO23 → Q4 head LED</text>
+<text x="800" y="268.5" class="" text-anchor="start">pin 18  GPIO24 → Q5 station LED</text>
+<text x="800" y="290.5" class="" text-anchor="start">pins 3, 5  I2C1 → ADS1115</text>
+<text x="800" y="312.5" class="" text-anchor="start">pins 1, 2  3.3 V, 5 V → I/O board</text>
+<text x="800" y="334.5" class="" text-anchor="start">pin 29  GPIO5 ← laser receiver</text>
+<text x="800" y="356.5" class="" text-anchor="start">pin 22  GPIO25 ← lid switch</text>
+<text x="800" y="378.5" class="" text-anchor="start">pin 9  GND → 0 V bus (W42)</text>
+<text x="800" y="400.5" class="" text-anchor="start">USB 2.0 → Rodent, head camera</text>
+<text x="800" y="422.5" class="" text-anchor="start">CAM/DISP 0 → station camera</text>
+<rect x="1080" y="160" width="200" height="118" rx="6" class="box"/>
+<text x="1180.0" y="187.5" class="b" text-anchor="middle">MOSFET modules Q1–Q5</text>
+<text x="1180.0" y="205.5" class="" text-anchor="middle">Adafruit #5648 × 5</text>
+<text x="1180.0" y="223.5" class="" text-anchor="middle">low-side switch</text>
+<text x="1180.0" y="241.5" class="" text-anchor="middle">SIG has a 10 kΩ pull-down</text>
+<text x="1180.0" y="259.5" class="" text-anchor="middle">flyback diode on board</text>
+<rect x="1300" y="160" width="175" height="118" rx="6" class="box"/>
+<text x="1387.5" y="181.0" class="b" text-anchor="middle">Loads (W23–W27)</text>
+<text x="1387.5" y="198.0" class="" text-anchor="middle">Pump 24 V (Q1)</text>
+<text x="1387.5" y="215.0" class="" text-anchor="middle">Vac valve NC (Q2)</text>
+<text x="1387.5" y="232.0" class="" text-anchor="middle">Vent valve NC (Q3)</text>
+<text x="1387.5" y="249.0" class="" text-anchor="middle">Head LED 12 V (Q4)</text>
+<text x="1387.5" y="266.0" class="" text-anchor="middle">Station LED 12 V (Q5)</text>
+<rect x="1080" y="280" width="200" height="62" rx="6" class="box"/>
+<text x="1180.0" y="297.5" class="b" text-anchor="middle">I/O board · ADS1115 0x48</text>
+<text x="1180.0" y="315.5" class="" text-anchor="middle">A0 ← 10k/20k ← sensor</text>
+<text x="1180.0" y="333.5" class="" text-anchor="middle">GPIO5 ← 10k/20k ← rx</text>
+<rect x="1080" y="350" width="200" height="30" rx="6" class="box"/>
+<text x="1180.0" y="369.5" class="" text-anchor="middle">Lid switch C+NO (opt.)</text>
+<rect x="1300" y="280" width="175" height="40" rx="6" class="box"/>
+<text x="1387.5" y="295.5" class="b" text-anchor="middle">XGZP6847A100KPGN</text>
+<text x="1387.5" y="313.5" class="" text-anchor="middle">5 V · cup-line tee</text>
+<rect x="1300" y="326" width="175" height="30" rx="6" class="box"/>
+<text x="1387.5" y="345.5" class="" text-anchor="middle">Laser KY-008 · 5 V</text>
+<rect x="1300" y="362" width="175" height="46" rx="6" class="box"/>
+<text x="1387.5" y="380.5" class="b" text-anchor="middle">Laser receiver · 5 V</text>
+<text x="1387.5" y="398.5" class="" text-anchor="middle">2.2 kΩ pull-up (at rx)</text>
+<rect x="1080" y="430" width="200" height="44" rx="6" class="box"/>
+<text x="1180.0" y="447.5" class="b" text-anchor="middle">Station camera (CM3)</text>
+<text x="1180.0" y="465.5" class="" text-anchor="middle">500 mm Pi 5 cable · W45</text>
+<path d="M1052,176 L1080,176" class="w2" stroke="#1f5fbf"/>
+<path d="M1052,198 L1080,198" class="w2" stroke="#1f5fbf"/>
+<path d="M1052,220 L1080,220" class="w2" stroke="#1f5fbf"/>
+<path d="M1052,242 L1080,242" class="w2" stroke="#1f5fbf"/>
+<path d="M1052,264 L1080,264" class="w2" stroke="#1f5fbf"/>
+<path d="M1052,286 L1080,286" class="w2" stroke="#1f5fbf"/>
+<path d="M1052,308 L1080,308" class="w2" stroke="#222222"/>
+<path d="M1052,330 L1080,330" class="w2" stroke="#1f5fbf"/>
+<path d="M1052,352 L1066,352 L1066,365 L1080,365" class="w2" stroke="#1f5fbf"/>
+<path d="M1052,418 L1062,418 L1062,452 L1080,452" class="w3" stroke="#14857a"/>
+<path d="M1280,219 L1300,219" class="w3" stroke="#555555"/>
+<path d="M1280,300 L1300,300" class="w2" stroke="#1f5fbf"/>
+<path d="M1280,320 L1294,320 L1294,341 L1300,341" class="w2" stroke="#1f5fbf"/>
+<path d="M1280,336 L1288,336 L1288,385 L1300,385" class="w2" stroke="#1f5fbf"/>
+<text x="790" y="494" class="s" text-anchor="start">Gate: laser in the left post, receiver in the right post, beam 4 mm above MAX.</text>
+<text x="790" y="512" class="s" text-anchor="start">A cut receiver wire pulls GPIO5 LOW (= blocked), so the run won't start.</text>
+<text x="790" y="536" class="s" text-anchor="start">Sensor DIP-6: pins 2+4 = 5 V, 3+6 = GND, 5 = OUT, 1 = N/C (leave floating).</text>
+<text x="790" y="554" class="s" text-anchor="start">At atmosphere expect OUT ≈ 4.5 V and A0 ≈ 3.0 V. ADS1115 runs on 3.3 V.</text>
+<text x="790" y="578" class="s" text-anchor="start">Head camera USB and the Q4 head-LED pair run through the drag chain (panel C).</text>
+<rect x="16" y="616" width="1468" height="430" rx="10" class="panel"/>
+<text x="32" y="642" class="h2" text-anchor="start">C   Rodent ↔ machine (drag chain and moving head)</text>
+<rect x="40" y="656" width="300" height="314" rx="6" class="box"/>
+<rect x="40" y="656" width="300" height="30" rx="6" class="hdrfill"/>
+<text x="50" y="676" class="b" text-anchor="start">BTT Rodent V1.1 · FluidNC ≥ 4.1.1</text>
+<text x="50" y="704.5" class="" text-anchor="start">Socket X → X motor (W50)</text>
+<text x="50" y="728.5" class="" text-anchor="start">X-MAX gpio.35 ← X home sw. (NC, W52)</text>
+<text x="50" y="752.5" class="" text-anchor="start">Socket Y → spare X (leave empty)</text>
+<text x="50" y="776.5" class="" text-anchor="start">Socket Z → Z motor (W51)</text>
+<text x="50" y="800.5" class="" text-anchor="start">Socket E → spare Z (leave empty)</text>
+<text x="50" y="824.5" class="" text-anchor="start">Z-MAX gpio.33 ← Z top switch (NC, W53)</text>
+<text x="50" y="848.5" class="" text-anchor="start">Y-MAX gpio.34 ← optical probe (W54)</text>
+<text x="50" y="872.5" class="" text-anchor="start">USB-C (CH340) ↔ Pi USB 2.0 (W43)</text>
+<text x="50" y="896.5" class="" text-anchor="start">VIN 24 V from F1 (panel A)</text>
+<text x="50" y="920.5" class="" text-anchor="start">Jumpers: SW_VCC 5V · VUSB off</text>
+<text x="50" y="944.5" class="" text-anchor="start">r_sense: check R075 / R022 first</text>
+<rect x="420" y="660" width="230" height="40" rx="6" class="box"/>
+<text x="535.0" y="684.5" class="" text-anchor="middle">X motor · right end of beam</text>
+<rect x="420" y="710" width="230" height="40" rx="6" class="box"/>
+<text x="535.0" y="734.5" class="" text-anchor="middle">X home sw. · left end, C+NC</text>
+<path d="M340,700 L380,700 L380,680 L420,680" class="w3" stroke="#7b2cbf"/>
+<path d="M340,724 L392,724 L392,730 L420,730" class="w2" stroke="#1f5fbf"/>
+<path d="M340,868 L380,868" class="w3" stroke="#14857a"/>
+<text x="386" y="872.5" class="s" text-anchor="start">to Pi (panel B)</text>
+<path d="M340,892 L380,892" class="w3" stroke="#d62828"/>
+<text x="386" y="896.5" class="s" text-anchor="start">from F1 (panel A)</text>
+<rect x="680" y="656" width="330" height="314" rx="8" class="group"/>
+<text x="695" y="678" class="b" text-anchor="start">X drag chain · 15 × 30 mm inside, 1 m</text>
+<text x="695" y="696" class="s" text-anchor="start">fixed end at beam middle (X ≈ 640)</text>
+<rect x="695" y="705" width="300" height="30" rx="6" class="box"/>
+<text x="845.0" y="724.5" class="" text-anchor="middle">Z motor: 4-core 22 AWG shielded</text>
+<rect x="695" y="743" width="300" height="46" rx="6" class="box"/>
+<text x="845.0" y="761.5" class="" text-anchor="middle">8-core 24 AWG shielded:</text>
+<text x="845.0" y="779.5" class="" text-anchor="middle">probe 3 · Z sw 2 · head LED 2 · spare 1</text>
+<rect x="695" y="797" width="300" height="30" rx="6" class="box"/>
+<text x="845.0" y="816.5" class="" text-anchor="middle">USB 2.0 ext. 3 m: Pi → head camera</text>
+<rect x="695" y="835" width="300" height="30" rx="6" class="box"/>
+<text x="845.0" y="854.5" class="" text-anchor="middle">PU tube 4 mm OD: valves → cup</text>
+<text x="695" y="893" class="s" text-anchor="start">Shields to Rodent GND at the board end only.</text>
+<text x="695" y="911" class="s" text-anchor="start">Tie every cable at both chain ends,</text>
+<text x="695" y="929" class="s" text-anchor="start">nothing tied inside the chain.</text>
+<text x="695" y="947" class="s" text-anchor="start">Head LED pair comes from Q4 (panel B).</text>
+<path d="M340,772 L660,772 L660,720 L695,720" class="w3" stroke="#7b2cbf"/>
+<path d="M340,820 L668,820 L668,758 L695,758" class="w2" stroke="#1f5fbf"/>
+<path d="M340,844 L676,844 L676,774 L695,774" class="w2" stroke="#1f5fbf"/>
+<rect x="1040" y="656" width="430" height="314" rx="8" class="group"/>
+<text x="1055" y="678" class="b" text-anchor="start">Moving carriage and head</text>
+<text x="1055" y="696" class="s" text-anchor="start">Z loop: spiral wrap, about 350 mm, bend radius ≥ 40 mm</text>
+<rect x="1055" y="705" width="400" height="30" rx="6" class="box"/>
+<text x="1255.0" y="724.5" class="" text-anchor="middle">Z motor (top of Z spine) · socket Z</text>
+<rect x="1055" y="743" width="400" height="30" rx="6" class="box"/>
+<text x="1255.0" y="762.5" class="" text-anchor="middle">Z top switch (spine top), C+NC · Z-MAX</text>
+<rect x="1055" y="781" width="400" height="46" rx="6" class="box"/>
+<text x="1255.0" y="799.5" class="" text-anchor="middle">Optical probe on head foot · Y-MAX</text>
+<text x="1255.0" y="817.5" class="" text-anchor="middle">slot clear at rest, so a cut wire = triggered</text>
+<rect x="1055" y="835" width="400" height="30" rx="6" class="box"/>
+<text x="1255.0" y="854.5" class="" text-anchor="middle">Head LED ring 12 V · Q4</text>
+<rect x="1055" y="873" width="400" height="30" rx="6" class="box"/>
+<text x="1255.0" y="892.5" class="" text-anchor="middle">Head camera ELP 8 MP · USB</text>
+<rect x="1055" y="911" width="400" height="30" rx="6" class="box"/>
+<text x="1255.0" y="930.5" class="" text-anchor="middle">Cup + spring buffer · leave 30 mm tube slack</text>
+<path d="M995,720 L1055,720" class="w3" stroke="#7b2cbf"/>
+<path d="M995,766 L1045,766" class="w2" stroke="#1f5fbf"/>
+<path d="M1045,758 L1045,850" class="w2" stroke="#1f5fbf"/>
+<path d="M1045,758 L1055,758" class="w2" stroke="#1f5fbf"/>
+<path d="M1045,804 L1055,804" class="w2" stroke="#1f5fbf"/>
+<path d="M1045,850 L1055,850" class="w2" stroke="#1f5fbf"/>
+<circle cx="1045" cy="766" r="3.2" fill="#1f5fbf"/>
+<path d="M995,812 L1030,812 L1030,888 L1055,888" class="w3" stroke="#14857a"/>
+<path d="M995,850 L1020,850 L1020,926 L1055,926" class="w3" stroke="#7d8597" stroke-dasharray="7 4"/>
+<text x="40" y="996" class="b" text-anchor="start">Never plug or unplug a motor while the board has 24 V.</text>
+<text x="40" y="1016" class="s" text-anchor="start">Sockets Y and E are spare drivers that copy X and Z: leave them empty. All switches are wired NC, so a broken wire reads as triggered.</text>
+<text x="40" y="1034" class="s" text-anchor="start">The X switch must click with the cup ≈ 23 mm left of pocket 0's centre; the Z switch at c ≈ 258 mm (FIRMWARE.md step 6).</text>
+<text x="24" y="1075" class="b" text-anchor="start">Legend:</text>
+<path d="M96,1070 L130,1070" class="w3" stroke="#8a5a2b"/>
+<text x="138" y="1075" class="s" text-anchor="start">mains L / N</text>
+<path d="M245,1070 L279,1070" class="w3" stroke="#2f8f3a" stroke-dasharray="7 4"/>
+<text x="287" y="1075" class="s" text-anchor="start">protective earth</text>
+<path d="M429,1070 L463,1070" class="w3" stroke="#d62828"/>
+<text x="471" y="1075" class="s" text-anchor="start">+24 V</text>
+<path d="M536,1070 L570,1070" class="w3" stroke="#e07b00"/>
+<text x="578" y="1075" class="s" text-anchor="start">+12 V</text>
+<path d="M643,1070 L677,1070" class="w3" stroke="#222222"/>
+<text x="685" y="1075" class="s" text-anchor="start">0 V / supply</text>
+<path d="M799,1070 L833,1070" class="w3" stroke="#1f5fbf"/>
+<text x="841" y="1075" class="s" text-anchor="start">signal / GPIO</text>
+<path d="M96,1098 L130,1098" class="w3" stroke="#7b2cbf"/>
+<text x="138" y="1103" class="s" text-anchor="start">motor</text>
+<path d="M203,1098 L237,1098" class="w3" stroke="#14857a"/>
+<text x="245" y="1103" class="s" text-anchor="start">USB / CSI</text>
+<path d="M338,1098 L372,1098" class="w3" stroke="#7d8597" stroke-dasharray="7 4"/>
+<text x="380" y="1103" class="s" text-anchor="start">vacuum tube</text>
+<path d="M487,1098 L521,1098" class="w3" stroke="#555555"/>
+<text x="529" y="1103" class="s" text-anchor="start">switched load</text>
+<rect x="650" y="1089" width="30" height="18" rx="4" class="group"/>
+<text x="688" y="1103" class="s" text-anchor="start">dashed box = moves with the X carriage</text>
+</svg>

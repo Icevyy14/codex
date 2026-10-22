@@ -127,8 +127,11 @@ def frame_parts() -> list[Part]:
         parts.append(Part(f"upright_{side}", box(x - 20, BEAM_Y0, Z_BASE_TOP, x + 20, BEAM_Y1, Z_BEAM_BOT), ALU, "purchased", "static"))
         parts.append(Part(f"foot_{side}", cbox(x, (BED_Y0 + BED_Y1) / 2, Z_BASE_BOT - 4, 60, BED_Y1 - BED_Y0, 8), BLACK, "purchased", "static", note="rubber foot strip"))
     parts.append(Part("x_beam", box(BEAM_X0, BEAM_Y0, Z_BEAM_BOT, BEAM_X1, BEAM_Y1, Z_BEAM_TOP), ALU, "purchased", "static"))
-    parts.append(Part("x_rail", box(X_RAIL_X0, BEAM_Y0 - L.MGN12_RAIL_H, L.X_BEAM_Z - 6, X_RAIL_X0 + X_RAIL_LEN, BEAM_Y0, L.X_BEAM_Z + 6), STEEL, "purchased", "static", note="MGN12 1300 mm"))
-    parts.append(Part("bed_plywood", box(BED_X0, BED_Y0, Z_BED_BOT, BED_X1, BED_Y1, Z_BED_TOP), WOOD, "wood", "static", note="18 mm plywood"))
+    parts.append(Part("x_rail", box(X_RAIL_X0, BEAM_Y0 - L.MGN12_RAIL_H, L.X_RAIL_Z - 6, X_RAIL_X0 + X_RAIL_LEN, BEAM_Y0, L.X_RAIL_Z + 6), STEEL, "purchased", "static", note="MGN12 1300 mm, M3 screws into T-nuts in the beam's upper front slot"))
+    bed = box(BED_X0, BED_Y0, Z_BED_BOT, BED_X1, BED_Y1, Z_BED_TOP)
+    for x in (XL, XR):  # notches so the uprights pass through the bed down to the base rail
+        bed = bed.cut(box(x - 20.5, BEAM_Y0 - 0.5, Z_BED_BOT - 1, x + 20.5, BEAM_Y1 + 0.5, Z_BED_TOP + 1))
+    parts.append(Part("bed_plywood", bed, WOOD, "wood", "static", note="18 mm plywood, 41x41 mm notches at the upright positions"))
     # X drive: GT2 loop in a vertical plane just above the beam top
     xm, xi, pz = X_MOTOR_X, X_IDLER_X, X_PULLEY_Z
     parts.append(Part("x_motor", cbox(xm, BEAM_Y0 + 40 + 6 + 24, pz, NEMA, 48, NEMA), BLACK, "purchased", "static", note="NEMA17 48 mm"))
@@ -215,11 +218,12 @@ def x_idler_mount() -> cq.Workplane:
 def carriage_parts(cup_x: float) -> list[Part]:
     yb = BEAM_Y0
     parts: list[Part] = []
-    parts.append(Part("x_carriage", cbox(cup_x, yb - 10.5, L.X_BEAM_Z, L.MGN12H_L, 5, L.MGN12H_W), STEEL, "purchased", "carriage"))
+    parts.append(Part("x_carriage", cbox(cup_x, yb - 10.5, L.X_RAIL_Z, L.MGN12H_L, 5, L.MGN12H_W), STEEL, "purchased", "carriage"))
     parts.append(Part("x_bracket", x_bracket().translate((cup_x, yb - L.MGN12_H, 0)), PETG, "printed", "carriage"))
     spine_y1 = yb - L.MGN12_H - L.X_BRACKET_T
     ztop = L.Z_SPINE_BOTTOM + L.Z_SPINE_LEN
-    parts.append(Part("z_spine", box(cup_x - 20, spine_y1 - 20, L.Z_SPINE_BOTTOM, cup_x + 20, spine_y1, ztop), ALU, "purchased", "carriage"))
+    sx = cup_x + L.Z_SPINE_OFFSET_X
+    parts.append(Part("z_spine", box(sx - 20, spine_y1 - 20, L.Z_SPINE_BOTTOM, sx + 20, spine_y1, ztop), ALU, "purchased", "carriage", note="Z rail in its +10 slot (on the cup axis)"))
     parts.append(Part("z_rail", box(cup_x - 6, spine_y1 - 20 - L.MGN12_RAIL_H, L.Z_SPINE_BOTTOM + 1, cup_x + 6, spine_y1 - 20, ztop - 9), STEEL, "purchased", "carriage", note="MGN12 330 mm"))
     parts.append(Part("z_motor_mount", z_motor_mount().translate((cup_x, spine_y1 - 20, ztop)), PETG, "printed", "carriage"))
     parts.append(Part("z_motor", cbox(cup_x + 24, spine_y1 - 20 - 23, ztop + 5 + 24, NEMA, NEMA, 48), BLACK, "purchased", "carriage", note="NEMA17 + 400 mm T8x8 integrated lead screw"))
@@ -232,10 +236,11 @@ def x_bracket() -> cq.Workplane:
     Local origin: X = cup axis, Y = X-carriage front face (plate grows toward -Y), Z = machine Z.
     The top tab reaches over the beam to clamp the upper X-belt strand."""
     t = L.X_BRACKET_T
-    zb = L.X_BEAM_Z
-    plate = box(-30, -t, zb - 70, 30, 0, X_PULLEY_Z + 14.4)
+    zb = L.X_RAIL_Z
+    plate = box(-30, -t, zb - 80, 30, 0, X_PULLEY_Z + 14.4)
     plate = holes_y(plate, [(dx, zb + dz) for dx in (-10, 10) for dz in (-10, 10)], M3_CLR)  # MGN12H 20x20
-    plate = holes_y(plate, [(dx, z) for dx in (-10, 10) for z in (zb - 60, zb - 40)], M5_CLR)  # Z spine T-nuts
+    so = L.Z_SPINE_OFFSET_X
+    plate = holes_y(plate, [(so + dx, z) for dx in (-10, 10) for z in (zb - 70, zb - 45)], M5_CLR)  # Z spine T-nuts (both slots)
     zb_hi = X_PULLEY_Z + 6.4
     tab = box(-30, 0, zb_hi - 6, 30, L.MGN12_H + X_BELT_Y[1] + 4, zb_hi + 8)
     tab = tab.cut(box(-31, L.MGN12_H + X_BELT_Y[0] - 0.5, zb_hi - 1.2, 31, L.MGN12_H + X_BELT_Y[1] + 0.5, zb_hi + 1.2))
@@ -248,9 +253,10 @@ def z_motor_mount() -> cq.Workplane:
     plate = box(-22, -48, 0, 47, 0, t)
     plate = plate.cut(cyl((24, -23, -1), 23, t + 2))
     plate = holes_z(plate, [(24 + dx, -23 + dy) for dx in (-15.5, 15.5) for dy in (-15.5, 15.5)], M3_CLR)
-    back = box(-22, -2, -30, 22, 0, t)  # tab down the spine front, bolts into the slot
+    so = L.Z_SPINE_OFFSET_X
+    back = box(so - 22, -2, -30, so + 22, 0, t)  # tab down the spine front, bolts into both slots
     plate = plate.union(back)
-    plate = holes_y(plate, [(-10, -18), (10, -18)], M5_CLR)
+    plate = holes_y(plate, [(so - 10, -18), (so + 10, -18)], M5_CLR)
     return plate
 
 

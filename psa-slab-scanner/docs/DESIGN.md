@@ -130,8 +130,10 @@ each through one lens: slab safety, reliability/buildability, and practical valu
   the lens. **[Certain, mirror geometry]** The mirror reflection of a ring of radius r lands
   within r/2 of the axis, so within ~12 mm. The label band sits 45–65 mm off-axis, so it is
   glare-free without polarisers. That avoids the slab plastic's stress-birefringence
-  "rainbow" risk that cross-polarisation has. A black foam-board roof stops room lights
-  reflecting off the slabs.
+  "rainbow" risk that cross-polarisation has. [Likely] Room lights reflecting off the slab
+  plastic are a minor effect. The LED ring is several times brighter on the label than a
+  ceiling light's reflection, so contrast drops a little but nothing saturates. If Phase 0
+  shows glare anyway, add the optional black foam-board light roof.
 - **Resolution.**
   - Head camera (8 MP IMX179, 3.6 mm lens, 140 mm away): 0.055 mm/px.
   - Station (Camera Module 3): 0.039 mm/px.

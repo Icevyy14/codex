@@ -154,6 +154,19 @@ def check_head_camera() -> None:
     record("head camera half-angle needed to see label edge (deg, <= 30)", need, 30.0, "", larger_is_better=False)
 
 
+def check_rail_slots() -> None:
+    """Rails must sit on an extrusion slot (20-series slots are every 20 mm, 10 mm from each edge)."""
+    beam_slots = [L.X_BEAM_Z - 10, L.X_BEAM_Z + 10]
+    record("X rail centre on a 4040 front-face slot (mm off)", min(abs(L.X_RAIL_Z - z) for z in beam_slots), 0.01, "", larger_is_better=False)
+    spine_slots = [L.Z_SPINE_OFFSET_X - 10, L.Z_SPINE_OFFSET_X + 10]  # relative to the cup axis
+    record("Z rail centre on a 2040 spine slot (mm off)", min(abs(0 - x) for x in spine_slots), 0.01, "", larger_is_better=False)
+    parts = M.machine(P[3].x, L.C_SAFE_EMPTY, with_slabs=False)
+    bed = next(p for p in parts if p.name == "bed_plywood").shape.val()
+    ups = [p.shape.val() for p in parts if p.name.startswith("upright")]
+    vol = sum(bed.intersect(u).Volume() for u in ups)
+    record("bed plywood vs uprights overlap (mm3)", vol, 1.0, "", larger_is_better=False)
+
+
 def check_extremes() -> None:
     t = L.travel_needed()
     for x in t["x"]:
@@ -165,9 +178,9 @@ def check_extremes() -> None:
             record(f"travel extreme x={x:.0f} c={c:.0f}: moving parts vs frame", d, 2.0, pair)
     record("X carriage on rail at left limit (mm margin)", (t["x"][0] - L.MGN12H_L / 2) - M.X_RAIL_X0, 3.0)
     record("X carriage on rail at right limit (mm margin)", (M.X_RAIL_X0 + M.X_RAIL_LEN) - (t["x"][1] + L.MGN12H_L / 2), 3.0)
-    z_lo = L.Z_CARRIAGE_ABOVE_CUP
+    z_lo = L.Z_CARRIAGE_ABOVE_CUP + L.C_MIN
     z_hi = L.Z_CARRIAGE_ABOVE_CUP + L.C_MAX + L.MGN12H_L
-    record("Z carriage on rail at c=0 (mm margin)", z_lo - (L.Z_SPINE_BOTTOM + 1), 2.0)
+    record(f"Z carriage on rail at c={L.C_MIN:.0f} (mm margin)", z_lo - (L.Z_SPINE_BOTTOM + 1), 2.0)
     record("Z carriage on rail at c=max (mm margin)", (L.Z_SPINE_BOTTOM + L.Z_SPINE_LEN - 9) - z_hi, 2.0)
     record("X bracket clears X motor / idler mounts at the ends (mm)", min(M.X_MOTOR_X - 26 - (t["x"][1] + 30), (t["x"][0] - 30) - (M.X_IDLER_X + 18)), 2.0)
 
@@ -179,6 +192,7 @@ def main() -> int:
     check_station()
     check_head_camera()
     check_extremes()
+    check_rail_slots()
     w = max(len(r.name) for r in results)
     bad = 0
     for r in results:

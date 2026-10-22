@@ -136,9 +136,12 @@ ARM_TO_CUP = 35.0  # drop-arm centre to cup axis (Y)
 #   ARM_TO_CUP (35) + arm half (10) + Z plate (8) + Z carriage (13) + Z spine (20) + X bracket (8) + X carriage (13) = 107
 Y_CUP_TO_BEAM = ARM_TO_CUP + EXT20 / 2 + Z_PLATE_T + MGN12_H + EXT20 + X_BRACKET_T + MGN12_H
 Z_SPINE_BOTTOM = POST_H + 8.0  # lowest rigid gantry part that sweeps over the bed
-Z_CARRIAGE_ABOVE_CUP = POST_H + 13.0  # Z carriage bottom edge height above the cup face
+Z_CARRIAGE_ABOVE_CUP = POST_H + 25.0  # Z carriage bottom edge above the cup face: carriage stays on its rail down to c = -12
+Z_SPINE_OFFSET_X = -10.0  # 2040 spine centre vs cup axis: the Z rail bolts into the spine's +10 slot, on the cup axis
+C_MIN = -12.0  # lowest cup height the rail allows (probing the bare pad trips near -2)
 Z_SPINE_LEN = 340.0
 X_BEAM_Z = 400.0  # X beam (4040) centre height
+X_RAIL_Z = X_BEAM_Z + 10.0  # rail bolts into the upper slot of the beam's front face (4040 slots are at +/-10)
 LABEL_TOWARD = "front"  # slabs face-down, label end toward the operator (keeps the arm out of camera view)
 
 
@@ -165,6 +168,8 @@ def check() -> list[str]:
         problems.append("station cell must not be at an end")
     if Z_SPINE_BOTTOM + 1 + Z_SPINE_LEN - 10 < Z_CARRIAGE_ABOVE_CUP + C_MAX + MGN12H_L:
         problems.append("Z rail too short for full travel")
+    if Z_CARRIAGE_ABOVE_CUP + C_MIN < Z_SPINE_BOTTOM + 1:
+        problems.append("Z carriage leaves the bottom of its rail above C_MIN")
     return problems
 
 
