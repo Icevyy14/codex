@@ -1,5 +1,6 @@
 """Web page API with the simulated machine (Flask test client)."""
 
+import threading
 import time
 
 import pytest
@@ -17,6 +18,20 @@ def from_layout():
     return dataclasses.replace(_layout(), face_down_check="off")
 
 H = {"X-SlabRail": "1"}
+
+
+class HeldProvider(SimProvider):
+    """A simulated machine whose run waits at the start until ``go`` is set. A test that presses Stop right after
+    Start sets it only once the Stop is in, so the run always sees the Stop before its first slab. Without it, on a
+    busy box the run could reach the first slab first (and stop there for another reason)."""
+
+    def __init__(self, cfg, **kw):
+        super().__init__(cfg, **kw)
+        self.go = threading.Event()
+
+    def get(self, fresh):
+        assert self.go.wait(120), "the test never released the run"
+        return super().get(fresh)
 
 
 def _wait(client, states=("finished", "stopped", "error"), timeout=240):
@@ -56,10 +71,12 @@ def test_status_start_finish_download(tmp_path):
 
 def test_stop_then_resume_from_the_page(tmp_path):
     cfg = from_layout()
-    app = create_app(cfg, SimProvider(cfg, slabs=3), out_dir=tmp_path)
+    provider = HeldProvider(cfg, slabs=3)
+    app = create_app(cfg, provider, out_dir=tmp_path)
     c = app.test_client()
     bid = c.post("/api/start", json={}, headers=H).get_json()["batch_id"]
     assert c.post("/api/stop", headers=H).status_code == 200
+    provider.go.set()
     s = _wait(c)
     assert s["state"] == "stopped" and "Stopped on request" in s["message"]
     b = {x["id"]: x for x in c.get("/api/batches").get_json()}
@@ -184,10 +201,12 @@ def test_the_face_down_tick_only_confirms_a_face_down_stop(tmp_path):
     from slabscan.simworld import SimCamera, SimGate, SimLights, SimMotion, SimSlab, SimVacuum, SimWorld
 
     cfg = dataclasses.replace(_layout(), face_down_check="stop")
-    app = create_app(cfg, SimProvider(cfg, slabs=3), out_dir=tmp_path)
+    provider = HeldProvider(cfg, slabs=3)  # the Stop is in before the run starts: its first slab may have no back code
+    app = create_app(cfg, provider, out_dir=tmp_path)
     c = app.test_client()
     bid = c.post("/api/start", json={}, headers=H).get_json()["batch_id"]
-    c.post("/api/stop", headers=H)
+    assert c.post("/api/stop", headers=H).status_code == 200
+    provider.go.set()
     s = _wait(c)
     assert s["state"] == "stopped" and "Stopped on request" in s["message"]
     r = c.post("/api/resume", json={"batch": bid, "face_down_ok": True}, headers=H)
