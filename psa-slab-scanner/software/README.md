@@ -27,7 +27,7 @@ starts the web page at every boot.
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
-.venv/bin/python -m pytest -q tests        # about 5 minutes
+.venv/bin/python -m pytest -q tests        # 189 tests, about 12 minutes
 ```
 
 ## First-time order
@@ -72,10 +72,10 @@ All commands are `python -m slabscan <command>`. Add `--sim` to use the simulato
 | `mark [--only 0,12] [--dry-run]` | Drill-template walk (above). `--dry-run` prints the order and positions. |
 | `run [--name NAME] [--front-photo always\|fallback] [--all-face-down] [--yes]` | One batch. It refuses to start before `calibrate z` and `calibrate x` have been run. `--yes` skips the start question. `--all-face-down` turns the face-down check off for this batch (below). |
 | `resume BATCH_DIR [--accept-heights] [--face-down-ok]` | Continues a stopped batch (below). `--face-down-ok`: you checked the slab the face-down check stopped on. It is refused unless the last stop was that face-down stop, and it confirms that one slab only. |
-| `sim [--slabs N] [--face-down-check] [--sim-head cad\|open]` | Full simulated batch. Prints the summary and a time estimate. `--face-down-check` keeps the check on and counts the slabs it would stop at. |
+| `sim [--slabs N] [--face-down-check] [--jp-rate R] [--sim-head cad\|open\|none]` | Full simulated batch. Prints the summary and a time estimate. `--face-down-check` keeps the check on and counts the slabs it would stop at (a simulated operator confirms each). `--jp-rate` gives that share of cards the Japanese back. `--sim-head open` draws a hypothetical head that leaves the card window clear; `cad` (the default) is today's head. |
 | `web [--port 8080]` | Phone page (below). |
-| `phase0 [--sim N] [--out DIR] [--face-up 15] [--save]` | The Phase 0 camera test (same as `python -m tools.phase0`): reads 30-50 of your slabs in the Phase 0 jig before you buy any motion parts. The read-rate report is written as soon as you type `q`. The face-up pass is off unless you ask for it; a GO for the learned face-down check needs 15 face-up slabs. `--save` writes its threshold on a GO. |
-| `refs [--drop CERT \| --drop-operator]` | Lists the learned face-down check's card-back references, with the batch, position and cert each came from. `--drop` deletes one slab's reference, for example after a wrong confirmation. |
+| `phase0 [--sim N] [--out DIR] [--face-up N] [--save]` | The Phase 0 camera test (same as `python -m tools.phase0`): reads 30-50 of your slabs in the Phase 0 jig before you buy any motion parts. The read-rate report is written as soon as you type `q`. The face-up pass is off unless you ask for it (`--face-up` defaults to 0); a GO for the learned face-down check needs 15 face-up slabs. `--save` writes its threshold on a GO. |
+| `refs [--drop CERT \| --drop-operator]` | Lists the learned face-down check's card-back references, with the batch, position and cert each came from. `--drop CERT` deletes one slab's reference, for example after a wrong confirmation; `--drop-operator` deletes every reference you confirmed and keeps the back-QR ones. |
 
 **Jog safety rules** (enforced in software):
 - Nothing moves before homing.
@@ -167,12 +167,12 @@ It tells you which stack to put the slab back on.
 
 | File | Contents |
 |---|---|
-| `certs.csv` | One row per slab: cert, grader, status (`ok`, `needs_review`, `no_read`, `conflict`, `other_grader`), which pocket it came from and where it is now (`out_pocket`, `out_index` counted from the bottom), image paths. Written row by row, so a crash loses nothing. |
+| `certs.csv` | One row per slab: cert, grader, status (`ok`, `needs_review`, `no_read`, `conflict`, `other_grader`), which pocket it came from and where it is now (`out_pocket`, `out_index` counted from the bottom), image paths, and `face_down`: how it was proven face-down (`qr`, `operator`, `learned(0.93)` or `off`). Written row by row, so a crash loses nothing. |
 | `certs.txt` | Only the `ok` certs, one per line, in machine order. Paste it into a spreadsheet or Card Dealer Pro. |
-| `report.html` | Every slab with its label photo. Opens on a phone. |
-| `summary.json` | Counts, duplicates, the per-stack slab count check, the ITF format learned, mean cycle time. |
-| `journal.jsonl` | Machine log used by resume. |
-| `images/` | Back photo of every slab, plus a front photo when the station camera was used. |
+| `report.html` | Every slab with its label photo and a Face-down column (learned rows in bold: check their photos). Opens on a phone. |
+| `summary.json` | Counts, duplicates, the per-stack slab count check, the ITF format learned, mean cycle time, and `face_down` (mode, counts, every learned row, the references). |
+| `journal.jsonl` | Machine log used by resume, including the face-down events (`face_down_stop` on the stop line, `face_down_confirmed`, `face_down_reference`, `face_down_learned`, `face_down_baseline`, `face_down_ok_unused`). |
+| `images/` | Back photo of every slab, plus a front photo when the station camera was used. In learned mode also `face_down_window.jpg` (the run's first slab with the card window drawn) and `face_down_empty.jpg` (the view over an empty pocket). |
 | `stop.json` | Why the last run stopped (deleted when a run finishes). |
 
 ## Web page

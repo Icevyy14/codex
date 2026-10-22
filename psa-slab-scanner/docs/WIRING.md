@@ -367,8 +367,9 @@ board near the valves so this tube stays short.
 
 ## 6. Contact probe (fail-safe optical endstop)
 
-**Part:** a slotted optical endstop board with a TCST2103 sensor (BOM), on the head foot. A flag
-clamped to the spring-buffer rod moves through the slot as the cup is pushed up.
+**Part:** a slotted optical endstop board with a TCST2103 sensor (BOM), on the head foot's sensor
+post. A 1 mm aluminium flag, clamped under the vacuum elbow on top of the spring buffer, rises
+through the slot as the cup is pushed up (BUILD_GUIDE §7.6; it is in the CAD as `probe_flag`).
 
 **Wiring (W54):**
 - board **VCC** → Rodent Y-MAX **V-Lim**, which is 5 V with the SW_VCC jumper on 5 V;
@@ -384,7 +385,8 @@ clamped to the spring-buffer rod moves through the slot as the cup is pushed up.
 **Mechanical rule (this is what makes it fail-safe)**
 - **At rest, the slot must be clear**, so the light reaches the detector and the output is LOW.
 - **Contact pushes the flag into the slot.** The output goes HIGH, which reads as triggered.
-- Set the flag so it enters the slot after about 2 mm of buffer travel. The sim assumes 2 mm.
+- Set the board in its slots so the flag blocks the beam after 2.0 ± 0.5 mm of buffer travel
+  (BUILD_GUIDE §7.6). The sim assumes 2 mm.
 
 **Why this way round:** every failure lands on "triggered", and FluidNC then refuses to probe
 (ALARM:4).
@@ -616,7 +618,10 @@ the bundle along the drop arm every 50 mm down to the head.
   At c = 0, that point is 350 mm above the pads (`model.ARM_Z`: the Z carriage 295 mm above the cup
   face, plus 55), well above the 218 mm rod tops. [Certain, layout numbers]
 
-**Tube slack:** leave 30 mm at the cup fitting. The buffer rod rises up to 25 mm on contact.
+**Tube slack:** leave 25 mm at the cup's `M-5ALU-4` barb elbow, which points to the back (+Y). The
+buffer rod rises up to 20 mm on contact (SMC `ZPT25UUK20-B5-A10`, 20 mm stroke). Keep the tube off
+the head lens and its LED ring: at full stroke it runs about 1 mm under the ring [Guessing; the
+tube is not in the CAD].
 
 ## 12. Grounding and shielding
 

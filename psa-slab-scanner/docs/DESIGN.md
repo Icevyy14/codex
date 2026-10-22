@@ -65,7 +65,7 @@ each through one lens: slab safety, reliability/buildability, and practical valu
 | Air-film double picks | The slow leg of the peel (2 mm/s) is placed where the cup really leaves the slab: at the probe trip the spring buffer is already squeezed about 2 mm (`buffer_trip_mm`, measured in BUILD_GUIDE §7.6), so the head first rises that far at 20 mm/s while the cup stays on the slab, then 2 mm/s through the release point and 1 mm past it, then a 0.5 s dwell low over the stack, so a slab clinging by an air film falls back a few mm onto its own stack. Squeeze-film force scales with speed, so it falls about 10× to ~0.1 N, below the slab's weight. Doubles are still detected at placement. |
 | Klipper probe macro fragility | FluidNC native `G38.3` with an explicit bounded target. |
 | Too many moving parts | 2 motors instead of 4. No gantry squaring. |
-| "Flipping and un-reversing costs more time than it saves" | Don't flip anything. Order doesn't matter, because the CSV records each slab's exact pocket and position, and unloading goes top-down in small bundles (OPERATING.md §6). Face-down loading is a hard rule: before the cup touches a slab, the head camera must see a PSA back-label QR, otherwise the run stops untouched for you to check. Older PSA labels and CGC have no back QR, so they stop too, unless the run is started with `--all-face-down`; then a face-up slab would get the cup on its front. |
+| "Flipping and un-reversing costs more time than it saves" | Don't flip anything. Order doesn't matter, because the CSV records each slab's exact pocket and position, and unloading goes top-down in small bundles (OPERATING.md §6). Face-down loading is a hard rule: before the cup touches a slab, the head camera must see a PSA back-label QR or, in the default learned mode, a card back it learned from proven slabs (§5); otherwise the run stops untouched for you to check. Today's head foot hides the card window, so the learned part never activates [Certain, CAD ray cast]: older PSA labels and CGC stop, unless the run is started with `--all-face-down`; then a face-up slab would get the cup on its front. |
 
 - **What we keep from the other concepts:**
   - fail-safe sensor wiring;
@@ -83,7 +83,7 @@ each through one lens: slab safety, reliability/buildability, and practical valu
 
 | Contact | Motion | Force | Worst case |
 |---|---|---|---|
-| Suction cup on the **back**, centre of the card window | Static. The cup only moves vertically while touching. | Trips at ~1.4 N. Vacuum clamp ~19 N over the 25 mm lip. | A faint cup ring or a grit micro-mark on the **back** (allowed). Mitigations: non-marking PU/HT1 cup, IPA wipe each run, 24 h marking test before use. |
+| Suction cup on the **back**, centre of the card window | Static. The cup only moves vertically while touching. | Trips at ~1.2 N [Likely, SMC catalog spring force]. Vacuum clamp ~19 N over the 25 mm lip. | A faint cup ring or a grit micro-mark on the **back** (allowed). Mitigations: non-marking PU/HT1 cup, IPA wipe each run, 24 h marking test before use. |
 | Slab front resting on the back of the slab below | Static. Pick = straight lift, 2 mm/s through the point where the cup leaves the slab, then 20 mm/s, with a 0.5 s pause just above the stack. Place = probed set-down at 20 mm/s (`G38.3`). | ≤ 2 N at contact. Bottom slab of a 30-stack carries 19 N (1.8 kPa, same as stacking by hand). | Lateral slip at placement if a slab lands crooked. This is the most plausible front-scuff path. [Likely] Mitigated by ±1.75 mm pocket play, rods only at the edges, and slow probed set-down. |
 | Bottom slab front on the pocket pad | Static | ≤ 19 N | Grit on the pad. Wipe pads weekly. Microfiber face. |
 | Slab edges on 8 mm wooden dowels | Only if the slab is off-centre by > 1.75 mm | < 1 N | Edge rub on wood. The dowels sit 12 mm from every corner, so corner tips never touch. |
@@ -107,7 +107,7 @@ each through one lens: slab safety, reliability/buildability, and practical valu
 1. **Height bookkeeping.** Every slab's thickness is measured when it is placed (the probe step).
 2. **Every downward move is a probing move.** Each one is a `G38.3`, so an unexpected contact stops
    the head at once instead of driving on; probe windows never go more than 12 mm past the expected
-   surface. A trip at full Z speed squeezes the 25 mm buffer about 6 mm (about 2.3 N).
+   surface. A trip at full Z speed squeezes the 20 mm buffer about 6 mm (about 1.6 N [Likely]).
 3. **Fail-safe contact sensor.** A cut wire reads as "touching", so the machine refuses to
    probe.
 4. **Probe hard limit** (firmware). A contact-sensor trip during any move that is not a probe (a
@@ -118,7 +118,11 @@ each through one lens: slab safety, reliability/buildability, and practical valu
    machine won't start. It cannot see anything above the 218 mm rod tops, such as a slab lying
    across the rods: the survey catches that, because its first probe window starts at travel
    height.
-7. **Face-down check.** No PSA back QR seen from above = the cup does not touch the slab.
+7. **Face-down check.** No PSA back QR seen from above = the cup does not touch the slab, unless
+   the learned check (the default mode, §5) matches its card window with the card backs of proven
+   slabs. With today's head that never happens: the foot hides the window. Another grader's code
+   seen from above always stops. Modes: `learned` (default), `stop` (back QR only), `off` (or
+   `run --all-face-down` for one batch).
 8. **Plausibility checks.** A stack taller than predicted by > 4.5 mm, a vent that does not reach
    atmosphere, a vacuum sensor reading outside its range, or an exception pocket that's full stops
    the run. After any stop the head re-reads its real position, lifts straight up, and puts a held
@@ -135,7 +139,7 @@ each through one lens: slab safety, reliability/buildability, and practical valu
 | X drive (1.9 kg moving, 2 m/s² + 2 N friction) | 5.8 N belt → 0.037 N·m | NEMA17 at 375 rpm ≈ 0.3 N·m → **SF ≈ 8** [Likely] |
 | X beam sag, 4040 over 1.42 m, 20 N at midspan | 0.18 mm | Pocket play 1.75 mm [Certain, beam formula] |
 | X beam twist from the 127 mm head overhang | ≈ 0.8 mm at the cup, worst at midspan [Guessing on J] | Within pocket play. Measure it during build (BUILD_GUIDE §6). Add a rear brace if > 1 mm. |
-| Spring buffer force at trip / at 12 mm / bottomed (25 mm) | 1.4 / 3.4 / 6.0 N | The software never asks for more than 12 mm; a trip at 6000 mm/min squeezes about 6 mm. |
+| Spring buffer force at trip (2 mm) / end of a probe window (14 mm) / bottomed (20 mm) | about 1.2 / 2.4 / 3.0 N [Likely: SMC lists 1.0 N at rest and 3.0 N at full stroke for ø10–32 buffers] | The software never probes more than 12 mm past contact; a trip at 6000 mm/min squeezes about 6 mm. The `ZPT25UUK20-B5-A10` has 20 mm of stroke: SMC sells no 25 mm stroke on a 25 mm pad. [Certain, SMC ZP catalog Table 2] |
 | Stack height, 30 PSA slabs at 6.25–6.9 mm | 188–207 mm | MAX line 210, beam at 214, rod tops 218 |
 | Carry height (cup) | 248 mm | A **double pick** of two 11.5 mm thick holders still clears the rods by 5 mm, counting the free cup's 2 mm hang below its calibrated height [Certain, CAD] |
 
@@ -177,13 +181,73 @@ each through one lens: slab safety, reliability/buildability, and practical valu
   - **CGC** (`cgccards.com` QR) is read and stacked like PSA. **BGS/SGC/TAG** are recognised
     and sent to the exception pocket.
 
+### The learned face-down check
+
+**Why.** Pre-2017 PSA labels and CGC slabs have no back QR, so the plain check stops at every one
+of them (49 of 330 in the simulator's default mix). Most of them show the same card back through
+the plastic, and a face-up slab shows a card front there instead.
+
+**The descriptor** (`slabscan/facedown.py`) [Certain, code]:
+- Only the card window, `face_down_window_mm` (x −28 … 28, y −33 … −17 mm from the cup axis, −y =
+  the label end; 896 mm², at least 300 mm² required). Not the label, and not the head's own parts.
+- Each rectangle is cropped with a 4 mm margin and box-resampled to 1 px/mm. That removes noise,
+  focus and JPEG differences and about 1° of yaw, and costs about as much as a thumbnail.
+- Glare (a 1 mm average at grey level 245 or more, grown by 2 mm) is masked everywhere.
+- Pattern term: the window minus its own blur (σ 4 mm), so exposure and light fall-off drop out;
+  normalised cross-correlation at every shift within ± 4 mm (the slab's play in its pocket).
+- Colour term: a hue-saturation histogram (a grey-level histogram on grey frames).
+- **Score = the lower of the two.** A false accept puts the cup on a front; a false reject only
+  stops the run.
+- Cost [Certain, measured on the development container]: about 2 ms to describe a full 3264 × 2448
+  frame and about 2 ms to compare it with 48 references. [Guessing] 10–20 ms on a Pi 5. It adds one
+  head frame per run (the empty-pocket view), none per slab.
+
+**Safety layers** [Certain, code; tested in the simulator]:
+1. **References only from proven slabs:** a back QR seen from above; your `--face-down-ok`, learned
+   only after the slab is placed and vetoed by a PSA back-label QR seen from below or another
+   grader's code seen from above; the Phase 0 seed. A learned acceptance never becomes one. A back
+   design known only from your confirmations is used once 3 agree.
+2. **`--face-down-ok` confirms one slab:** only after a face-down stop, only the top slab of that
+   pocket. The web tick appears only then and is cleared after each resume.
+3. **A texture floor**, and a match needs at least half the matched back design's own texture
+   (a plain front with a glare spot has some texture, far less than a back).
+4. **Glare:** a window with more than 2% glare never becomes a reference; more than 30% is not
+   matched.
+5. **The empty-pocket guard:** one head frame over an empty pocket per run. A window whose pattern
+   looks like it (similarity ≥ 0.5) shows the head, not the slab: it neither matches nor teaches.
+6. **The occlusion check:** on the newest 5 or more slabs proven on this machine, a pixel that
+   tracks the empty-pocket view by the frame's exposure ratio moves with the camera. More than 10%
+   of the window like that: the mode is not active.
+7. **A measured threshold:** Phase 0 compares at least 10 usable backs with each other and with
+   at least 15 face-up slabs; a back that matches none of the others is left out. GO needs a gap of
+   0.10; the threshold is the midpoint, never below 0.55. It is stored with a tag of the window and
+   descriptor it was measured for (`face_down_threshold_sig`) and refused without it.
+8. **At least 5 references** (`face_down_min_refs`).
+
+**Limits.**
+- [Certain, CAD ray cast] **Today's head hides the whole window** (0 of 75 points visible; the
+  foot blocks all of them, the flag and elbow some). Layers 5 and 6 then refuse everything, so the
+  check acts like `stop`. It needs a `head_foot` change plus a `checks.py` frustum check: rays from
+  the lens at hover (about 147–149 mm above the slab) to the window grown by 2 mm must clear every
+  head part.
+- [Certain, sim] A head edge about 1 mm inside the window is not detected and lifts face-up scores
+  from 0.37 to 0.52 (2 of 300 accepted at a threshold of 0.50). Hence the 0.55 floor; the frustum
+  check is the real fix.
+- [Guessing] Real separation: full-art fronts, holo glare, Japanese and other-game backs, sleeves
+  and stickers are untested. The colour term is tested only on synthetic colour images (the
+  simulator is grey). The CGC card may sit outside the window (safe: those slabs stop). The glare
+  level (245) and texture ratio (0.5) are tuned on the simulator only.
+
 ## 6. Verification done here (no real hardware)
 
 | Check | Tool | Result |
 |---|---|---|
-| Geometry: exact min-distance, all-pairs interference (including modelled fastener heads), held-slab sweep, hard-stop, rail-margin and line-of-sight checks at every pick, place, travel, station, hard-stop and Phase 0 pose | `cad/checks.py` (OpenCascade) | **77/77 pass** (October 2026; the numbers are in `cad/out/checks.txt`) [Certain]. **Not checked:** belt slack, cables and the vacuum tube, the probe flag, the real shapes of bought parts, loads and deflection. |
-| Unit tests: cert parsing, grader detection, ITF learning, decode at the design point, OCR fallback | `software/tests` | pass [Certain] |
-| End-to-end batches in a simulator that **raises Crash on any unsafe move** | `software/tests/test_runner_sim.py`, `test_safety_fixes.py`, `test_bench_tests.py` | pass [Certain]. Scenarios: every slab moved and read; pre-2016 labels via the station; check-digit ITF learned; double pick detected; thick holder; seal failure stops; overfill refused; CGC read, BGS rejected; face-down check; an unexpected error with a slab in the cup; failed vent; vacuum sensor fault; Ctrl-C hard stop. |
+| Geometry: exact min-distance, all-pairs interference (including modelled fastener heads), held-slab sweep, hard-stop, rail-margin and line-of-sight checks at every pick, place, travel, station, hard-stop and Phase 0 pose | `cad/checks.py` (OpenCascade) | **106/106 pass** (re-run on 22 Oct 2026; the numbers are in `cad/out/checks.txt`) [Certain]. **Not checked:** belt slack, cables and the vacuum tube, the real shapes of bought parts (the buffer and elbow are modelled from catalog dimensions), loads and deflection, and the face-down card window (no frustum check yet). |
+| Probe flag, guide and sensor over the buffer's 20 mm stroke | `cad/checks.py` `check_probe` | [Certain] trip at 2.00 mm; beam clear for 1.5 mm, fully blocked from 3 to 20 mm; flag 1.05 mm from the sensor and 0.45 mm from its guide; 8 mm guide engagement at full stroke; a rotating (J) buffer stopped at 1.32°, 0.6 mm from the sensor; buffer ± 3 mm on its thread still covered by the ± 4 mm board slots; pad 1.5 mm clear of the buffer body at full stroke; nothing in the label view while reading; a ball-end key reaches the front board screw. |
+| Phase 0 jig vs machine | `cad/checks.py` `check_phase0` | [Certain] the occluder (foot, buffer, flag, elbow, board) sits 0.0 mm from the machine's relative to the lens and blocks the same share of the slab view; the face-up pass (mount 3 mm up) leaves the free cup 1.0 mm above the slab's front. |
+| Unit tests: cert parsing, grader detection, ITF learning, decode at the design point, OCR fallback, the learned face-down descriptor, config checks | `software/tests` | **189 passed** (full suite, 11 min 49 s, 22 Oct 2026) [Certain] |
+| End-to-end batches in a simulator that **raises Crash on any unsafe move** | `software/tests/test_runner_sim.py`, `test_safety_fixes.py`, `test_bench_tests.py`, `test_face_down_learned.py` | pass [Certain]. Scenarios: every slab moved and read; pre-2016 labels via the station; check-digit ITF learned; double pick detected; thick holder; seal failure stops; overfill refused; CGC read, BGS rejected; face-down check; an unexpected error with a slab in the cup; failed vent; vacuum sensor fault; Ctrl-C hard stop. Learned check: an old label passes once QR references exist; a face-up slab still stops; a plain face-up front with glare is refused; today's CAD head and a partly hidden window are refused; one wrong confirmation does not teach a front; a back QR seen from below vetoes a confirmation; a Japanese back needs 3 confirmations; `--face-down-ok` is refused after another stop; a batch with a learned acceptance resumes; Phase 0 leaves an outlier back out. |
+| Learned face-down check, 330-slab simulated batch (seed 7) | `sim --slabs 330 --face-down-check` | [Certain, sim] Today's head: 49 stops, 0 references (unchanged from back-QR only). A hypothetical head that leaves the window clear: 281 by back QR, 48 learned (lowest score 0.69), 1 stop. Both 14.0 s per slab, 78.2 min, 991 head frames. With the clear head, 300 simulated Phase 0 runs all said GO (thresholds 0.54–0.57) and no face-up slab was accepted; 0 of 150 plain fronts with glare were accepted. [Guessing for real slabs] |
 | Real slabs, real cameras, real cup | — | **Not done.** Phase 0 + acceptance tests in BUILD_GUIDE are mandatory before trusting it with your inventory. |
 
 ## 7. Known risks and what retires them
@@ -192,7 +256,8 @@ each through one lens: slab safety, reliability/buildability, and practical valu
 |---|---|
 | Real PSA barcode/QR payloads differ from the assumptions | Phase 0: scan 30–50 of your slabs with the real cameras and `slabscan focus`. `custom_regex` in config handles a prefix or suffix: it is checked when the config loads (it must compile and have one capture group) and applied after the other graders' URL rules. |
 | Cup leaves visible marks | Phase 0B 24 h marking test with a hand pump, then the 300-cycle + 24 h test on the machine with the vacuum re-held all the time (BUILD_GUIDE §13.2). Swap cup material if needed (BOM lists two). |
-| Older labels stop the run | Each slab without a PSA back QR stops at the face-down check. Use `run --all-face-down` only for stacks you checked yourself. |
+| Older labels stop the run | Each slab without a PSA back QR stops at the face-down check. The learned check could remove most of these stops (1 of 330 in the simulator with a clear view [Certain, sim; Guessing for real backs]), but today's head hides the card window, so it never activates. A `head_foot` change plus a frustum check comes first. Until then use `run --all-face-down` only for stacks you checked yourself. |
+| The buffer and elbow differ from their catalog dimensions | Measure them on arrival (BUILD_GUIDE §3.3) before cutting the flag; the board slots give ± 4 mm of trip adjustment. |
 | Beam twist larger than estimated | Dial-indicator check during the build. A rear diagonal brace is in the guide. |
 | Double picks (slabs clinging) | Peel dwell. Detected at placement (step ≥ 11.6 mm) and flagged with the exact position. |
 | Mixed weird holders (SGC 86 mm wide doesn't fit; BGS/TAG widths unmeasured; sleeves) | Loading rules in OPERATING.md. SGC is too wide for the pockets. Measure one BGS, TAG and CGC holder before loading them: anything wider than 82.6 mm is "do not load". |

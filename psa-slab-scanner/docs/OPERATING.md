@@ -16,10 +16,14 @@ Confidence tags: **[Certain]** = read in the code (`software/slabscan/`) or the 
   together (DOUBLE PICK), the read one gets its row and the one underneath gets an extra
   `no_read` row whose note starts `UNREAD:`. That slab is in the **output pocket**, directly under
   the read one, not in pocket 12 (§5.4). Always check the count line in the summary.
-- **Slabs without a PSA back-label QR stop the run.** [Certain, `runner._check_face_down`] Before
-  the cup touches a slab, the head camera must see the back QR that proves it is face-down. Older
-  PSA labels (before 2017) and CGC slabs have none, so each one stops the run until you check it
-  (§8.1). For stacks you checked yourself, start with `--all-face-down` (§3).
+- **Slabs without a PSA back-label QR stop the run, and with today's head that is every one.**
+  [Certain, `runner._check_face_down`] Before the cup touches a slab, the head camera must prove it
+  is face-down: a PSA back-label QR, or, in the default `learned` mode, a card window that matches
+  the card backs of slabs proven earlier (§8.4). The learned part works only after a Phase 0 GO,
+  5 references and a clear view of the card window. Today's head foot hides that window [Certain,
+  CAD ray cast], so it never becomes active. Older PSA labels (before 2017) and CGC slabs therefore
+  stop the run until you check each one (§8.1). For stacks you checked yourself, start with
+  `--all-face-down` (§3).
 - **Only the E-stop removes motor power.** Ctrl-C twice halts the motors at once and nothing moves
   afterwards, but they stay powered. [Certain, `runner.hard_stop`]
 - **A wrong cert is worse than no cert.** The software refuses to guess: two codes that disagree
@@ -63,13 +67,13 @@ Confidence tags: **[Certain]** = read in the code (`software/slabscan/`) or the 
 
 | Rule | Why |
 |---|---|
-| **Face-down** (label and card facing the pad, the back facing up). A hard rule. | The cup only touches the back. Before the cup touches a slab, the head camera must see a PSA back-label QR; if it can't (a face-up slab, a pre-2017 label, a CGC slab) the run stops with nothing touched until you check it (§8.1). With `--all-face-down` that check is off and a face-up slab gets the cup on its front. [Certain, `runner.py`] |
+| **Face-down** (label and card facing the pad, the back facing up). A hard rule. | The cup only touches the back. Before the cup touches a slab, the head camera must see a PSA back-label QR, or (learned mode, once active) a card back it knows. If it can't (a face-up slab, a pre-2017 label, a CGC slab) the run stops with nothing touched until you check it (§8.1). With `--all-face-down` that check is off and a face-up slab gets the cup on its front. [Certain, `runner.py`] |
 | **Label end toward the front** (toward you) | It keeps the arm out of the camera's view of the label. [Certain, CONTRACT] |
 | **Remove all sleeves and bags** | A smooth sleeve may well seal under the cup [Guessing], but the slab can then slide out of the sleeve during the 2 m/s² moves, and nothing detects a sleeve. A sleeve also slides on the stack. |
 | **Pockets 1–11 only.** Pocket 0 and pocket 12 start empty. | Stack 1 moves into pocket 0. Pocket 12 collects exceptions. [Certain] |
 | **Fill to the gauge, never above it.** Stand a `fill_gauge` in the front finger gap, its foot on the bed, against the stack. **The underside of its top bar is the MAX line.** The notches mark 0, 5, 10 … 30 slabs of 6.6 mm; the top notch (198 mm) is *not* the MAX line. | The bar underside is 210 mm above the bed, so 207 mm above the pad: the gauge errs 3 mm on the safe side because the bed sits 3 mm below the pad top. About 30 standard PSA slabs, or about 27 CGC. [Certain, `model.fill_gauge`, `layout.py`] Higher, and the overfill beam blocks the start. |
 | **Each slab flat and centred** between the rods. Lower bundles of 5–10 with your fingertips in the front and back gaps (52 mm wide), following the bundle down; let go only when it rests on the stack. Never drop a bundle in. | A slab sitting on a rod stops the run ("taller than expected"). [Certain] |
-| **PSA and CGC can be mixed**, in any order and any holder thickness | Both are read and stacked normally. [Certain, `certs.py`] Measure one CGC holder before the first CGC batch: it must be ≤ 82.6 mm wide. CGC slabs have no PSA back QR, so each one stops at the face-down check unless you use `--all-face-down`. |
+| **PSA and CGC can be mixed**, in any order and any holder thickness | Both are read and stacked normally. [Certain, `certs.py`] Measure one CGC holder before the first CGC batch: it must be ≤ 82.6 mm wide. CGC slabs have no PSA back QR, so each one stops at the face-down check unless you use `--all-face-down`. The learned check may not help them either: [Guessing] the card window may miss the card in a CGC holder, and then they stop (the safe side). |
 | **BGS and TAG: measure one first.** Load them only if the holder is ≤ 82.6 mm wide (the pocket is 84 mm). They are then recognised and moved to pocket 12 as `other_grader`. | [Guessing] BGS holders may be wider than PSA's, and no width here has been measured. A wider holder rubs or jams on the dowels at every pick and placement. |
 | **SGC: don't load.** Its holder is about 86 mm wide and the pocket is 84 mm. | [Likely, `layout.py`; measure one of yours] It won't go between the rods. Scan SGC by hand. |
 | **Thick PSA holders are OK.** They are read and flagged "thick holder". | Fewer fit under the line, so trust the gauge, not a count. |
@@ -94,6 +98,15 @@ python -m slabscan run --name "high-value" --front-photo always  # also photogra
   cup on its front. The web page has the same choice as a checkbox.
 - **The run refuses to start** until `calibrate z` and `calibrate x` have been done. [Certain,
   `cli.py`]
+- **The start line `face-down check: …` says what the check does this run** [Certain,
+  `runner.face_down_status`]:
+  - `back QR only - every slab without a PSA back QR stops for you` (`face_down_check = "stop"`);
+  - `learned check not active yet: <why>. Until then every slab without a PSA back QR stops for
+    you, as in 'stop' mode` (the default mode, not ready: with today's head you always see this);
+  - `learned (threshold 0.62, 23 references in 1 prototype(s) …)`: slabs without a back QR are
+    picked when their card window matches a known card back (§8.4);
+  - `OFF - a slab loaded face-up gets the cup on its front` (`--all-face-down`, or
+    `face_down_check = "off"`).
 
 **Web page:**
 1. On the Pi, run `python -m slabscan web`, or install the boot service with
@@ -130,8 +143,11 @@ The page shows:
 ![First transfer](img/storyboard_2_first_transfer.png)
 
 **For every slab** [Certain, `runner.transfer`]:
-1. A look from just above the top slab: the face-down check (a PSA back QR must be visible) and
-   a first read of the back.
+1. A look from just above the top slab: the face-down check (a PSA back QR must be visible, or in
+   learned mode a card window that matches a known card back) and a first read of the back. In
+   learned mode the survey also takes one head frame over the first empty pocket
+   (`images/face_down_empty.jpg`): every card window is compared with it, so a head part in the
+   way is noticed. [Certain, `runner._take_baseline`]
 2. A slow probe down to it. Every downward move is a probing move, so anything unexpected in the
    way stops the head.
 3. The cup line must read atmosphere, then the cup seals.
@@ -175,9 +191,9 @@ Everything is in `batches/<batch id>/`:
 | `certs.csv` | One row per slab, written row by row as it runs, so a crash loses nothing. |
 | `certs.txt` | Only the `ok` certs, one per line, in machine order. Paste it into a spreadsheet or Card Dealer Pro. |
 | `report.html` | Every row with its label photo(s). Opens on a phone. |
-| `summary.json` | Counts per status, duplicates, the per-stack count check, `needs_attention`, the ITF format learned, mean cycle time. |
-| `images/` | `NNNN_back.jpg` for every slab, plus `NNNN_front.jpg` when the front camera was used. NNNN = `position`. |
-| `journal.jsonl`, `run.json`, `stop.json` | Machine log for `resume`, the run options, and why it last stopped. |
+| `summary.json` | Counts per status, duplicates, the per-stack count check, `needs_attention`, the ITF format learned, mean cycle time, and `face_down` (§5.3). |
+| `images/` | `NNNN_back.jpg` for every slab, plus `NNNN_front.jpg` when the front camera was used. NNNN = `position`. In learned mode also `face_down_window.jpg` (the run's first slab with the card window drawn in red) and `face_down_empty.jpg` (the view over an empty pocket). |
+| `journal.jsonl`, `run.json`, `stop.json` | Machine log for `resume` (including the face-down events, §8.4), the run options, and why it last stopped. |
 
 ### 5.1 `certs.csv` columns
 
@@ -199,6 +215,7 @@ Everything is in `batches/<batch id>/`:
 | `note` | Why it isn't plain `ok`, plus flags like "thick holder", "thin/odd step" and "DOUBLE PICK" |
 | `image_front`, `image_back` | Photo paths, relative to the batch folder |
 | `scanned_at` | Local time |
+| `face_down` | How the slab was proven face-down before the cup touched it: `qr` (back QR seen from above), `operator` (your `--face-down-ok`), `learned(0.93)` (card-window match, with its score: check its photo, §8.4) or `off` (check off). Empty on a double pick's `UNREAD` row. |
 
 ### 5.2 Statuses
 
@@ -228,6 +245,12 @@ Shown at the end of the run and in `summary.json`:
   stacks by hand". [Certain, `runner.count_check`]
 - **`needs attention`:** every non-`ok` row with its pocket and position counted from the bottom.
   That is your to-do list.
+- **`face-down:`** how the batch's slabs were proven face-down, e.g. `face-down: 281 by back QR,
+  49 confirmed by you`. If any were learned, it adds the lowest learned score and its position:
+  check the back photos of the learned ones. In `report.html` the Face-down column shows the same
+  per slab, with learned rows in bold. `summary.json`'s `face_down` holds the mode, the counts,
+  every learned row (position, pocket, score, back photo), the references and this run's stops.
+  [Certain, `cli.face_down_line`, `runner._face_down_summary`]
 
 ### 5.4 Double picks
 
@@ -292,11 +315,11 @@ their fronts slide across each other's backs.
 | Every run | Lint roller over the pads | Grit under a stack's bottom slab |
 | **Weekly**, or every ~1,000 slabs | Wipe the pads' microfiber with a slightly damp microfiber cloth, then let them dry | DESIGN.md: pads weekly |
 | Weekly | `python -m slabscan selftest -i` | Watch the trends: seal time and the `leak` kPa/s. A creeping leak means a fitting or the cup is going. |
-| Weekly | Check the vacuum tube's slack at the cup, and the Z cable loop | The buffer rod rises 25 mm on contact (WIRING.md §11) |
+| Weekly | Check the vacuum tube's slack at the cup elbow, and the Z cable loop | The buffer rod rises up to 20 mm on contact (WIRING.md §11) |
 | **Monthly**, or every ~5,000 slabs | **Belt:** deflection check, 100 g lifts the lower strand 13–23 mm (BUILD_GUIDE §6.6). Check the pulley grub screw too. | If you re-tension, re-run `calibrate x`. |
 | Monthly | Rails: wipe, then a little lithium/PTFE grease on both | Dry rails get notchy. [Likely] |
 | Monthly | Spot-check frame bolts, the gate post screws, the camera bracket and the lens lock nut | Vibration. Re-run `focus head` if the lens moved. |
-| Monthly | Contact-sensor check: `selftest -i` probe trigger | The flag can bend in a knock |
+| Monthly | Contact-sensor check: `selftest -i` probe trigger; push the cup up by hand and feel for the flag rubbing in its guide | The flag can bend in a knock (BUILD_GUIDE §7.6) |
 | Monthly | **E-stop check:** machine idle, press the E-stop. The software must report the controller lost, and a meter on the 24 V switched bus must read 0 V. Release, `home`. | The contact switches the 24 V capacitor inrush and can weld closed without any sign (WIRING.md §1.3). If the bus stays live, stop using the machine and replace the contact blocks. |
 | **Replace cup pads** | When the lip is damaged, the seal gets slow, the leak grows, or after any slab shows a mark. Spare SMC ZP25UU pads are in the BOM. | **Re-run `calibrate z` after every pad change**: the new pad's face height differs. [Likely] |
 | Replace pad facing | When the microfiber is worn shiny or stained | Re-glue a new facing (BUILD_GUIDE §5.5) |
@@ -350,7 +373,16 @@ Messages are quoted from the code, shortened where marked "…". [Certain]
 | "Pocket N: the cup sealed on something but the contact sensor did not trip. Contact sensor fault …" | The second, vacuum-based contact check caught a dead sensor | Same as above |
 | "Pocket N: the cup sealed (… kPa) before the head moved down - a slab is hanging on the cup. Nothing will move …" | A slab stuck to the cup from before | Hold it, vent (prompt / Vent button), put it face-down back on the stack it came from, start again |
 | **While moving slabs** | | |
-| "Pocket N: the top slab could not be confirmed FACE-DOWN before touching it (no PSA back-label QR was seen from above / a … code is visible from above …). … nothing touched it." | A face-up slab, or an older label or CGC slab with no back QR | Look at the top slab of pocket N. Face-up: turn it face-down, then `resume`. Face-down: `resume --face-down-ok` (web: tick "the top slab it stopped on is face-down"). That confirms this one slab only; for a batch of older labels you checked, start it with `--all-face-down`. |
+| "Pocket N: the top slab could not be confirmed FACE-DOWN before touching it (no PSA back-label QR was seen from above[; learned check: …] / a … code is visible from above …). … nothing touched it." | A face-up slab, or an older label or CGC slab with no back QR that the learned check could not match (the reason after "learned check:" is in the rows below) | Look at the top slab of pocket N. Face-up: turn it face-down, then `resume`. Face-down: `resume --face-down-ok` (web: tick "the top slab of pocket N, where the face-down check stopped, is face-down"; the tick only shows after a face-down stop). It confirms that one slab only, and only right after this stop. For a batch of older labels you checked, start it with `--all-face-down`. |
+| "… a CGC (or BGS …) code is visible from above, and those sit on the FRONT label" | Another grader's slab lies face-up | Turn it face-down and resume. If you confirm it with `--face-down-ok` instead, it is picked but never learned from. |
+| "… learned check not active yet: face_down_threshold is not measured (Phase 0 measures it)" | No Phase 0 GO saved | Normal with today's head. Otherwise: Phase 0 with `--face-up 15 --save` (BUILD_GUIDE §1.7), or set `face_down_check = "stop"`. |
+| "… learned check not active: face_down_threshold was not measured for this card window (face_down_threshold_sig …)" | The card window changed since Phase 0, or the threshold was typed in by hand | Run Phase 0 again with `--save` |
+| "… learned check not active yet: N of 5 card-back references" or "… checked on 5 slabs proven face-down on this machine …, N so far" | The first batches: not enough back-QR (or confirmed) slabs seen yet | Normal. Every back-QR slab adds one. |
+| "… N% of the card window shows the same thing on every proven slab as over an empty pocket (allowed 10%): a part of the head is in the way" or "… the card window looks like the view over an empty pocket (…): the head hides it" | The head foot (or another head part) is in the camera's view of the card window. **This is what today's head gives.** [Certain, CAD] | Confirm the slab as above. Compare `images/face_down_window.jpg` with `face_down_empty.jpg`. Only a head change fixes it. |
+| "… best match with a known card back 0.xx < threshold 0.yy" | A face-up slab, a card back the machine has not learned (Japanese, another game), or a sleeve or sticker over the window | Look at it. Face-down: confirm it. |
+| "… it matches a card back (0.xx) known only from N of your confirmations; it is used once 3 confirm it" | A back design taught only by your confirmations | Confirm it if it is face-down; after 3 agreeing confirmations that back is used |
+| "… the card window shows far less pattern (texture …) than that card back …: a plain card front, or glare" | Very likely a face-up plain card, or a glare spot | Look at it carefully before confirming |
+| "… nothing visible in the card window (blank, dark or washed out)", "… glare covers N% of the card window" or "… the card window is not inside the frame" | Head ring off or glare on the window; or `cam_head` / `face_down_window_mm` wrong | Check the head ring and `face_down_window.jpg` (BUILD_GUIDE §12.3) |
 | "Unexpected contact over pocket N at … mm while moving down to … mm [with a slab in the cup]: something is higher than it should be …" | A crooked, added or dropped slab, or a slab lying on the rods | Look before you touch anything. Fix it, then resume. |
 | "Pocket N is … mm taller than expected - was a slab added or is one sitting crooked?" | A slab is on a rod, or someone added one | Seat it flat (or take the added slab off), then resume |
 | "Pocket N: no contact where the stack should be (predicted … mm). Check the contact sensor, then resume." | The stack is lower than expected: a slab was removed, or the sensor is weak | Count the stack against the CSV. `selftest -i`. Resume. |
@@ -377,6 +409,8 @@ Messages are quoted from the code, shortened where marked "…". [Certain]
 | "The stacks changed since the run stopped: pocket N: … mm now, … mm when the run stopped (±n slabs) …" | A slab was added, removed or moved while stopped | Put things back as they were. If it says "It looks like one slab went from pocket A to pocket B …", move that top slab back as told. Or use `resume --accept-heights` if you changed things on purpose: the count check will flag it. |
 | "exception pocket 12 was emptied to … mm; counting continues from …" | Info: you emptied pocket 12 | Nothing |
 | "resume: the run stopped before the first survey finished - starting it from the beginning" | Info | Nothing |
+| "--face-down-ok refused: the batch did not stop at the face-down check last time, so there is no slab for it to confirm. Nothing moved. …" | The last stop was not a face-down stop | Resume without it. If a slab the check can't confirm comes next, the run stops there and you confirm that one. |
+| "--face-down-ok was for the top slab of pocket N, but the next slab is in pocket M: not used" (log line) | Info: the confirmation is only for the slab it stopped on | Nothing; if pocket M's slab can't be confirmed either, the run stops there |
 
 ### 8.2 Venting the cup by hand
 
@@ -403,9 +437,87 @@ or hold the slab and pull the vacuum tube off the cup fitting.
 | Camera errors | The head camera's USB extension in the drag chain (WIRING.md §16 risk 4) |
 | Many `no_read` | Focus (`focus head`, `focus station --save`), a ring not lighting, glare. Fit the light roof. |
 | Many `needs_review` "ITF only … not learned yet" in the first batches | Normal. It learns after 3 slabs where QR and ITF agree, and the setting is kept for that batch. [Certain, `ItfModel`] |
-| A face-down-check stop at every older-label or CGC slab | Expected: they have no PSA back QR. Check the stacks yourself and start such batches with `--all-face-down`. |
+| A face-down-check stop at every older-label or CGC slab | Expected with today's head: the learned check is not active (the start line says why). Check the stacks yourself and start such batches with `--all-face-down`. |
+| Learned acceptances with scores just above the threshold | Open their back photos (§8.4). If one shows a card front, set `face_down_check = "stop"` and check that slab: the cup touched its front. |
 | Every slab goes to the front camera (slow runs, many "confirmed by OCR") | The head crop is wrong: `cam_head.hfov_deg` / `row_axis` don't match the real camera, so the label is cut off (BUILD_GUIDE §12.3) |
 | "Probe Hard Limit" alarms | The probe flag chatters at the slot edge during the slow lift, or something touched the cup: BUILD_GUIDE §13.2, WIRING.md §6 |
+
+### 8.4 The learned face-down check
+
+[Certain for how it works, from `slabscan/facedown.py` and `runner.py`; Guessing for how well it
+works on real slabs: it has only run in the simulator]
+
+**What it does.** Most slabs without a back QR show the same card back through the plastic (every
+English Pokémon card has the same back). The machine compares the card window
+(`face_down_window_mm`, a 56 × 16 mm area on the card next to the label) with the card backs of
+slabs it has seen proven face-down. A match lets the cup pick the slab without stopping. A face-up
+slab shows its card front there instead.
+
+**The three modes** (`face_down_check` in `config/calibration.toml`):
+- `"learned"` (the default): a back QR, or a card-window match. Until the check is active it acts
+  exactly like `"stop"`.
+- `"stop"`: only a back QR proves it. Every older label and CGC slab stops.
+- `"off"`, or `run --all-face-down` for one batch: no check. A face-up slab gets the cup on its
+  front.
+
+**When it is active.** All of these must hold; the start line says which one is missing.
+[Certain, `facedown.learned_ready`]
+1. Phase 0 measured a threshold on your slabs and said GO, and `--save` wrote it with its
+   `face_down_threshold_sig` (BUILD_GUIDE §1.7). No threshold below 0.55 is used.
+2. At least 5 card-back references exist.
+3. The view over an empty pocket was taken (once per run, during the survey).
+4. On the newest 5 or more slabs proven on this machine, at most 10% of the card window looked
+   the same as over the empty pocket. More means a part of the head is in the view.
+- **With today's head, 4 never holds**, and every match is also refused because the window looks
+  like the empty-pocket view. [Certain, CAD ray cast: 0 of 75 points of the window visible; in the
+  simulator 0 references are ever collected] It needs a CAD change to `head_foot` first.
+- [Certain, sim] A head edge 3 mm or more inside the window is caught. One about 1 mm inside is
+  not, and it raises face-up scores from 0.37 to 0.52; that is why no threshold below 0.55 is
+  accepted. The CAD check that would rule this out does not exist yet.
+
+**Where the references come from.**
+- Slabs with a back QR seen from above.
+- Slabs you confirmed with `--face-down-ok`, but only after the slab was placed, and never if the
+  read station then saw a PSA back-label QR from below (it was face-up after all) or another
+  grader's code was in view from above.
+- A back design known only from your confirmations is used once 3 of them agree. One wrong
+  confirmation alone teaches nothing.
+- The Phase 0 backs, if Phase 0 said GO and you used `--save`.
+- **Never from a learned acceptance**, so the check cannot teach itself a wrong appearance. Never
+  from a window with glare on more than 2% of it, with too little pattern, or that looks like the
+  empty-pocket view.
+- Up to 6 back designs (prototypes) with the newest 8 references each are kept.
+
+**Where they live:** `config/card_backs.npz`, next to `calibration.toml`. Not in git.
+```bash
+python -m slabscan refs                    # list: prototype, source, batch and position, cert, back photo
+python -m slabscan refs --drop 12345678    # delete the references taken from the slab with this cert
+python -m slabscan refs --drop-operator    # delete every reference you confirmed (keeps the back-QR ones)
+```
+Deleting the file starts over, including the empty-pocket view. A file written for another card
+window is not used. [Certain, `facedown.CardBackRefs`]
+
+**Auditing learned acceptances.** Do it for every learned row in the first batches.
+- `certs.csv`: `face_down` = `learned(0.93)`; `report.html` shows those rows in bold in the
+  Face-down column. Open each back photo: it must show a card **back**.
+- The summary line names the lowest learned score.
+- `journal.jsonl`, one line per event:
+  - `face_down_learned`: score, its pattern (`ncc`) and colour (`hist`) parts, prototype,
+    threshold, references, texture, and similarity to the empty-pocket view;
+  - `face_down_reference`: each reference taken from a slab you confirmed (position, cert, back
+    photo, result);
+  - `face_down_confirmed`: your confirmation and what became of it;
+  - the stop line carries `face_down_stop` (the pocket) and why;
+  - `face_down_baseline`: the empty-pocket view; `face_down_ok_unused`: a confirmation that did
+    not apply.
+- **After a wrong `--face-down-ok`** (you confirmed a slab that was face-up): the cup touched its
+  front, so check that slab. Then delete what it taught: `refs --drop <its cert>` (the cert is in
+  its `face_down_reference` line).
+
+**Limits** [Guessing]: real card backs and fronts have not been measured. Full-art fronts, holo
+glare, Japanese and other-game backs, sleeves and stickers are untested; 15 face-up slabs in
+Phase 0 say little about the worst face-up slab. Japanese backs need their own references (a
+back-QR slab, or 3 of your confirmations).
 
 ## 9. Quick card
 
@@ -416,8 +528,9 @@ BEFORE   cup wiped (IPA) - pockets 0 and 12 empty - nothing above the gauge's to
 LOAD     face-DOWN (hard rule), label toward you, pockets 1-11, bundles of 5-10 lowered by hand
          PSA+CGC mixed OK.  BGS/TAG only if <= 82.6 mm wide (go to 12).  NO SGC.
 START    python -m slabscan run --name NAME   (web: Start run)
-         slabs without a back QR (old PSA, CGC) stop the run: check, then resume --face-down-ok,
-         or start a checked batch with --all-face-down
+         start line "face-down check: ..." = what the check does (today's head: back QR only)
+         slabs without a back QR (old PSA, CGC) stop the run: check, then resume --face-down-ok
+         (only right after that stop; that one slab), or start a checked batch with --all-face-down
 STOP     web "Stop after this slab" / Ctrl-C once = clean stop.
          Ctrl-C twice = motors halt NOW, nothing moves; a held slab stays on the pump -> hold it, type vent.
          E-STOP = the only stop that cuts motor power. Use it for anything dangerous.
@@ -426,5 +539,6 @@ AFTER    stack k is now in pocket k-1, order reversed: top slab = highest out_in
          Unload from the TOP, max 5 at a time, face-down into a tray. Never lift or flip a stack.
          Pocket 12 = check by hand.  needs_review = check by hand (still in its output stack).
          DOUBLE PICK = an extra UNREAD row: that slab is in the OUTPUT pocket, under the read one.
+         face_down = learned(0.xx) -> open its back photo.  refs / refs --drop CERT = references.
 WEEKLY   pads wiped, selftest -i.   MONTHLY  belt, rails, bolts, E-stop check.   NEW CUP PAD -> calibrate z
 ```
