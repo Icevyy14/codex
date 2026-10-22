@@ -43,6 +43,7 @@ class SimSlab:
     grader: str = "PSA"
     face_down: bool = True
     back: str = "pokemon_en"  # card back seen through the slab when face-down: pokemon_en | pokemon_jp (sim.card_back)
+    front: str = "art"  # card front seen when face-up: art (sim.card_front) | plain (sim.plain_front, one colour)
     clingy: bool = False  # sticks to the slab above it when that one is lifted (double pick)
     seal_fails: bool = False  # cup cannot seal on this slab
 
@@ -408,7 +409,7 @@ class SimCamera:
                 return self._blank()
             s = w.held[0]
             side = "front" if s.face_down else "back"
-        base = _cached_view(s.cert, s.era, s.grader, side, self.role, w.itf_payload, self.deg, back=s.back, head=w.head)
+        base = _cached_view(s.cert, s.era, s.grader, side, self.role, w.itf_payload, self.deg, back=s.back, head=w.head, front=s.front)
         noise = np.random.default_rng(self.n).normal(0, 2.0, base.shape)
         return np.clip(base.astype(np.float32) + noise, 0, 255).astype(np.uint8)
 
@@ -416,11 +417,11 @@ class SimCamera:
 _VIEW_CACHE: dict = {}
 
 
-def _cached_view(cert, era, grader, side, role, itf_payload, deg, back="pokemon_en", head="cad"):
-    key = (cert, era, grader, side, role, itf_payload, back, head, repr(deg))
+def _cached_view(cert, era, grader, side, role, itf_payload, deg, back="pokemon_en", head="cad", front="art"):
+    key = (cert, era, grader, side, role, itf_payload, back, head, front, repr(deg))
     if key not in _VIEW_CACHE:
         if role == "head":
-            _VIEW_CACHE[key] = head_view(cert, side, deg, era=era, grader=grader, back=back, head=head, itf_payload=itf_payload)
+            _VIEW_CACHE[key] = head_view(cert, side, deg, era=era, grader=grader, back=back, head=head, itf_payload=itf_payload, front=front)
         else:
             _VIEW_CACHE[key] = render_slab_side(SimSlab(cert, era=era, grader=grader), side, deg, seed=hash(key) & 0xFFFF, itf_payload=itf_payload)
     return _VIEW_CACHE[key]

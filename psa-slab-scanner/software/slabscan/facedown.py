@@ -69,7 +69,7 @@ MIN_WINDOW_MM2 = 300.0  # smaller windows are too easy to match by chance
 BASELINE_MAX = 0.5  # pattern similarity (ncc) to the empty-pocket view at which a window does not show the slab
 GLARE_LEVEL = 245.0  # thumbnail grey level (a 1 mm box average) counted as glare: a saturated reflection of the ring light
 GLARE_DILATE_MM = 2.0  # the mask grows by this much (the bright halo around the saturated core)
-GLARE_REF_MAX = 0.05  # a frame with more of the window under glare never becomes a reference
+GLARE_REF_MAX = 0.02  # a frame with more of the window under glare never becomes a reference (a fixed reflection would be in every one)
 GLARE_QUERY_MAX = 0.30  # a frame with more of the window under glare is not matched: the run stops
 STATIC_MAX = 0.10  # fraction of the window that may move with the camera (head part, anything fixed to it)
 STATIC_REFS = 5  # proven slabs seen on THIS machine before that is measured (the newest STATIC_USE are used)
@@ -143,14 +143,19 @@ def threshold_tag(rects) -> str:
     return hashlib.sha1(signature(rects).encode()).hexdigest()[:12]
 
 
-def _highpass(gray: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """(high-passed thumbnail, mask of the pixels that are not glare). The blur is a normalised convolution over the
-    unmasked pixels, so a glare spot neither shows as pattern nor drags its neighbours' local mean up."""
+def _glare_ok(gray: np.ndarray) -> np.ndarray:
+    """True where a thumbnail pixel is not glare: below GLARE_LEVEL, and not within GLARE_DILATE_MM of a pixel that is."""
     glare = (gray >= GLARE_LEVEL).astype(np.uint8)
     r = int(round(GLARE_DILATE_MM * WINDOW_PX_PER_MM))
     if glare.any() and r > 0:
         glare = cv2.dilate(glare, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1)))
-    ok = glare == 0
+    return glare == 0
+
+
+def _highpass(gray: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """(high-passed thumbnail, mask of the pixels that are not glare). The blur is a normalised convolution over the
+    unmasked pixels, so a glare spot neither shows as pattern nor drags its neighbours' local mean up."""
+    ok = _glare_ok(gray)
     w = ok.astype(np.float32)
     g = np.minimum(gray, 250.0)
     s = HIGHPASS_SIGMA_MM * WINDOW_PX_PER_MM
@@ -229,6 +234,9 @@ def compare(q: Descriptor, r: Descriptor) -> Match:
         return Match()
     m = int(round(SEARCH_MM * WINDOW_PX_PER_MM))
     acc, wsum = None, 0.0
+    # Glare pixels are 0 in both patches: they count as "no pattern here", which lowers a score, never raises it. (A
+    # correlation over only the pixels valid in both would be fairer to glare frames, but in the simulator it lifted
+    # face-up fronts with glare from 0.39 to 0.48: fewer pixels match by chance more easily.)
     for qp, rp in zip(q.patches, r.patches):
         if qp.shape != rp.shape:
             return Match()

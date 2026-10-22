@@ -277,6 +277,13 @@ def card_front(cert: str) -> np.ndarray:
     return np.clip(img, 0, 255).astype(np.uint8)
 
 
+def plain_front(cert: str) -> np.ndarray:
+    """A plain card FRONT (one colour, nothing printed in the card window): the hardest face-up case for the learned
+    check, because the window then shows only what the light does (a glare spot)."""
+    level = 60 + _stable_seed("plain", cert) % 150
+    return np.full((int(round(CARD_H_MM * CARD_PX_PER_MM)), int(round(CARD_W_MM * CARD_PX_PER_MM))), level, np.uint8)
+
+
 def _paste_clip(canvas: np.ndarray, img: np.ndarray, x_mm: float, y_mm: float) -> None:
     """Copy ``img`` (at PX_PER_MM_RENDER) onto the canvas with its corner at (x_mm, y_mm), clipped to the canvas."""
     x, y = int(round(x_mm * PX_PER_MM_RENDER)), int(round(y_mm * PX_PER_MM_RENDER))
@@ -295,12 +302,13 @@ def _card_layer(card: np.ndarray, rows_mm: float) -> np.ndarray:
 
 
 def head_view(cert: str, side: str, deg: Degrade, era: str = "2017+", grader: str = "PSA", back: str = "pokemon_en",
-              head: str = "cad", itf_payload: str = "zero_pad", seed: int | None = None) -> np.ndarray:
+              head: str = "cad", itf_payload: str = "zero_pad", seed: int | None = None, front: str = "art") -> np.ndarray:
     """What the head camera sees of one slab from above: HEAD_VIEW_MM of it. ``side`` is the slab side facing up:
     'back' (face-down: back label, or none on old labels, and the card BACK in the card window) or 'front' (face-up:
     front label and the card's own front). The slab lies up to +/-2 mm off centre and up to 1 deg off square in its
     pocket, the exposure differs by up to 12 %, and about a third of the slabs carry a glare spot on the card window.
-    The head's own parts (``head``, see HEADS) are drawn in front of it."""
+    The head's own parts (``head``, see HEADS) are drawn in front of it. ``front``: "art" (card_front) or "plain"
+    (plain_front)."""
     rng = np.random.default_rng(_stable_seed(cert, side, era, grader, back, head) if seed is None else seed)
     x0v, y0v, x1v, y1v = HEAD_VIEW_MM
     W, H = x1v - x0v, y1v - y0v
@@ -309,7 +317,7 @@ def head_view(cert: str, side: str, deg: Degrade, era: str = "2017+", grader: st
     sx, sy = -SLAB_W_MM / 2 - x0v + dx, -SLAB_H_MM / 2 - y0v + dy  # slab corner on the canvas (mm)
     cv2.rectangle(canvas, (int(sx * PX_PER_MM_RENDER), int(sy * PX_PER_MM_RENDER)), (int((sx + SLAB_W_MM) * PX_PER_MM_RENDER), canvas.shape[0]), 70, -1)
     cx, cy = sx + (SLAB_W_MM - CARD_W_MM) / 2, sy + CARD_TOP_MM
-    card = card_back(back) if side == "back" else card_front(cert)
+    card = card_back(back) if side == "back" else (plain_front(cert) if front == "plain" else card_front(cert))
     _paste_clip(canvas, _card_layer(card, H - cy + 1), cx, cy)
     lx, ly = sx + (SLAB_W_MM - LABEL_W_MM) / 2, sy + LABEL_TOP_MM
     if grader != "PSA":

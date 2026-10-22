@@ -174,3 +174,31 @@ def test_start_all_face_down_runs_through_slabs_without_a_back_qr(tmp_path):
     s = _wait(c)
     assert s["state"] == "finished", s["message"]
     assert (tmp_path / bid / "run.json").read_text().count('"face_down_check": "off"') == 1
+
+
+def test_the_face_down_tick_only_confirms_a_face_down_stop(tmp_path):
+    """The tick confirms the slab a face-down stop showed, nothing else: after any other stop it is refused (409) and
+    the batch list offers it only for a batch whose last stop was the face-down check."""
+    from slabscan.results import BatchWriter
+    from slabscan.runner import Runner, Stop
+    from slabscan.simworld import SimCamera, SimGate, SimLights, SimMotion, SimSlab, SimVacuum, SimWorld
+
+    cfg = dataclasses.replace(_layout(), face_down_check="stop")
+    app = create_app(cfg, SimProvider(cfg, slabs=3), out_dir=tmp_path)
+    c = app.test_client()
+    bid = c.post("/api/start", json={}, headers=H).get_json()["batch_id"]
+    c.post("/api/stop", headers=H)
+    s = _wait(c)
+    assert s["state"] == "stopped" and "Stopped on request" in s["message"]
+    r = c.post("/api/resume", json={"batch": bid, "face_down_ok": True}, headers=H)
+    assert r.status_code == 409 and "--face-down-ok refused" in r.get_json()["error"]
+    assert {x["id"]: x for x in c.get("/api/batches").get_json()}[bid]["face_down_stop"] is None
+    # a batch that stopped at the face-down check (an older label without a back QR on top of pocket 1)
+    world = SimWorld(cfg, stacks={1: [SimSlab("148069831", 6.6, "old")], **{p.index: [] for p in cfg.sources if p.index != 1}})
+    w = BatchWriter(tmp_path, "20260101-000000-fd")
+    with pytest.raises(Stop, match="could not be confirmed FACE-DOWN"):
+        Runner(cfg, SimMotion(world), SimVacuum(world), SimLights(), SimCamera(world, "head"), SimCamera(world, "station"), w,
+               gate=SimGate(world), log=lambda *_: None).run()
+    assert {x["id"]: x for x in c.get("/api/batches").get_json()}["20260101-000000-fd"]["face_down_stop"] == 1
+    page = c.get("/").get_data(as_text=True)
+    assert 'id="facedownrow" hidden' in page and "$('facedown').checked=false" in page

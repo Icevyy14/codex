@@ -588,7 +588,7 @@ class Runner:
             return "operator"
         if psa_back and not fronts:
             if learned:
-                self._learn(desc, "qr", src)
+                self._learn(desc, "qr", src, {"cert": next(r.cert for r in hover_reads if r.source == "back_qr" and r.grader == "PSA")})
             return "qr"
         why_learned = ""
         if learned and not fronts:

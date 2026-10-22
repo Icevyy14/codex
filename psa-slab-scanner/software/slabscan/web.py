@@ -27,7 +27,7 @@ from flask import Flask, abort, jsonify, request, send_from_directory
 from .config import Config
 from .ops import Console
 from .results import BatchWriter
-from .runner import NOMINAL_T
+from .runner import FACE_DOWN_OK_REFUSED, NOMINAL_T, last_face_down_stop, read_journal
 
 _BATCH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _FILE_RE = re.compile(r"^(certs\.csv|certs\.txt|certs_enriched\.csv|report\.html|summary\.json|images/[A-Za-z0-9_.-]+\.jpg)$")
@@ -171,6 +171,8 @@ class RunManager:
         if not _BATCH_RE.match(batch_id or "") or not (self.out_dir / batch_id / "journal.jsonl").exists():
             raise ValueError(f"no such batch: {batch_id}")
         opts = run_options(self.out_dir / batch_id)
+        if face_down_ok and last_face_down_stop(read_journal(self.out_dir / batch_id / "journal.jsonl")) is None:
+            raise RuntimeError(FACE_DOWN_OK_REFUSED)
         with self.lock:
             if self.busy():
                 raise RuntimeError("a run is already going")
@@ -282,7 +284,9 @@ class RunManager:
             stop = d / "stop.json"
             msg = json.loads(stop.read_text()).get("message", "") if stop.exists() else ""
             finished = (d / "summary.json").exists() and not stop.exists()
-            out.append({"id": d.name, "slabs": n, "finished": finished, "stopped": msg, "resumable": (d / "journal.jsonl").exists() and not finished,
+            resumable = (d / "journal.jsonl").exists() and not finished
+            out.append({"id": d.name, "slabs": n, "finished": finished, "stopped": msg, "resumable": resumable,
+                        "face_down_stop": last_face_down_stop(read_journal(d / "journal.jsonl")) if resumable else None,
                         "files": [f for f in ("certs.csv", "certs.txt", "report.html", "certs_enriched.csv") if (d / f).exists()]})
         return out
 
@@ -417,7 +421,7 @@ a{color:var(--accent)}pre{white-space:pre-wrap;font-size:12px;color:var(--mute);
   <div class="row"><button class="go" id="start">Start run</button><button class="stop" id="stop">Stop after this slab</button></div>
   <div class="row"><select id="resumeSel"></select><button id="resume">Resume</button></div>
   <label class="mute"><input type="checkbox" id="accept" style="min-height:0"> accept changed stack heights on resume</label>
-  <label class="mute"><input type="checkbox" id="facedown" style="min-height:0"> the top slab it stopped on is face-down (I checked; its card back becomes a reference)</label>
+  <label class="mute" id="facedownrow" hidden><input type="checkbox" id="facedown" style="min-height:0"> <span id="facedowntxt">the top slab it stopped on is face-down</span> (I checked; this one slab only)</label>
 </div>
 <div class="card" id="imgcard" hidden><div class="mute">last label</div><img class="label" id="img" alt="last label photo"></div>
 <div class="card"><div class="mute">last 10 slabs</div><div class="tablewrap"><table><thead><tr><th>#</th><th>cert</th><th>status</th><th>now in</th></tr></thead><tbody id="rows"></tbody></table></div></div>
@@ -452,14 +456,21 @@ async function refresh(){
 async function batches(){
   let b;try{b=await (await fetch('/api/batches')).json()}catch(e){return}
   const sel=$('resumeSel');const keep=sel.value;sel.replaceChildren();const box=$('batches');box.replaceChildren();
-  for(const x of b){if(x.resumable){const o=el('option',`${x.id} (${x.slabs} done)`);o.value=x.id;sel.append(o)}
+  fdstop={};for(const x of b){if(x.resumable){const o=el('option',`${x.id} (${x.slabs} done)`);o.value=x.id;sel.append(o);fdstop[x.id]=x.face_down_stop}
     const d=el('div');d.append(el('span',`${x.id} · ${x.slabs} slabs · ${x.finished?'finished':(x.stopped?'stopped':'not finished')} `));
     for(const f of x.files){const a=el('a',f+' ');a.href=`/batches/${x.id}/${f}`;d.append(a)}box.append(d)}
   if(!sel.options.length)sel.append(el('option','nothing to resume'));else if(keep)sel.value=keep;
+  facedownRow();
 }
+let fdstop={};
+function facedownRow(){const p=fdstop[$('resumeSel').value];const show=p!==undefined&&p!==null;$('facedownrow').hidden=!show;
+  if(!show)$('facedown').checked=false;else $('facedowntxt').textContent=`the top slab of pocket ${p}, where the face-down check stopped, is face-down`}
+$('resumeSel').onchange=()=>{$('facedown').checked=false;facedownRow()};
 $('start').onclick=()=>{if(confirm('Slabs face-down, label toward you, pockets 0 and 12 empty, hands clear?'))post('/api/start',{name:$('name').value,front_photo:$('fp').value,all_face_down:$('allfd').checked})};
 $('stop').onclick=()=>post('/api/stop');
-$('resume').onclick=()=>{const v=$('resumeSel').value;if(v&&confirm('Resume '+v+'? Hands clear?'))post('/api/resume',{batch:v,accept_heights:$('accept').checked,face_down_ok:$('facedown').checked})};
+$('resume').onclick=()=>{const v=$('resumeSel').value;const fd=$('facedown').checked&&!$('facedownrow').hidden;
+  if(v&&confirm('Resume '+v+'? Hands clear?')){post('/api/resume',{batch:v,accept_heights:$('accept').checked,face_down_ok:fd});
+    $('facedown').checked=false;$('accept').checked=false}};
 $('vent').onclick=()=>{if(confirm('Are you holding the slab? It lets go when the cup vents.'))post('/api/vent')};
 refresh();batches();setInterval(refresh,2000);setInterval(batches,10000);
 </script></body></html>
