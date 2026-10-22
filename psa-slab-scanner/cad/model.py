@@ -362,6 +362,73 @@ def fill_gauge() -> cq.Workplane:
     return g.union(box(0, 0, L.MAX_LINE, 30, 4, L.MAX_LINE + 4))
 
 
+# --------------------------------------------------------------------------- Phase 0 test jig (printed)
+# A slab sits on edge ledges with its FRONT 140 mm above the station camera (same mount as the
+# machine) and its BACK 140 mm below the head camera, exactly as in the machine. Two 2020 posts.
+
+P0_POST = 312.0  # 2020 posts; the top bridge sits on them
+P0_SLAB_Z = L.STATION_LENS_Z + L.CAM_TO_SLAB  # slab front (bottom face) height
+P0_TOP_Z = P0_SLAB_Z + SLAB_T + L.CAM_TO_SLAB  # head lens height
+
+
+def phase0_tray() -> cq.Workplane:
+    """Frame that holds one slab by its edges (2 mm ledges) between the two posts.
+    Local origin: slab centre at the ledge top."""
+    ow, ol = L.POCKET_W + 2 * 12, L.POCKET_L + 2 * 6
+    frame = cbox(0, 0, 4, ow, ol, 8).cut(cbox(0, 0, 4, L.POCKET_W - 4, L.POCKET_L - 4, 10))  # 2 mm ledges all round
+    frame = frame.cut(cbox(0, 0, 6.5, L.POCKET_W, L.POCKET_L, 5))  # pocket the slab drops into
+    frame = frame.cut(cbox(0, -ol / 2, 6.5, 50, 20, 5))  # finger notch at the front to lift the slab out
+    for sx in (-1, 1):  # clamps onto the 2020 posts
+        clamp = cbox(sx * (ow / 2 + 11), 0, 10, 24, 24, 20).cut(cbox(sx * (ow / 2 + 11), 0, 10, 20.4, 20.4, 22))
+        clamp = holes_x(clamp, [(0, 10)], M5_CLR)
+        frame = frame.union(clamp)
+    return frame.translate((0, 0, -8))
+
+
+def phase0_top() -> cq.Workplane:
+    """Bridge between the post tops carrying the head camera and LED ring (same 32 mm board pattern)."""
+    ow = L.POCKET_W + 2 * 12
+    span = ow + 2 * 11
+    bar = cbox(0, 0, 4, span + 24, 50, 8)
+    bar = bar.cut(cyl((0, 0, -1), 16, 12))
+    bar = holes_z(bar, [(dx, dy) for dx in (-16, 16) for dy in (-16, 16)], 2.2)
+    ring = cyl((0, 0, -8), 56, 8).cut(cyl((0, 0, -9), 46, 10))
+    for sx in (-1, 1):
+        bar = bar.cut(cbox(sx * span / 2, 0, 4, 20.4, 20.4, 10))  # post tops slot in
+    return bar.union(ring)
+
+
+def phase0_base() -> cq.Workplane:
+    """Base: the same camera mast + LED ring as the machine's station, plus two sockets for 2020 posts."""
+    ow = L.POCKET_W + 2 * 12
+    px = ow / 2 + 11
+    plate = cbox(0, 0, 2, 2 * px + 40, 130, 4)
+    mast = cbox(0, 0, 8, 34, 34, 13).cut(cbox(0, 0, 10, 26, 26, 12))
+    ring = cyl((0, 0, 0), 60, 20).cut(cyl((0, 0, -1), 52, 22))
+    body = plate.union(mast).union(ring)
+    body = holes_z(body, [(-10.5, -6.25), (10.5, -6.25), (-10.5, 6.25), (10.5, 6.25)], 2.2)
+    body = body.cut(cbox(0, 18, 9, 18, 10, 9))
+    for sx in (-1, 1):
+        sock = cbox(sx * px, 0, 12, 28, 28, 24).cut(cbox(sx * px, 0, 14, 20.4, 20.4, 24))
+        sock = holes_y(sock, [(sx * px, 16)], M5_CLR)
+        body = body.union(sock)
+    return body
+
+
+def phase0_parts() -> list[Part]:
+    ow = L.POCKET_W + 2 * 12
+    parts = [Part("p0_base", phase0_base(), PETG, "printed", "static"),
+             Part("p0_station_camera", cbox(0, 0, 14, 25, 24, 6).union(cyl((0, 0, 17), 9, 6)), GREEN, "purchased", "static")]
+    for sx in (-1, 1):
+        parts.append(Part(f"p0_post_{sx}", box(sx * (ow / 2 + 11) - 10, -10, 4, sx * (ow / 2 + 11) + 10, 10, 4 + P0_POST), ALU, "purchased", "static"))
+    parts.append(Part("p0_tray", phase0_tray().translate((0, 0, P0_SLAB_Z)), PETG, "printed", "static"))
+    parts.append(Part("p0_slab", slab(0, 0, P0_SLAB_Z), SLAB, "slab", "static"))
+    parts.append(Part("p0_label", slab_label(0, 0, P0_SLAB_Z), LABEL, "slab", "static"))
+    parts.append(Part("p0_top", phase0_top().translate((0, 0, P0_TOP_Z + 4)), PETG, "printed", "static"))
+    parts.append(Part("p0_head_camera", cbox(0, 0, P0_TOP_Z + 18, 38, 38, 10).union(cyl((0, 0, P0_TOP_Z), 14, 7)), GREEN, "purchased", "static"))
+    return parts
+
+
 # --------------------------------------------------------------------------- slabs
 
 
@@ -418,6 +485,9 @@ def printed_catalog() -> list[tuple[str, cq.Workplane, int, str]]:
         ("gate_post_L", gate_post("L").rotate((0, 0, 0), (1, 0, 0), 90), 1, "PETG, lying on its side (as exported), 4 walls"),
         ("gate_post_R", gate_post("R").rotate((0, 0, 0), (1, 0, 0), 90), 1, "PETG, lying on its side (as exported), 4 walls"),
         ("drill_template", drill_template(), 1, "PLA/PETG, 0.2 mm, 100% infill bosses (build tool)"),
+        ("phase0_base", phase0_base(), 1, "PLA/PETG black (Phase 0 test jig)"),
+        ("phase0_tray", phase0_tray(), 1, "PLA/PETG (Phase 0 test jig)"),
+        ("phase0_top", phase0_top().rotate((0, 0, 0), (1, 0, 0), 180), 1, "PLA/PETG (Phase 0 test jig), ring up"),
         ("awl_adapter", awl_adapter(), 1, "PETG (build tool) + M5 heat-set insert + 3 mm steel pin"),
         ("fill_gauge", fill_gauge().rotate((0, 0, 0), (0, 1, 0), 90), 2, "PLA (loading tool)"),
     ]
