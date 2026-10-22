@@ -15,18 +15,25 @@ gap I filled.
    - The Rodent V1.1 manual says 75 mΩ, and a V1.1 owner reports parts marked "R075". [Certain
      that the V1.1 manual says so; Likely for real V1.1 boards]
    - The V1.0 schematic and BTT's `rodent.yaml` say 22 mΩ. [Certain]
-   - `config.yaml` ships with `r_sense_ohms: 0.075`. If your board's resistors say "R022", change
-     all four lines to `0.022`.
-   - The dangerous mistake is setting 0.075 on a 22 mΩ board. The motors then get 3.4 × the set
-     current: 3.4 A on X. [Certain, from the driver current formula]
+   - **`config.yaml` ships with `r_sense_ohms: 0.022`, on purpose.** Change all four lines to
+     `0.075` only after you have **read "R075"** on your board's resistors.
+   - Why this default: on a TMC2160 the motor current scales with 1/R_sense. Setting 0.075 on a
+     22 mΩ board gives 3.4 × the set current (3.4 A on X, 1.7 A held all the time on both motors
+     in PETG mounts). Setting 0.022 on a 75 mΩ board gives 0.29 ×: weak motors that stall at the
+     first homing, with no slab in the machine. The wrong guess should fail cold, not hot.
+     [Certain, from the driver current formula]
 2. **Use FluidNC v4.1.1 or newer.** [Certain] FluidNC puts itself in a config alarm on any key it
    doesn't know, so an older build may reject this file. BTT has shipped Rodents with old
    firmware, so reflash even a new board. [Likely]
 3. **Never plug or unplug a motor while the board has 24 V.** It can destroy the driver.
    [Certain, standard for TMC drivers]
-4. **The Z soft limit of −8 is safe with the current CAD.** [Certain, `cad/out/checks.txt`] The Z
-   carriage sits 243 mm above the cup face, so it stays on its rail down to c = −12 (4 mm of
-   margin there). An earlier draft had the carriage leave the rail at c = −4; that is fixed.
+4. **The Z soft limits (−8 … 255) sit inside printed hard stops.** [Certain, `cad/out/checks.txt`]
+   The Z carriage sits 295 mm above the cup face. The `z_end_cap` stops it at c = −14 (it would
+   leave its rail at c = −19); at the top the `z_plate` meets the `z_motor_mount` at c = 262, 4 mm
+   past the switch, with 3.6 mm of carriage still on the rail.
+5. **`probe_hard_limit: true`** turns a contact-sensor trip during any non-probe move into an
+   immediate critical alarm (Step 7 tests it). The 300-cycle test must show zero such alarms
+   (BUILD_GUIDE §13.2).
 
 ## Why this board
 
@@ -101,10 +108,13 @@ the chain's data alignment breaks"]
 
 **Where the travel numbers come from** (cad/layout.py and cad/model.py, October 2026):
 - Pocket centres run from X = 42 to 1238.
-- The X carriage leaves its rail when the cup is below X 12.7 or above 1267. The X bracket hits the
-  idler and motor mounts at X 8 and 1266. [Certain, computed from the CAD]
-- Z's top of travel is 250 (C_MAX). The Z carriage runs off the top of its 330 mm rail at
-  c ≈ 268.6 (557 − 243 − 45.4) and off the bottom at c ≈ −16. [Certain, computed from the CAD]
+- Printed end bumpers stop the `x_bracket` at cup X 15 (`x_bumper_L`) and X 1262 (the left end of
+  `x_motor_mount`). The MGN12H carriage still has 2.3 / 5.3 mm on its rail there. The soft range
+  22 … 1253 stays 7 / 9 mm inside the bumpers. [Certain, `checks.txt`]
+- The X home switch must trip at X 19 ± 2: at least 2 mm before the left bumper.
+- Z's top of travel is 250 (C_MAX). The Z switch trips at c ≈ 258, the top hard stop is at 262
+  (3.6 mm of carriage left on the rail), and the bottom hard stop is at −14 (5 mm left; the
+  carriage would leave the rail at −19). [Certain, `checks.txt`]
 - If the rail lengths or pocket count change, recompute `max_travel_mm` and `mpos_mm` with the same
   margins.
 
@@ -153,11 +163,15 @@ which is the default config name (`$Config/Filename`). [Certain]
 3. Upload `config.yaml` with the flash file manager, then restart.
 
 **C. From the Pi, headless** (later updates, without a laptop).
-1. Install the tools: `pip install pyserial xmodem`.
-2. Stop the slabscan software, then run:
+1. Install the tool into the software's venv (system `pip` on Bookworm refuses with
+   "externally-managed-environment"; pyserial is already in the venv):
+   `~/psa-slab-scanner/software/.venv/bin/pip install xmodem`
+2. Stop the slabscan software (`sudo systemctl stop slabrail-web` if the boot service runs), then
+   run the script with the venv's Python:
+   `~/psa-slab-scanner/software/.venv/bin/python upload_config.py /dev/ttyUSB0 firmware/fluidnc/config.yaml`
 
 ```python
-# upload_config.py  -  run on the Pi:  python3 upload_config.py /dev/ttyUSB0 firmware/fluidnc/config.yaml
+# upload_config.py  -  run on the Pi with the venv's python (step C.2)
 import sys, time, serial
 from xmodem import XMODEM
 port, path = sys.argv[1], sys.argv[2]
@@ -252,10 +266,16 @@ WIRING.md, sections 6 and 7, shows the right way. The `?` report also lists acti
 3. Repeat `$H` five times. After each one, jog to the same spot (`G90 G0 X42 Z240`) and check the
    cup lands on the same point (a pencil mark on the pad). Spread must be under 0.2 mm.
 4. **Check that the switch positions match the numbers in the config.**
-   - Jog until the cup is centred over pocket 0 at about Z 240. `?` should show X ≈ 42 ± 3.
+   - Jog until the cup is centred over pocket 0 at about Z 240. `?` should show X ≈ 42 ± 2.
+     (The X switch must trip within ±2 mm of X 19, because the left bumper is at X 15.)
    - If not, move the X switch, not the config. `calibrate x` corrects only the small remainder,
      and a large offset eats into the soft-limit margins.
    - Do the same for Z after `calibrate z`: `pad_trigger_c` must be between −4 and 0.
+
+5. **Motor temperature:** leave the motors holding for 10 minutes, then touch both motor cases.
+   **They must stay below about 50 °C** (warm, comfortable to hold a finger on). Hotter means the
+   `r_sense_ohms` value does not match the board, or the current is set above 70 % of the motor's
+   rating: power off and check Step 0.
 
 Homing takes up to about 40 s in the worst case. The software allows 180 s for `$H` and 60 s for
 other commands. [Certain, arithmetic: 1354 mm at 50 mm/s plus 289 mm at 25 mm/s; `motion.home()`]
@@ -284,6 +304,12 @@ G38.3 Z-6 F1200
   already tripped at start), and nothing moves. [Certain, FluidNC `mc_probe_cycle`]
 - **Soft-limit test:** `G38.3 Z-20 F600` must be refused, because −20 is below the −8 soft limit.
   [Likely: soft-limit alarm or error, depending on state]
+- **Probe hard limit test** (`probe_hard_limit: true`): `G0 Z100`, then send `G1 Z130 F100` (a slow
+  move UP, away from everything) and push the cup up by hand while it moves. FluidNC must stop at
+  once with a critical alarm (`ALARM` with "Probe Hard Limit" in the message). Clear it with a
+  reset (Ctrl-X, or the RESET button) and `$H`. [Certain: FluidNC v4.1.1 `Probe.cpp` raises it when
+  the probe trips in a cycle, jog or homing that is not a `G38` move] If nothing happens, the key
+  was not read: check `$CD` for `probe_hard_limit: true`.
 
 ## How the software talks to FluidNC
 
@@ -302,7 +328,9 @@ G38.3 Z-6 F1200
 | Purpose | Sent | FluidNC answers |
 |---|---|---|
 | Home | `$H`, then `G90`, `G21`, `G54`, `G92.1`. If `$#` shows a G54 offset, it also sends `G10 L2 P1 X0 Z0`. | `ok` after both homing cycles |
-| Move | `G1 X… F…` or `G1 Z… F…`. Never Y. Moves are machine-frame numbers because G54 is zero. | `ok` when queued |
+| Move | `G1 X… F…`, or `G1 Z… F…` **up only**. Never Y. Moves are machine-frame numbers because G54 is zero. | `ok` when queued |
+| Move down | `G38.3 Z… F…` (the Z speed for the fast part, 1200 for the probe window and the rod band): every downward move stops on an unexpected contact | `[PRB:…:0]` (no contact) or `:1` (contact: the run stops) |
+| Halt (Ctrl-C twice) | `!` (feed hold), wait for `Hold:0`, then Ctrl-X (soft reset) | the banner; homing is required again |
 | Wait for done | `G4 P0`, then `?` polled until `<Idle\|MPos:x,y,z…>` | `Idle`. `Alarm` or `Door` raises MotionError. |
 | Probe | `G38.3 Z<target> F1200` | `[PRB:x,y,z:1]` (hit) or `:0` (miss), then `ok` |
 | Work offset | `$#` (reads `[G54:…]`) | All zeros after `home()` |
@@ -312,16 +340,22 @@ The probe report prints machine coordinates. [Certain, `report_probe_parameters`
 **What the software does not use**
 - The vacuum, valves and lights are on the Pi's GPIO, not FluidNC. There are no `user_outputs`,
   so the `M64`/`M65` method in motion.py must not be called.
-- Any `error:` or `ALARM:` reply raises `MotionError`, and the runner stops with the cup in a safe
-  state.
+- Any `error:` or `ALARM:` reply raises `MotionError`. The runner then re-reads the real position
+  and parks: a held slab is put back on its stack, lifting straight up first. If the controller is
+  in Alarm (for example a probe hard limit), nothing moves: the pump keeps holding a slab on the
+  cup and the operator takes it (CLI prompt or the web Vent button).
+- The serial port is opened exclusively. A second slabscan process gets `ControllerBusy` (and the
+  machine lock refuses it first): stop `slabrail-web` before running CLI machine commands.
 
 **How the software handles power loss and limits** [Certain, `motion.py`, `runner.py`]:
 - **E-stop = controller power off.** The E-stop cuts the Rodent's 24 V (WIRING.md §1), and the
   CH340 is powered from the board. So the serial device **disappears**, and pyserial raises
   `SerialException`.
-  - `GcodeMachine` turns that into `ControllerLost`. The runner stops without moving, shuts the cup
-    valves from the Pi, and prints "The controller lost power or its USB link (E-stop pressed, or
-    the cable came out) …".
+  - `GcodeMachine` turns that into `ControllerLost`. The runner stops without moving. If a slab is
+    on the cup, the Pi keeps the pump and valve switched on; after an E-stop they have no 24 V, so
+    the slab hangs only on the closed cup line until it leaks down. The message says "The controller
+    lost power or its USB link (E-stop pressed, or the cable came out) …" and where the slab came
+    from.
   - The next command reconnects (it waits up to 15 s for the port), waits for the banner, and
     must home again before anything moves.
 - **Probe targets** are clamped to machine Z −7.5 (`z_min + 0.5`), inside the −8 soft limit.
@@ -330,15 +364,20 @@ The probe report prints machine coordinates. [Certain, `report_probe_parameters`
 
 ## Open issues
 
-1. **Resolved: Z rail bottom margin.** [Certain, CAD] `Z_CARRIAGE_ABOVE_CUP` is now 243 mm (the
-   236 mm drop arm), so the carriage's lower edge meets the rail end at c = −16
-   (`Z_SPINE_BOTTOM + 1 − Z_CARRIAGE_ABOVE_CUP` = 227 − 243). `checks.txt` shows 4 mm of margin at
-   c = −12. Top of travel still clears: at the Z switch (c ≈ 258) the carriage top is at
-   258 + 243 + 45.4 = 546 mm, under the 557 mm rail top.
+1. **Resolved: Z rail margins.** [Certain, CAD] `Z_CARRIAGE_ABOVE_CUP` is now 295 mm (the
+   285 mm drop arm), with printed hard stops at c = −14 and c = 262 (see "Where the travel numbers
+   come from"). `checks.txt` shows 5 mm of carriage on the rail at the bottom stop and 3.6 mm at the
+   top stop.
 2. **[Likely] Sense resistor value by board version.** See "Read this first". If BTT publishes a
    V1.1 config, compare it with this file.
 3. **[Likely] Optical endstop boards differ.** Some have an indicator LED circuit that can hold
    the Rodent's opto on. The Step 5 fail-safe rows catch this, so never skip them.
 4. **[Guessing] Z hold when unpowered.** DESIGN.md estimates the head stays put on E-stop
-   (detent torque > back-drive). Test it: E-stop with the head at 240 and 200 g on the cup, then
-   watch for 1 minute. If it creeps, add a friction brake or counterweight before unattended use.
+   (detent torque > back-drive). Test it (BUILD_GUIDE §7.8): E-stop with the cup about 15 mm
+   above a foam block and 200 g on the cup, then watch for 1 minute. If it creeps, add a friction
+   brake or counterweight before unattended use.
+5. **[Likely] Z torque margin at 0.8 A.** The Z motor runs at about half its rated current, at
+   750 rpm, with no stall detection. A stall while lifting a slab leaves the head lower than the
+   software thinks. BUILD_GUIDE §7.8 has a 100-lift test (`python -m tools.bench_tests lifts 100`):
+   the bare pad must re-probe within 0.1 mm. If not, lower Z `max_rate_mm_per_min` here and
+   `feed_z` in `calibration.toml` to 3000.

@@ -1,6 +1,6 @@
 # SlabRail: unattended PSA / CGC slab cert scanner
 
-Load up to **330 graded slabs** (11 stacks of 30) and walk away. About an hour later you have
+Load up to **330 graded slabs** (11 stacks of 30) and walk away. About 80 minutes later you have
 `certs.csv` with every cert number, where each slab ended up, and a photo of each label.
 The machine has **two motors**: one moves the head left and right along a single beam, the
 other moves it up and down.
@@ -18,8 +18,22 @@ other moves it up and down.
   swapped cards. Loading and unloading still take you about 10 minutes either way.
 - **[Certain] It has not touched a real slab yet.** The geometry, the motion plan and the decoding
   were verified in CAD and in a simulator (below). Real PSA label payloads and real cup
-  behaviour still need to be tested. That is why the build starts with a **Phase 0** camera
-  test (about $150 if you borrow a school Raspberry Pi, about $300 if you buy one) before you buy any motion parts.
+  behaviour still need to be tested. That is why the build starts with **two Phase 0 gates**
+  before you buy any motion parts:
+  - **0A, camera test:** can the cameras read *your* labels? About $285 with a borrowed school
+    Raspberry Pi, about $450 if you buy one. One or two evenings plus printing.
+  - **0B, cup test:** does the cup seal on your holders, and does it leave a mark after 24 h? This
+    is the only part that touches your inventory. About $145, a hand vacuum pump on the bench, no
+    mains wiring.
+- **[Likely] The budget has almost no headroom.** The full list is about $1,900 against the $2,000
+  cap; a realistic worst case is about $2,170. With the school's shop stock it drops to about
+  $1,630 (worst case about $1,900). Details below and in [docs/BOM.md](docs/BOM.md).
+- **[Certain, code] Older labels stop the run.** Before the cup touches a slab, the head camera
+  must see a PSA back-label QR, the proof that the slab is face-down. Pre-2017 PSA labels and CGC
+  slabs have none, so each one stops the run until you confirm it, unless you start the run with
+  `--all-face-down` (then a slab loaded face-up gets the cup on its front). In the simulator's
+  default mix, 49 of 330 slabs would stop. A load of mostly old labels is not an unattended run
+  without that flag.
 - **Build effort:** a real mechatronics project, roughly 60–85 hours of hands-on work plus
   printing. Plan to use your school's instructors for the 120 V wiring, crimping and
   calibration.
@@ -44,13 +58,13 @@ The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
 
 | | |
 |---|---|
-| Capacity | 330 per load (11 × 30 PSA). CGC reads too. BGS/SGC/TAG are detected and set aside. |
+| Capacity | 330 per load (11 × 30 PSA). CGC reads too. BGS and TAG are detected and set aside, but only load them if they measure ≤ 82.6 mm wide. SGC (≈ 86 mm) does not fit. |
 | Footprint | about 1.42 m × 0.32 m × 0.65 m tall (fits a 6 ft bench) |
 | Moving parts | X belt axis, Z lead-screw axis, a spring-loaded cup, 2 valves, 1 pump |
-| Cycle | about 11–12 s per slab in the timing simulation, so about 1 hour per 330. Real speed will be measured in the acceptance tests. |
+| Cycle | about 14 s per slab in the timing simulation: 78 min for a 330-slab load with the default label mix, including homing and the stack survey. Older front-only labels can take up to 30 s more each (OCR on the Pi), and each slab without a back QR stops the run unless you use `--all-face-down`. Real speed will be measured in the acceptance tests. |
 | Touches the slab | cup on the **back** only; edges against wooden dowels; slabs rest on each other as in any stack |
 | Output | `certs.csv` (cert, grader, status, pocket and position), `certs.txt`, `report.html` with label photos |
-| Budget | about **$1,700** for everything including a 10% allowance, or about **$1,440** if the school supplies filament, wire and common screws. Hard cap $2,000. Details in [docs/BOM.md](docs/BOM.md). |
+| Budget | about **$1,900** expected for everything including a 15% allowance; about **$2,170** worst case (tools, the conditional HT1 cups and light roof, [Guessing] prices 20% high), which is over the $2,000 hard cap. About **$1,630** (worst case about $1,900) if the school supplies filament, wire and common screws. Junk test slabs are extra unless they come from your stock. Details in [docs/BOM.md](docs/BOM.md). |
 
 ## What's in this folder
 
@@ -71,11 +85,16 @@ The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Verification done so far (no hardware)
 
-- **[Certain] 36/36 geometric checks pass** (`cad/checks.py`).
-  - Picking the last slab of every pocket with full neighbours clears the head by ≥ 10 mm.
-  - Carried slabs clear the dowels by ≥ 18 mm.
+- **[Certain] All 77 CAD checks pass** (`cad/checks.py`; every number is in
+  `cad/out/checks.txt`, so trust that file over this list).
+  - Picking the last slab of every pocket with full neighbours clears the head by ≥ 21 mm.
+  - Carried slabs clear the dowels by ≥ 21 mm; a double pick of two thick holders by ≥ 5 mm.
+  - A held slab clears every part fixed to the X carriage by ≥ 5 mm, even at the Z top hard stop.
   - The cameras have an unobstructed view of the label.
-  - All travel limits stay on the rails.
+  - Both carriages stay on their rails at every printed hard stop, and no two parts overlap at
+    any checked pose.
+  - **Not checked:** belt slack, cables and the vacuum tube, the probe flag (not in the CAD),
+    the real shapes of bought parts, and loads or deflection.
 - **[Certain] Simulated end-to-end batches.** The simulator **raises a crash on any unsafe move**.
   Every slab is moved exactly once and read. It also covers:
   - pre-2016 labels routed to the front camera,
@@ -83,7 +102,8 @@ The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
   - double-pick detection,
   - thick holders,
   - CGC slabs read and BGS rejected,
-  - overfill and seal failures stopping safely.
+  - overfill and seal failures stopping safely,
+  - unexpected errors with a slab in the cup (the slab is put back or held, never dropped).
 - **[Certain, synthetic labels] Decode sweep.**
   - The back QR reads through blur and strong glare.
   - The front barcode needs 0.05 mm per pixel; the station camera gives 0.039.
@@ -91,9 +111,14 @@ The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Build order
 
-1. **Phase 0, about $150–300, one or two evenings.** Build the camera test jig (`docs/img/phase0_jig.png`)
-   and run `python -m tools.phase0` on 30–50 of your own slabs. Go ahead only if at least 95%
-   read and 0 come out wrong.
-2. Order from the BOM. Print the parts in `cad/out/printed/`.
+1. **Phase 0, two gates. Order the machine only if both pass.** (BOM order 1 ≈ $594 in all.)
+   - **1a. Camera test, ≈ $285 with a borrowed Pi (≈ $450 buying one), one or two evenings plus
+     printing.** Build the camera test jig (`docs/img/phase0_jig.png`) and run
+     `python -m tools.phase0` on 30–50 of your own slabs. Go on only if at least 95% read and 0
+     come out wrong.
+   - **1b. Cup test, ≈ $145, 3–4 h of hands-on work plus the 24 h test.** Seal, leak and a 24 h
+     marking test with a hand vacuum pump on the bench (BUILD_GUIDE §1.10). Go on only if the
+     slab shows no mark after a dry wipe. If it does, try the HT1 cup first.
+2. Order the rest of the BOM (order 2, ≈ $1,309). Print the parts in `cad/out/printed/`.
 3. Follow `docs/BUILD_GUIDE.md`.
 4. Calibrate. Run the acceptance tests on junk slabs, then do a supervised first batch.

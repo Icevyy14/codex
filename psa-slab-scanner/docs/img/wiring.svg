@@ -27,15 +27,15 @@
 <rect x="40" y="125" width="200" height="34" rx="6" class="box"/>
 <text x="140.0" y="146.5" class="b" text-anchor="middle">Wall socket (mains)</text>
 <rect x="40" y="185" width="200" height="52" rx="6" class="box"/>
-<text x="140.0" y="206.5" class="b" text-anchor="middle">IEC C14 inlet</text>
+<text x="140.0" y="206.5" class="b" text-anchor="middle">IEC C14 inlet (ABS box)</text>
 <text x="140.0" y="224.5" class="" text-anchor="middle">fuse T3.15A + rocker</text>
 <rect x="40" y="265" width="200" height="74" rx="6" class="box"/>
 <text x="140.0" y="288.5" class="b" text-anchor="middle">Mean Well LRS-150-24</text>
 <text x="140.0" y="306.5" class="" text-anchor="middle">24 V · set to 24.5 V</text>
 <text x="140.0" y="324.5" class="" text-anchor="middle">set 115/230 switch first</text>
 <rect x="40" y="370" width="200" height="56" rx="6" class="hot"/>
-<text x="140.0" y="393.5" class="b" text-anchor="middle">E-STOP (NC, latching)</text>
-<text x="140.0" y="411.5" class="" text-anchor="middle">+24 V line · W7, W8</text>
+<text x="140.0" y="393.5" class="b" text-anchor="middle">E-STOP (2 NC in series)</text>
+<text x="140.0" y="411.5" class="" text-anchor="middle">latching · +24 V · W7, W8</text>
 <rect x="40" y="452" width="200" height="62" rx="6" class="gnd"/>
 <text x="140.0" y="469.5" class="b" text-anchor="middle">0 V bus (Wago)</text>
 <text x="140.0" y="487.5" class="" text-anchor="middle">LRS −V (W9)</text>
@@ -110,9 +110,9 @@
 <rect x="1080" y="160" width="200" height="118" rx="6" class="box"/>
 <text x="1180.0" y="187.5" class="b" text-anchor="middle">MOSFET modules Q1–Q5</text>
 <text x="1180.0" y="205.5" class="" text-anchor="middle">Adafruit #5648 × 5</text>
-<text x="1180.0" y="223.5" class="" text-anchor="middle">low-side switch</text>
-<text x="1180.0" y="241.5" class="" text-anchor="middle">SIG has a 10 kΩ pull-down</text>
-<text x="1180.0" y="259.5" class="" text-anchor="middle">flyback diode on board</text>
+<text x="1180.0" y="223.5" class="" text-anchor="middle">low-side · diode on board</text>
+<text x="1180.0" y="241.5" class="" text-anchor="middle">add 10 kΩ SIG→GND each,</text>
+<text x="1180.0" y="259.5" class="" text-anchor="middle">unless measured (§14)</text>
 <rect x="1300" y="160" width="175" height="118" rx="6" class="box"/>
 <text x="1387.5" y="181.0" class="b" text-anchor="middle">Loads (W23–W27)</text>
 <text x="1387.5" y="198.0" class="" text-anchor="middle">Pump 24 V (Q1)</text>
@@ -130,7 +130,7 @@
 <text x="1387.5" y="295.5" class="b" text-anchor="middle">XGZP6847A100KPGN</text>
 <text x="1387.5" y="313.5" class="" text-anchor="middle">5 V · cup-line tee</text>
 <rect x="1300" y="326" width="175" height="30" rx="6" class="box"/>
-<text x="1387.5" y="345.5" class="" text-anchor="middle">Laser KY-008 · 5 V</text>
+<text x="1387.5" y="345.5" class="" text-anchor="middle">Class 2 laser · 5 V</text>
 <rect x="1300" y="362" width="175" height="46" rx="6" class="box"/>
 <text x="1387.5" y="380.5" class="b" text-anchor="middle">Laser receiver · 5 V</text>
 <text x="1387.5" y="398.5" class="" text-anchor="middle">2.2 kΩ pull-up (at rx)</text>

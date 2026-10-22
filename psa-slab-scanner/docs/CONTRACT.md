@@ -17,11 +17,16 @@ Every document and file must agree with this page. If something here is wrong, f
   - An overfill laser beam runs at 214 mm along the row centre line.
 - **Axes (only two):**
   - **X:** belt-driven, GT2 20T pulley, 40 mm/rev, 80 steps/mm at 1/16 microstepping, on an MGN12 1300 mm rail on a 4040 beam.
-  - **Z:** NEMA17 with an integrated 400 mm T8×8 lead screw, 400 steps/mm at 1/16, on an MGN12 330 mm rail on a 2040 spine.
+  - **Z:** NEMA17 (1.5–2.0 A/phase, ≤ 4 mH, ≥ 40 N·cm) with an integrated T8×8 lead screw (8 mm lead), 400 steps/mm at 1/16, on an MGN12 330 mm rail on a 2040 spine.
+    - **The screw is cut to 340 mm below the motor face** (311–356 mm works). The screw tip is fixed to the X carriage right over the held slab (X +24, Y 33 from the cup axis). Cut to 340 it ends 283 mm above the pad, above everything the head carries. A 400 mm screw left uncut ends near 223 mm [Likely: integrated screws are usually measured from the motor face], so every lift would drive the held slab's back into its tip, and the tip would pass only 5 mm over the rod tops. [Certain, CAD `Z_SCREW_LEN`, `Z_SCREW_TIP`]
 - **Work coordinates:**
   - X = the cup axis position in layout mm.
   - Z = the cup-face height "c" above the pad top.
-  - Key heights: C_SAFE_EMPTY = 228, C_SAFE_LOADED = 243, C_MAX = 250, STATION_READ_C ≈ 169.6.
+  - Key heights: C_SAFE_EMPTY = 236.5, C_SAFE_LOADED = 248, C_MAX = 250, STATION_READ_C ≈ 171.6.
+    They include CUP_HANG = 2: the free cup hangs `buffer_trip_mm` below its trip-calibrated
+    height. A measured `buffer_trip_mm` above 2 raises both travel heights by the difference
+    (`config.load`), and one that would put loaded travel above C_MAX is refused.
+  - Hard stops and switches (CAD): Z bottom hard stop c = −14 (`z_end_cap`), Z top switch trips at c ≈ 258, Z top hard stop c = 262 (`z_plate` meets `z_motor_mount`). X hard stops at cup X 15 (`x_bumper_L`) and 1262 (left end of `x_motor_mount`); the X home switch trips at X 19 ± 2.
 - **Homing:**
   - X homes to MIN (left end) with a microswitch and reads X = 22 there, so machine X = layout X
     (pocket 0 at X = 42). `calibrate x` stores the small residual as `offset_x`.
@@ -30,11 +35,14 @@ Every document and file must agree with this page. If something here is wrong, f
 - **Speeds:**
   - X: 15000 mm/min max, 2000 mm/s².
   - Z: 6000 mm/min, 1200 mm/s².
-  - Probe: 1200 mm/min.
+  - Probe: 1200 mm/min. **Every downward move is a guarded `G38.3`** (fast part at the Z speed, the probe window at 1200 mm/min, a held slab passes the rod tops at 1200 mm/min), so an unexpected contact stops it. A trip at 6000 mm/min squeezes the buffer about 6 mm before the head stops.
+  - Halt (Ctrl-C twice): feed hold `!`, then soft reset Ctrl-X. Homing is required afterwards.
   - Motor current: X run 1.0 A, Z run 0.8 A (hold 0.5 A, to keep the head up).
 - **Contact probe:** a slotted optical endstop on the cup's spring buffer (M10, 25 mm stroke), wired **fail-safe** so a cut wire reads as TRIGGERED.
   - It is the FluidNC `probe` pin.
   - Probing uses `G38.3` (no alarm on a miss) with a bounded target.
+  - `probe_hard_limit: true`: a probe trip during any move that is not a `G38` (a lift, a traverse, a jog, homing) is a critical alarm that needs a reset and `$H`. It must give zero alarms in the 300-cycle test (BUILD_GUIDE §13.2), or the sensor output gets hysteresis.
+  - Buffer: SMC ZPT M10 spring buffer, **non-rotating (K)**, 25 mm stroke (20 mm is the fallback), so the probe flag cannot turn out of the sensor slot.
 
 ## CAD decisions after the build review (binding)
 - **Rails on slots:**
@@ -42,15 +50,20 @@ Every document and file must agree with this page. If something here is wrong, f
     screws into M3 T-nuts.
   - The Z spine (2040) sits 10 mm to the LEFT of the cup axis, so the Z rail is in its right
     slot, on the cup axis.
-- **Z carriage:** its bottom is 243 mm above the cup face. It stays on its rail down to
-  c = −12 mm, which matches the firmware soft limit of Z −8 with margin.
+- **Z carriage:** its bottom is 295 mm above the cup face. The `z_end_cap` stops it at c = −14
+  (it would leave its rail at c = −19), and at the top hard stop (c = 262) 3.6 mm of carriage is
+  still on the rail. The firmware soft limits (Z −8 … 255) sit inside both stops.
+- **Z machinery above the held slab:** the Z spine bottom is 275 mm above the pad (the `z_end_cap`
+  under it ends at 267) and the lead-screw tip is at 283, so even at the top hard stop a held slab
+  clears every part fixed to the X carriage by 5 mm. [Certain, `cad/out/checks.txt`]
 - **Bed:** the plywood has 41 × 41 mm notches at the two upright positions. The uprights pass
   through to the base rail.
-- **Drop arm (2020 × 236 mm):** drill two 5.5 mm cross holes, matching the head_foot and
-  camera_bracket clamp holes.
+- **Drop arm (2020 × 285 mm):** drill two 5.5 mm cross holes, 19 mm and 84 mm from the end that
+  bottoms in `head_foot`'s socket, matching the head_foot and camera_bracket clamp holes.
 - **Light roof:** OPTIONAL. Add it only if Phase 0 or the first runs show room-light glare on
-  labels. If you do, it's black foam board on two 2020 posts bolted to the back of the uprights.
-  The CAD model leaves it out by default.
+  labels. If you do, it's black foam board on two 2020 posts bolted to the **outer end faces** of
+  the uprights (X −68 and X 1348). Not to their back faces: the beam-to-upright joining plates and
+  brackets are there (BUILD_GUIDE §4.3). The CAD model leaves it out by default.
 - **Guide rods:** 82 dowels at 12 mm from each pocket corner, which leaves a 52 mm finger gap
   front and back.
 
@@ -58,6 +71,8 @@ Every document and file must agree with this page. If something here is wrong, f
 - **Board:** BTT Rodent V1.x (V1.1 assumed) running FluidNC v4.1.1 or newer. BTT's official
   `rodent.yaml` is the base.
   - Set `r_sense_ohms` to the board's resistor marking: R075 → 0.075, R022 → 0.022.
+    `config.yaml` ships with 0.022 on purpose: the wrong guess then gives weak motors, not 3.4×
+    the current. Change all four lines to 0.075 only after reading R075 on your board.
 - **Connection:** CH340 USB serial at 115200 baud to the Raspberry Pi: `/dev/ttyUSB0`, by-id
   `/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0`.
 - **Unused features:** no Y axis is defined, and no spindle or coolant pins are used. FluidNC
@@ -71,9 +86,13 @@ Every document and file must agree with this page. If something here is wrong, f
 - **Soft limits (machine mm):** X 22…1253, Z −8…255.
   - After homing: X = 22, Z = 255.
   - Probe targets must stay above Z −8.
-  - CAD must keep the Z carriage on its rail down to c = −12.
-- **E-stop:** cuts the Rodent's 24 V, so FluidNC reboots and the USB serial device disappears.
-  The software must treat a lost port as a stop, then reconnect and home again.
+  - CAD must keep both carriages on their rails at every hard stop (X 15 / 1262, Z −14 / 262).
+- **E-stop:** two NC contact blocks **in series** in the +24 V line. It cuts the Rodent, the pump,
+  both valves and the LED buck, so FluidNC reboots and the USB serial device disappears. The
+  software must treat a lost port as a stop, then reconnect and home again. A held slab then hangs
+  only on the closed cup line until it leaks down: the operator takes it off.
+- **Mains:** the IEC inlet sits in a closed ABS box with a cable gland to the LRS; no mains metal is
+  exposed with the cord plugged in.
 - **Firmware files:** `firmware/fluidnc/config.yaml`. Bring-up steps: `docs/FIRMWARE.md`.
 - **Wiring:** `docs/WIRING.md` and `docs/img/wiring.svg`.
 
@@ -86,13 +105,14 @@ Every document and file must agree with this page. If something here is wrong, f
   - 24 = station LED ring
 - **GPIO inputs:**
   - 25 = optional lid/door switch to GND (internal pull-up)
-  - 5 = overfill beam receiver output (HIGH = beam received)
+  - 5 = overfill beam receiver output (HIGH = beam received). The laser is a ≤ 1 mW (Class 2)
+    650 nm module, fed from the Pi's 5 V, so it is on whenever the Pi is on.
 - **I2C1 (GPIO 2/3):** ADS1115 at 0x48.
   - Its A0 reads the XGZP6847A vacuum sensor (−100…0 kPa, 0.5–4.5 V at 5 V supply) through a 10k/20k divider.
 - **Cameras:**
-  - Head: USB UVC 8 MP IMX179 board with an M12 3.6 mm lens, manual focus, looking down at the held slab's back from 140 mm.
+  - Head: USB UVC 8 MP IMX179 board with an M12 3.6 mm lens, manual focus, looking down at the held slab's back from 140 mm. Its frames are cropped to the pocket under the cup (`cam_head.hfov_deg`, `row_axis`, `lens_to_label_mm`: check them on the real camera).
   - Station: Raspberry Pi Camera Module 3 (standard) on CSI port 0, looking up at the held slab's front from 140 mm.
-- **Lighting:** both cameras use a ≈50 mm LED ring around the lens. The black foam-board "light roof" is optional (see the CAD decisions above).
+- **Lighting:** a 40 mm COB LED ring around the head lens (a 60 mm ring cuts into the drop arm) and a 60 mm ring around the station lens, both 12 V. The black foam-board "light roof" is optional (see the CAD decisions above).
 
 ## Software (repo folder `psa-slab-scanner/software`)
 - **Package:** `slabscan/`
@@ -108,14 +128,27 @@ Every document and file must agree with this page. If something here is wrong, f
   - `calibrate x`: operator centres the awl over pocket 0 and pocket 12 and writes `offset_x` plus a scale check.
   - `focus head|station`: live sharpness and decode score to set focus.
   - `mark`: drives the awl to every cell for the drill template.
-  - `run [--name NAME] [--front-photo always|fallback]`
-  - `resume BATCH_DIR`
+  - `run [--name NAME] [--front-photo always|fallback] [--all-face-down] [--yes]`
+  - `resume BATCH_DIR [--face-down-ok] [--accept-heights] [--yes]`
   - `sim [--slabs N]`: full simulated batch, no hardware.
+  - Bench tests (not part of the CLI): `python -m tools.bench_tests cycles|rest|lifts|drop|powercut N` (BUILD_GUIDE §7.8, §13).
   - `web [--port 8080]`: phone-friendly start/stop/progress page and CSV download.
   - `phase0 [--sim N] [--out DIR]`: the Phase 0 camera read-rate test (same as `python -m tools.phase0`).
 - **Outputs:** `batches/<id>/certs.csv`, `certs.txt`, `report.html`, `summary.json`, `journal.jsonl`, `images/` (plus `run.json`, and `stop.json` after a stop).
 - **Enrichment (optional, later):** `python -m tools.enrich batches/<id>` (PSA API, quota-metered).
 - **Graders:** PSA and CGC are read and stacked normally. Other graders go to pocket 12.
+- **Face-down check:** before the cup touches a slab, the frame from above must show a PSA back-label
+  QR. Otherwise (pre-2017 labels, CGC, a face-up slab) the run stops untouched until the operator
+  confirms (`resume --face-down-ok`, or the web checkbox). `run --all-face-down` (or the web start
+  checkbox) turns it off for one batch; the choice is stored in `run.json` and kept on resume.
+  `face_down_check = "off"` in the config turns it off for good.
+- **Stops:** Ctrl-C once (or web Stop) = stop after the current slab. Ctrl-C twice = hard stop: the
+  motors halt where they are, nothing moves afterwards, a held slab stays on the pump until the
+  operator holds it and vents (CLI prompt or the web Vent button).
+- **One process:** the machine is locked to one slabscan process (`/run/lock/slabrail.lock`); stop
+  `slabrail-web` before running CLI machine commands.
 
 ## Budget
-Hard cap $2,000 total. Target $1,000–1,400 including about 10% spares and shipping. The user has school 3D printers and mechatronics instructors.
+Hard cap $2,000 total. Target $1,000–1,400 including spares and shipping. The user has school 3D printers and mechatronics instructors.
+The current BOM is about $1,903 with a 15% allowance, which is far above the target and close to
+the cap (BOM.md has the breakdown and the worst case).

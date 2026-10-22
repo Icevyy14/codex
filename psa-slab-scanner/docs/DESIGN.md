@@ -60,12 +60,12 @@ each through one lens: slab safety, reliability/buildability, and practical valu
 
 | Judge's objection to B | Fix in SlabRail |
 |---|---|
-| Fingers can't reach slabs in tight corrals | Separate dowels, not walls. There is a 52 mm finger gap at the front and back of every pocket for lowering and lifting bundles of 5–10. |
+| Fingers can't reach slabs in tight corrals | Separate dowels, not walls. There is a 52 mm finger gap at the front and back of every pocket for lowering bundles of 5–10 when loading, and for taking slabs off the top in bundles of up to 5 when unloading. Never lift or flip a whole stack (OPERATING.md §6). |
 | Printed posts can lean | Dowels sit in drilled holes, 15 mm deep, drilled through a printed vertical guide. |
-| Air-film double picks | Very slow first millimetre of peel (2 mm/s) plus a dwell. Squeeze-film force scales with speed, so it falls about 10× to ~0.1 N, below the slab's weight. Doubles are still detected at placement. |
+| Air-film double picks | The slow leg of the peel (2 mm/s) is placed where the cup really leaves the slab: at the probe trip the spring buffer is already squeezed about 2 mm (`buffer_trip_mm`, measured in BUILD_GUIDE §7.6), so the head first rises that far at 20 mm/s while the cup stays on the slab, then 2 mm/s through the release point and 1 mm past it, then a 0.5 s dwell low over the stack, so a slab clinging by an air film falls back a few mm onto its own stack. Squeeze-film force scales with speed, so it falls about 10× to ~0.1 N, below the slab's weight. Doubles are still detected at placement. |
 | Klipper probe macro fragility | FluidNC native `G38.3` with an explicit bounded target. |
 | Too many moving parts | 2 motors instead of 4. No gantry squaring. |
-| "Flipping and un-reversing costs more time than it saves" | Flip **bundles**, not single slabs. Order doesn't matter, because the CSV records each slab's exact pocket and position. A slab loaded the wrong way up is still read (both faces are imaged). It just gets cup contact on its front. |
+| "Flipping and un-reversing costs more time than it saves" | Don't flip anything. Order doesn't matter, because the CSV records each slab's exact pocket and position, and unloading goes top-down in small bundles (OPERATING.md §6). Face-down loading is a hard rule: before the cup touches a slab, the head camera must see a PSA back-label QR, otherwise the run stops untouched for you to check. Older PSA labels and CGC have no back QR, so they stop too, unless the run is started with `--all-face-down`; then a face-up slab would get the cup on its front. |
 
 - **What we keep from the other concepts:**
   - fail-safe sensor wiring;
@@ -75,7 +75,8 @@ each through one lens: slab safety, reliability/buildability, and practical valu
   - CSV written incrementally;
   - count reconciliation.
 - **Honest residuals:**
-  - Every slab is lifted and carried. A vacuum loss drops it at most 236 mm onto foam or a stack.
+  - Every slab is lifted and carried. A vacuum loss drops it at most about 240 mm onto foam or a
+    stack.
   - Hands-on time is still ~10 min per 300 for loading and unloading.
 
 ## 3. Everything that touches a slab
@@ -83,31 +84,45 @@ each through one lens: slab safety, reliability/buildability, and practical valu
 | Contact | Motion | Force | Worst case |
 |---|---|---|---|
 | Suction cup on the **back**, centre of the card window | Static. The cup only moves vertically while touching. | Trips at ~1.4 N. Vacuum clamp ~19 N over the 25 mm lip. | A faint cup ring or a grit micro-mark on the **back** (allowed). Mitigations: non-marking PU/HT1 cup, IPA wipe each run, 24 h marking test before use. |
-| Slab front resting on the back of the slab below | Static. Pick = straight 5 mm lift at 20 mm/s. Place = probed set-down at 20 mm/s. | ≤ 2 N at contact. Bottom slab of a 30-stack carries 19 N (1.8 kPa, same as stacking by hand). | Lateral slip at placement if a slab lands crooked. This is the most plausible front-scuff path. [Likely] Mitigated by ±1.75 mm pocket play, rods only at the edges, and slow probed set-down. |
+| Slab front resting on the back of the slab below | Static. Pick = straight lift, 2 mm/s through the point where the cup leaves the slab, then 20 mm/s, with a 0.5 s pause just above the stack. Place = probed set-down at 20 mm/s (`G38.3`). | ≤ 2 N at contact. Bottom slab of a 30-stack carries 19 N (1.8 kPa, same as stacking by hand). | Lateral slip at placement if a slab lands crooked. This is the most plausible front-scuff path. [Likely] Mitigated by ±1.75 mm pocket play, rods only at the edges, and slow probed set-down. |
 | Bottom slab front on the pocket pad | Static | ≤ 19 N | Grit on the pad. Wipe pads weekly. Microfiber face. |
 | Slab edges on 8 mm wooden dowels | Only if the slab is off-centre by > 1.75 mm | < 1 N | Edge rub on wood. The dowels sit 12 mm from every corner, so corner tips never touch. |
-| Head / camera / Z parts | None by design | — | [Certain, CAD] ≥ 8 mm clearance at every checked pose (see §6). |
+| Head / camera / Z parts | None by design | — | [Certain, CAD] ≥ 5 mm at every checked pose, including a held slab at the Z top hard stop and a double pick of two thick holders; much more in normal travel (numbers in `cad/out/checks.txt`, §6). The lead screw is cut so its tip stays above anything the head carries. |
 
 **Drops.** **[Certain, arithmetic]**
-- Losing vacuum at carry height means a fall of ≤ 236 mm, about 0.15 J, onto a stack or pad.
-  That is roughly a 25 cm desk drop. A flat landing is very unlikely to crack a slab [Likely]. A
-  corner landing on a dowel top could chip one [Guessing].
-- Exposure is short: a slab is in the air ~2 s per cycle.
-- Both solenoid valves are normally closed. With the check valve and reservoir, a **power cut
-  does not drop the slab instantly**. Acceptance test 13.4 in BUILD_GUIDE verifies this.
+- Losing vacuum at carry height means a fall of ≤ about 240 mm, about 0.15 J, onto a stack or
+  pad. That is roughly a 25 cm desk drop. A flat landing is very unlikely to crack a slab
+  [Likely]. A corner landing on a dowel top could chip one [Guessing].
+- Exposure: about 2 s in the air per cycle for a slab whose back reads. A slab that needs the
+  station is held longer: the front frames are taken over the lens, then decoding and OCR (up to
+  30 s on a Pi) happen with the slab over its planned output stack, not over the camera.
+- Both solenoid valves are normally closed, so a power cut (E-stop, mains) seals the cup line.
+  **The reservoir does not help then:** it is on the pump side of the closed vacuum valve. The
+  slab hangs only as long as the cup line's own leak allows, seconds to minutes. [Certain, the
+  plumbing in `hw.py` and BUILD_GUIDE §8.1] Acceptance test 13.4 measures it. While the Pi still
+  has power (Ctrl-C twice, a USB cable out, a park that failed) the software keeps the pump holding
+  a slab until you take it.
 
 **Crash prevention, layered.**
 1. **Height bookkeeping.** Every slab's thickness is measured when it is placed (the probe step).
-2. **Bounded probing.** `G38.3` never drives the cup more than 12 mm past the expected
-   surface. The spring buffer has 25 mm of stroke, so the worst-case push is ~3.4 N.
+2. **Every downward move is a probing move.** Each one is a `G38.3`, so an unexpected contact stops
+   the head at once instead of driving on; probe windows never go more than 12 mm past the expected
+   surface. A trip at full Z speed squeezes the 25 mm buffer about 6 mm (about 2.3 N).
 3. **Fail-safe contact sensor.** A cut wire reads as "touching", so the machine refuses to
    probe.
-4. **Second contact sensor.** During the start-up survey, a cup that seals without the optical
+4. **Probe hard limit** (firmware). A contact-sensor trip during any move that is not a probe (a
+   lift, a traverse) is an immediate critical alarm.
+5. **Second contact sensor.** During the start-up survey, a cup that seals without the optical
    sensor tripping stops the run.
-5. **Overfill laser beam.** It runs 4 mm above the fill line. If anything is too tall, the
-   machine won't start.
-6. **Plausibility checks.** A stack taller than predicted by > 4.5 mm, or an exception pocket
-   that's full, stops the run with the cup empty.
+6. **Overfill laser beam.** It runs 4 mm above the fill line. If anything is too tall, the
+   machine won't start. It cannot see anything above the 218 mm rod tops, such as a slab lying
+   across the rods: the survey catches that, because its first probe window starts at travel
+   height.
+7. **Face-down check.** No PSA back QR seen from above = the cup does not touch the slab.
+8. **Plausibility checks.** A stack taller than predicted by > 4.5 mm, a vent that does not reach
+   atmosphere, a vacuum sensor reading outside its range, or an exception pocket that's full stops
+   the run. After any stop the head re-reads its real position, lifts straight up, and puts a held
+   slab back; where that is unsafe, nothing moves and the pump keeps holding it.
 
 ## 4. Calculations
 
@@ -115,14 +130,14 @@ each through one lens: slab safety, reliability/buildability, and practical valu
 |---|---|---|
 | Cup holding force, Ø25 mm at −50 kPa (78% effective area) | 19.1 N | Slab weighs 0.64 N → **SF 30** vertical [Certain] |
 | Lateral grip vs X acceleration 2 m/s² | ~9.5 N vs 0.13 N | **SF 70** [Certain] |
-| Z load (0.75 kg head, 1.2 m/s²) | 8.3 N → 0.026 N·m on T8×8 at 40% efficiency | NEMA17 at 750 rpm, 24 V gives ≈0.15–0.2 N·m → **SF ≈ 6** [Likely] |
+| Z load (0.75 kg head, 1.2 m/s²) | 8.3 N → 0.026 N·m on T8×8 at 40% efficiency | A 1.5–2.0 A NEMA17 at 750 rpm on 24 V gives ≈ 0.15–0.2 N·m at full current, but Z runs at 0.8 A (40–55% of rating) → ≈ 0.06–0.1 N·m, **SF ≈ 2–4** [Likely]. No stall detection, so the 100-lift test (BUILD_GUIDE §7.8) must pass. A high-impedance 0.4–0.6 A "integrated" motor would stall: the BOM excludes it. |
 | Z back-drive when unpowered | ~0.005 N·m | NEMA17 detent ≈ 0.015 N·m → holds [Likely]. Hold current is kept on anyway. |
 | X drive (1.9 kg moving, 2 m/s² + 2 N friction) | 5.8 N belt → 0.037 N·m | NEMA17 at 375 rpm ≈ 0.3 N·m → **SF ≈ 8** [Likely] |
 | X beam sag, 4040 over 1.42 m, 20 N at midspan | 0.18 mm | Pocket play 1.75 mm [Certain, beam formula] |
 | X beam twist from the 127 mm head overhang | ≈ 0.8 mm at the cup, worst at midspan [Guessing on J] | Within pocket play. Measure it during build (BUILD_GUIDE §6). Add a rear brace if > 1 mm. |
-| Spring buffer force at trip / at 12 mm / bottomed (25 mm) | 1.4 / 3.4 / 6.0 N | The software never asks for more than 12 mm. |
+| Spring buffer force at trip / at 12 mm / bottomed (25 mm) | 1.4 / 3.4 / 6.0 N | The software never asks for more than 12 mm; a trip at 6000 mm/min squeezes about 6 mm. |
 | Stack height, 30 PSA slabs at 6.25–6.9 mm | 188–207 mm | MAX line 210, beam at 214, rod tops 218 |
-| Carry height (cup) | 243 mm | A **double pick** (2 × 7.5 mm CGC) still clears the rods by 10 mm [Certain] |
+| Carry height (cup) | 248 mm | A **double pick** of two 11.5 mm thick holders still clears the rods by 5 mm, counting the free cup's 2 mm hang below its calibrated height [Certain, CAD] |
 
 ## 5. Reading the label
 
@@ -146,9 +161,17 @@ each through one lens: slab safety, reliability/buildability, and practical valu
 - **Interpretation rules** (`slabscan/certs.py`, tested):
   - **Back QR → `psacard.com/cert/<n>`:** authoritative.
   - **PSA ITF holds an even digit count, so 9-digit certs may carry a leading zero or a check
-    digit.** The software learns which from slabs where QR and ITF both read. It refuses to
-    trust an ITF-only read until it has learned this, or until OCR of the printed digits agrees.
-  - **A lone ITF read** must be confirmed by a second agreeing frame.
+    digit.** The software learns which from slabs where QR and ITF both read. Until it has
+    learned this, an ITF-only read is `needs_review` unless OCR of the printed digits agrees.
+  - **An ITF-only read needs a second, independent source:** the back and front barcodes
+    agreeing, or OCR agreeing. Two frames of the same barcode count once. OCR that disagrees
+    makes it `needs_review`. Old front-only labels therefore need Tesseract (up to 30 s per slab on
+    a Pi) or end up `needs_review`.
+  - **Head frames are cropped to the pocket under the cup,** because the 3.6 mm lens also sees the
+    neighbours' labels. The frame taken from above the stack alone never makes an `ok`, and a cert
+    already recorded in the batch becomes `conflict` (exception pocket).
+  - **`psa_cert_digits`** (set from Phase 0): a PSA cert of a length Phase 0 never saw is
+    `needs_review`.
   - **Codes that disagree** produce `conflict` and the slab goes to the exception pocket. The
     machine never guesses.
   - **CGC** (`cgccards.com` QR) is read and stacked like PSA. **BGS/SGC/TAG** are recognised
@@ -158,17 +181,18 @@ each through one lens: slab safety, reliability/buildability, and practical valu
 
 | Check | Tool | Result |
 |---|---|---|
-| Geometry: 36 exact min-distance / line-of-sight checks at every pick, place, travel, station and extreme pose | `cad/checks.py` (OpenCascade) | **36/36 pass** [Certain] |
+| Geometry: exact min-distance, all-pairs interference (including modelled fastener heads), held-slab sweep, hard-stop, rail-margin and line-of-sight checks at every pick, place, travel, station, hard-stop and Phase 0 pose | `cad/checks.py` (OpenCascade) | **77/77 pass** (October 2026; the numbers are in `cad/out/checks.txt`) [Certain]. **Not checked:** belt slack, cables and the vacuum tube, the probe flag, the real shapes of bought parts, loads and deflection. |
 | Unit tests: cert parsing, grader detection, ITF learning, decode at the design point, OCR fallback | `software/tests` | pass [Certain] |
-| End-to-end batches in a simulator that **raises Crash on any unsafe move** | `software/tests/test_runner_sim.py` | pass [Certain]. Scenarios: every slab moved and read; pre-2016 labels via the station; check-digit ITF learned; double pick detected; thick holder; seal failure stops; overfill refused; CGC read, BGS rejected. |
+| End-to-end batches in a simulator that **raises Crash on any unsafe move** | `software/tests/test_runner_sim.py`, `test_safety_fixes.py`, `test_bench_tests.py` | pass [Certain]. Scenarios: every slab moved and read; pre-2016 labels via the station; check-digit ITF learned; double pick detected; thick holder; seal failure stops; overfill refused; CGC read, BGS rejected; face-down check; an unexpected error with a slab in the cup; failed vent; vacuum sensor fault; Ctrl-C hard stop. |
 | Real slabs, real cameras, real cup | — | **Not done.** Phase 0 + acceptance tests in BUILD_GUIDE are mandatory before trusting it with your inventory. |
 
 ## 7. Known risks and what retires them
 
 | Risk | Retired by |
 |---|---|
-| Real PSA barcode/QR payloads differ from the assumptions | Phase 0: scan 30–50 of your slabs with the real cameras and `slabscan focus`. `custom_regex` in config handles a prefix or suffix. |
-| Cup leaves visible marks | 300-cycle + 24 h marking test on a junk slab. Swap cup material if needed (BOM lists two). |
+| Real PSA barcode/QR payloads differ from the assumptions | Phase 0: scan 30–50 of your slabs with the real cameras and `slabscan focus`. `custom_regex` in config handles a prefix or suffix: it is checked when the config loads (it must compile and have one capture group) and applied after the other graders' URL rules. |
+| Cup leaves visible marks | Phase 0B 24 h marking test with a hand pump, then the 300-cycle + 24 h test on the machine with the vacuum re-held all the time (BUILD_GUIDE §13.2). Swap cup material if needed (BOM lists two). |
+| Older labels stop the run | Each slab without a PSA back QR stops at the face-down check. Use `run --all-face-down` only for stacks you checked yourself. |
 | Beam twist larger than estimated | Dial-indicator check during the build. A rear diagonal brace is in the guide. |
 | Double picks (slabs clinging) | Peel dwell. Detected at placement (step ≥ 11.6 mm) and flagged with the exact position. |
-| Mixed weird holders (SGC 86 mm wide doesn't fit; sleeves) | Loading rules in OPERATING.md. SGC is too wide for the pockets. |
+| Mixed weird holders (SGC 86 mm wide doesn't fit; BGS/TAG widths unmeasured; sleeves) | Loading rules in OPERATING.md. SGC is too wide for the pockets. Measure one BGS, TAG and CGC holder before loading them: anything wider than 82.6 mm is "do not load". |

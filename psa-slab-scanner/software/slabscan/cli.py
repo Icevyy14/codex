@@ -419,6 +419,9 @@ class _Count:
     def close(self):
         pass
 
+    def __getattr__(self, name):  # everything else (e.g. the camera's view_half_mm, used for the crop) from the wrapped part
+        return getattr(self.inner, name)
+
 
 class _CountLights:
     def __init__(self, inner):
@@ -432,6 +435,9 @@ class _CountLights:
     def station(self, on):
         self.ons += bool(on)
         self.inner.station(on)
+
+    def __getattr__(self, name):  # everything else (e.g. the camera's view_half_mm, used for the crop) from the wrapped part
+        return getattr(self.inner, name)
 
 
 class _CountVac:
@@ -451,6 +457,9 @@ class _CountVac:
 
     def close(self):
         self.inner.close()
+
+    def __getattr__(self, name):  # everything else (e.g. the camera's view_half_mm, used for the crop) from the wrapped part
+        return getattr(self.inner, name)
 
 
 def cmd_sim(args, con):

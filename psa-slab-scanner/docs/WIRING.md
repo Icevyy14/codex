@@ -37,9 +37,9 @@ search-engine extracts of the listings, and every "measure" step below exists be
 
 ```
  wall ──C13 cord──► IEC C14 inlet (fuse T3.15A + rocker) ──L,N,PE──► Mean Well LRS-150-24
-                                                                        │ +V 24.5 V      │ −V
+                    in the closed ABS mains box, gland ──►              │ +V 24.5 V      │ −V
                                                                         ▼                ▼
-                                                           E-STOP (NC, latching)      0 V bus (Wago)
+                                                 E-STOP (2 NC blocks in series, latching) 0 V bus (Wago)
                                                                         │                ├─ bond to FG/PE (one point)
                                                                   24 V switched bus      │
                          ┌──────────────────┬──────────────────────────┤
@@ -50,13 +50,22 @@ search-engine extracts of the listings, and every "measure" step below exists be
                                       Q3 vent valve               12 V bus: Q4 head LED, Q5 station LED
 
  wall ──► Raspberry Pi 27 W USB-C PSU ──► Pi 5 (own supply, never fed from the 24 V system)
-            Pi 5 V / 3.3 V pins ──► vacuum sensor, ADS1115, laser, laser receiver
+            Pi 5 V / 3.3 V pins ──► vacuum sensor, ADS1115, Class 2 laser, laser receiver
 ```
 
 ### 1.1 Mains side (instructor check)
 
 - **Inlet: an IEC C14 inlet with a built-in fuse holder and rocker switch** (BOM "Mains inlet").
   One part gives you the inlet, fuse and power switch.
+- **It lives in the mains box, not on the plywood panel** (BOM "Mains box": a small ABS box, a cable
+  gland and fully insulated 6.3 mm receptacles or tab boots). [Likely: snap-in IEC modules are made
+  for 1–3 mm panel walls, so on 6 mm plywood they end up glued or hanging, with live tabs open.]
+  - Cut the inlet's rectangular hole in the box wall and snap the inlet in.
+  - Put fully insulated receptacles (or boots) on every inlet tab, including the fuse-holder side.
+  - W2–W4 leave through the cable gland, tightened on the cable jacket, to the LRS terminal strip.
+  - Close the lid with its screws. **With the cord plugged in, no metal at mains voltage may be
+    exposed anywhere** (inlet back, fuse holder, LRS terminals). The instructor checks this (§14).
+  - An ABS box needs no earth bond. A metal box (Hammond 1590 type) must be bonded to PE.
   - Fuse **T3.15A** slow-blow (5 × 20 mm), as in the BOM. [Likely: suits a 156 W supply on
     115 V. Check the LRS-150 datasheet's input current and inrush before final choice]
 - **Mean Well LRS-150-24: 24 V, 6.5 A, 156 W, output adjustable 21.6–28.8 V.** [Certain from
@@ -67,7 +76,6 @@ search-engine extracts of the listings, and every "measure" step below exists be
 - Wire L, N and PE with 18 AWG (0.75 mm²) mains-rated wire, using the colours in the wire table.
   - The terminal labels are printed on the supply's terminal strip. Follow them.
   - Fit the supply's terminal cover.
-  - Use a closed enclosure or cover over the inlet back.
 - The Pi's 27 W USB-C supply plugs into its own wall socket, or into the same power strip as the
   machine cord. **It is never fed from the 24 V system.** That is what keeps the Pi alive when the
   machine power is cut.
@@ -115,13 +123,23 @@ sits **in the +24 V line straight after the supply**. Pressing it cuts:
   - The software must stop and tell you "controller lost power".
   - After you twist the E-stop to release it, run `home` before anything else.
 
-**Contact rating**
-- Use a contact rated for **at least 5 A at 24 V DC**. Many 22 mm contact blocks only list AC
-  ratings. [Guessing on what you'll receive]
-- If your box has two NC contacts, wire them **in series**. That gives two breaks in the DC
-  circuit, so a welded contact still leaves one.
-- If you can't find a DC rating, ask the instructor. The alternative is to put the E-stop in the
-  supply's mains feed, which means mains wiring in the E-stop box.
+**Contact rating and the two contact blocks (required)**
+- **Use two NC contact blocks wired in series** (BOM: a box with two NC blocks, or add a clip-on
+  22 mm NC block, about $3). Why: the contact switches 24 V DC straight into the Rodent's and the
+  buck's input capacitors. Every release charges them through nothing but wire and contact
+  resistance, and that inrush can weld a small contact closed. [Likely] A welded NC E-stop is
+  invisible: the button is down and the machine is still live. With two blocks in series, one
+  welded block still leaves the other to open.
+- Use blocks rated for **at least 5 A at 24 V DC** if you can find the rating. Many 22 mm blocks
+  only list AC ratings. [Guessing on what you'll receive]
+- **Do not "fix" this with an ordinary 24 V relay** switched by the E-stop: its contacts see the
+  same inrush and can weld the same way. Only a force-guided safety relay would help.
+- The alternative is to put the E-stop in the supply's mains feed (AC-rated contacts, and the LRS's
+  own soft start removes the DC inrush). That means mains wiring in the E-stop box: instructor only.
+- **Check it monthly** (OPERATING.md §7): with the machine idle, press the E-stop. The software must
+  report the controller lost, and the 24 V switched bus must read 0 V on a meter.
+- Only if F3 actually blows when you release the E-stop, change it to 2 A (the ring wiring takes
+  it).
 
 **Mounting:** at the front of the machine, where you can hit it without reaching over the bed.
 
@@ -258,7 +276,7 @@ Pi header with female Dupont leads.
 
 | W | From | To | Wire | Ends | Notes |
 |---|---|---|---|---|---|
-| W46 | I/O board 5 V and GND | KY-008 laser "S" (+5 V) and "−" (left gate post) | 24 AWG 2-core, about 1.2 m | Dupont / solder + heat-shrink | §8. Along the bed's front edge in clips. |
+| W46 | I/O board 5 V and GND | Class 2 (≤ 1 mW) laser module + and − (left gate post) | 24 AWG 2-core, about 1.2 m | Dupont / solder + heat-shrink | §8. Along the bed's front edge in clips. |
 | W47 | I/O board 5 V, GND, divider input | Receiver VCC, GND, OUT (right gate post) | 24 AWG 3-core, about 1.2 m | Dupont / solder | 2.2 kΩ OUT-to-VCC pull-up soldered **at the receiver** (§8) |
 
 ## 4. MOSFET modules
@@ -290,9 +308,11 @@ Don't use IRF520 modules: they aren't logic-level.
 **Rules for all five modules**
 - **Module V+ must be the load's supply:** 24 V for Q1–Q3, 12 V for Q4–Q5. The diode returns the
   coil current to V+.
-- **Add a 10 kΩ resistor from SIG to GND on each module** if it doesn't already have one. Power off
-  and measure SIG to GND to find out. [Guessing whether #5648 has one] The Pi's GPIOs float while
-  it boots or is off, and the pull-down keeps the pump and valves off.
+- **Add a 10 kΩ resistor from SIG to GND on each module** unless you measured one already there.
+  Power off and measure SIG to GND **before the first power-up** (§14 step 13). [Guessing whether
+  #5648 has one; Adafruit's listing does not mention one] The Pi's GPIOs float while it boots or is
+  off, and the pull-down keeps the pump and valves off. Without it, a floating vent gate can open
+  the vent and drop a held slab.
 - **If your pump draws more than 1.2 A running or 3 A at start, use a bigger module for Q1 only.**
   Measure it on the bench with a meter in series.
 
@@ -383,6 +403,13 @@ which is what you want. [Likely]
 3. If yours is the other way round, don't use it. Inverting the logic would turn a cut wire into
    "not touching".
 
+**Hysteresis (only if needed):** the firmware's `probe_hard_limit` alarms on any probe edge outside
+a `G38` move. If the flag chatters at the slot edge during the slow peel, BUILD_GUIDE §13.2's
+300 cycles will show "Probe Hard Limit" alarms. Then add hysteresis to the sensor output, keeping
+the fail-safe rule (a cut wire must still read triggered): for example a 74HC14 Schmitt inverter
+pair powered from V-Lim, with a 10 kΩ pull-up on its input [Guessing; have the instructor check it],
+and repeat FIRMWARE.md step 5's fail-safe rows. Or set `probe_hard_limit: false` and live without it.
+
 **Indicator LED caution:** some boards have an indicator LED arranged so that it holds OUT at mid
 voltage when "high". The Rodent's opto then stays half on, and the input never reads triggered.
 FIRMWARE.md Step 5 catches this.
@@ -412,10 +439,12 @@ a pressed switch. [Likely: forum reports]
 
 **Where the switches go**
 - **X home switch:** on the left end of the beam. It must click when the cup axis is at layout
-  X ≈ 19 mm, which is about 23 mm left of pocket 0's centre, ± 3 mm.
-  - The X carriage leaves its rail at X 12.7, so add a printed bumper as a hard stop at X ≈ 14.
+  X ≈ 19 mm, which is about 23 mm left of pocket 0's centre, **± 2 mm**.
+  - The printed `x_bumper_L` (in the CAD) is the hard stop at cup X 15, so the switch must trip at
+    least 2 mm before the `x_bracket` reaches it. The carriage still has 2.3 mm of rail there.
 - **Z top switch:** at the top of the Z spine, hit by the Z plate. It must click at c ≈ 258 mm
-  (the cup face 258 mm above the pad top), ± 2 mm.
+  (the cup face 258 mm above the pad top), ± 2 mm. That is 4 mm before the `z_plate` meets the
+  `z_motor_mount` (the top hard stop at c = 262).
 - Exact positions are checked in FIRMWARE.md Step 6.
 
 **Lid switch (optional, GPIO25):** use **C and NO**, closed when the lid presses it, so a shut lid
@@ -423,16 +452,23 @@ reads LOW (`Button.is_pressed`). A cut wire then reads "lid open", which is safe
 
 ## 8. Overfill laser gate
 
-**Parts (BOM): a KY-008 650 nm laser module and a non-modulated laser receiver module.** Both are
-5 V boards.
+**Parts (BOM): a ≤ 1 mW (Class 2) 650 nm laser module with a 6 mm barrel, and a non-modulated
+laser receiver module.** Both are 5 V parts.
+- **Do not use the KY-008 laser that comes in the receiver kit.** KY-008 modules are usually sold
+  as 5 mW (Class 3R). [Likely] The laser is on whenever the Pi is on (W46 is the Pi's 5 V), and the
+  beam runs along the open row at about 214 mm, the height of a face bent over the stacks while
+  loading. A Class 2 beam is protected by the blink reflex; a 3R beam is not. The listing must say
+  "≤ 1 mW" or "Class 2 / Class II". Keep the kit's receiver.
 - The laser sits in the left gate post and the receiver in the right post, with the beam 4 mm
-  above the MAX line.
+  above the MAX line. An M3 set screw in each post locks the barrel.
+- Stick a "LASER - do not stare into the beam - Class 2" label on both posts.
 - **Never look into the beam.** Aim it so it always ends on the receiver.
+- [Guessing] If you want the laser off between runs as well, switch its 5 V with a small low-side
+  MOSFET from a spare GPIO, on only during the start-up check. The software does not do this yet.
+  With the laser off the gate reads "blocked", so it stays fail-safe.
 
 **Laser wiring (W46):**
-- 5 V → the KY-008 "S" pin; GND → "−".
-- On most KY-008 boards the middle pin is not connected. [Likely] Confirm with a meter that the
-  laser lights from S and −.
+- 5 V → the module's + (red) lead; GND → − (black). Confirm with a meter that it lights.
 - 24 AWG 2-core, about 1.2 m.
 
 **Receiver wiring (W47):**
@@ -470,7 +506,9 @@ with the room lights on.
 
 ## 9. LED rings
 
-**Parts (BOM):** two 12 V COB "angel eye" white rings, about 60 mm. Measure OD and ID before
+**Parts (BOM):** two 12 V COB "angel eye" white rings: **40 mm** for the head (a 60 mm ring would
+cut into the drop arm; the seat in `camera_bracket` and `phase0_top` has a 41 mm bore) and 60 mm for
+the station (seat 52–60 mm in `station_mount` and `phase0_base`). Measure OD and ID before
 printing the ring seats.
 
 **Switching**
@@ -575,8 +613,8 @@ the bundle along the drop arm every 50 mm down to the head.
 **Loop size:**
 - Make it about 350 mm long, with no bend tighter than 40 mm radius.
 - Check by hand at c = 0 and c = 255. The loop must never hang lower than the top of the drop arm.
-  At c = 0, that point is about 298 mm above the pads (243 + 55, `model.ARM_Z`), well above the
-  218 mm rod tops. [Certain, layout numbers]
+  At c = 0, that point is 350 mm above the pads (`model.ARM_Z`: the Z carriage 295 mm above the cup
+  face, plus 55), well above the 218 mm rod tops. [Certain, layout numbers]
 
 **Tube slack:** leave 30 mm at the cup fitting. The buffer rod rises up to 25 mm on contact.
 
@@ -631,12 +669,15 @@ Do this with everything wired, **mains unplugged**, and the E-stop released.
 3. Inlet L to N, switch on: **not a short (> 10 Ω)**. The supply's input circuit shows some
    reading.
 4. Fuse fitted, T3.15A. **LRS 115/230 switch on your mains voltage.** Terminal cover on.
+4a. **Mains box closed, gland tight, insulated receptacles on every inlet tab: no exposed mains
+    metal anywhere with the cord plugged in** (§1.1). Not on the plywood panel.
 
 **24 V side**
 
 5. 24 V switched bus to 0 V bus: **> 1 kΩ**. It rises as the meter charges the capacitors. Under
    10 Ω is a short: find it.
-6. E-stop pressed: LRS +V to 24 V switched bus **open**. Released: **< 0.5 Ω**.
+6. E-stop pressed: LRS +V to 24 V switched bus **open**. Released: **< 0.5 Ω**. Check both NC
+   blocks: each one alone must open the circuit when pressed (meter across each block).
 7. F1 = 5 A, F2 = 3 A, F3 = 1 A fitted.
 8. Rodent VIN polarity: red to "VCC", black to "GND". [Certain, terminal labels]
 9. **24 V bus to Pi 5 V pin: open.** **0 V bus to Pi GND: < 1 Ω.**
@@ -657,6 +698,8 @@ Do this with everything wired, **mains unplugged**, and the E-stop released.
     - valve coil: hundreds of ohms [Guessing];
     - **never close to 0 Ω**.
 13. Divider resistors: measure each 10 kΩ, 20 kΩ and 2.2 kΩ (10k and 100k are easy to mix up).
+    **MOSFET SIG pull-downs:** SIG to GND on each of Q1–Q5, Pi lead unplugged: **about 10 kΩ**. Open
+    means the pull-down is missing: add it (§4) before any power-up.
 
 **Board set-up**
 
@@ -680,9 +723,9 @@ Do this with everything wired, **mains unplugged**, and the E-stop released.
    the pump on and `pinctrl set 17 op dl` turns it off. [Likely, Bookworm tool] Do the same for
    27, 22, 23 and 24, one at a time. Each output must drive only its own load.
 5. Now follow FIRMWARE.md from Step 1.
-6. **After 10 minutes of motors holding:** the motor bodies may be warm but not too hot to hold a
-   finger on (under about 60 °C). Hotter than that means the sense-resistor setting is wrong:
-   power off.
+6. **After 10 minutes of motors holding:** the motor bodies may be warm but **below about 50 °C**
+   (comfortable to hold a finger on). Hotter than that means the sense-resistor setting is wrong:
+   power off (FIRMWARE.md step 0).
 
 ## 16. Open risks
 
@@ -690,12 +733,16 @@ Do this with everything wired, **mains unplugged**, and the E-stop released.
    common output types safe, but measure before wiring.
 2. **[Likely] Sensor output direction.** It is assumed to be 0.5 V at −100 kPa. Check about 4.5 V
    at atmosphere on first power-up.
-3. **[Guessing] E-stop DC rating.** Confirm ≥ 5 A at 24 V DC, or use two contacts in series.
+3. **[Guessing] E-stop DC rating.** Two NC blocks in series are required anyway (§1.3); confirm
+   ≥ 5 A at 24 V DC if the blocks list it, and do the monthly E-stop check.
 4. **[Guessing] Head USB at about 4 m.** It works on paper. A cheap extension in a moving chain
    is the weakest cable in the machine. Watch for camera dropouts in the soak test.
-5. **[Guessing] Whether Adafruit #5648 has a SIG pull-down.** Measure SIG to GND with the power off
-   and add 10 kΩ if it reads open (§4).
+5. **[Guessing] Whether Adafruit #5648 has a SIG pull-down.** Measured in §14 step 13 before the
+   first power-up; add 10 kΩ if it reads open (§4). BUILD_GUIDE §13.4 ("unplug the Pi, the pump
+   must stop") checks it again.
+6. **[Guessing] Probe flag chatter** with `probe_hard_limit: true`: see §6 "Hysteresis".
 
-**Resolved:** the BOM now lists Adafruit #5648 modules, bare microswitches and the 1/3/5 A fuses
-used on this page, and the CAD keeps the Z carriage on its rail down to c = −12 (CONTRACT), so the
-old Z-rail bottom-margin issue is closed.
+**Resolved:** the BOM now lists Adafruit #5648 modules, bare microswitches, the 1/3/5 A fuses,
+the mains box, a Class 2 laser and a two-block E-stop used on this page. The CAD has printed hard
+stops that keep both carriages on their rails (CONTRACT), so the old Z-rail margin issue is
+closed.

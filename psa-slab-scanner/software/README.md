@@ -106,7 +106,8 @@ to check by hand: unreadable ones, or graders other than PSA and CGC.
 **Stopping**
 - Ctrl-C once, or Stop on the web page, finishes the current slab and parks with nothing in the
   cup.
-- Ctrl-C twice stops at once. A slab may then still be in the cup.
+- Ctrl-C twice is a hard stop: the motors halt where they are and nothing moves after that. A slab
+  in the cup stays held by the pump until you hold it and type `vent`. The next run homes first.
 - Use the e-stop for anything dangerous.
 
 **E-stop.** It cuts the 24 V supply: the controller, the motors, the pump and both valves. The

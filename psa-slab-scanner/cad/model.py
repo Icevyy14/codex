@@ -608,7 +608,7 @@ def awl_adapter() -> cq.Workplane:
 
 
 def fill_gauge() -> cq.Workplane:
-    """Stand it in a pocket: slabs must not stack above its top notch (the MAX line)."""
+    """Stand it in a pocket: slabs must not stack above the underside of its top bar (the MAX line); the notches count slabs."""
     g = box(0, 0, 0, 12, 4, L.MAX_LINE)
     for k in range(0, 31, 5):
         g = g.cut(box(-1, -1, k * 6.6, 3, 5, k * 6.6 + 0.8))

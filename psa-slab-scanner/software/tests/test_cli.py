@@ -341,3 +341,11 @@ def test_run_all_face_down_is_kept_for_the_batch(tmp_path):
     import json
 
     assert json.loads((batch / "run.json").read_text())["face_down_check"] == "off"  # resume reads it back
+
+
+def test_sim_timing_reads_modern_backs_from_above(tmp_path):
+    # the timing wrappers must pass the camera's view_half_mm through, or the head crop cuts the QR off and
+    # every slab detours to the station (the sim then reported ~24 s per slab instead of ~14)
+    code, out = _run(["sim", "--slabs", "4", "--eras", "1,0,0", "--quiet", "--out", str(tmp_path)])
+    assert code == 0, out
+    assert "station 0;" in out, out

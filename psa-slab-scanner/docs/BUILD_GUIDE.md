@@ -12,31 +12,31 @@ filled. Every time estimate is **[Guessing]**.
 
 ## Read this first
 
-- **Phase 0 costs about $300, not $100, if you buy the Raspberry Pi.** [Likely] In October 2026 a
-  Pi 5 4 GB costs about $110 by itself (BOM.md). Borrow a school Pi 4 or Pi 5 for Phase 0 and it
-  drops to about $150. Buy your own Pi only after Phase 0 says GO.
-- **The full machine is above your target.** [Likely ±15%] The BOM comes to about $1,697, about
-  $1,440 if the school supplies its usual shop stock, and about $1,350 with the lean swaps. The
-  target was $1,000–1,400 and the hard cap is $2,000.
+- **Phase 0 is two gates, and both come before any motion parts.** [Likely, BOM.md order plan]
+  - **0A, camera test: ≈ $449**, or ≈ $285 if you borrow a school Pi 4 or Pi 5 (a Pi 5 4 GB costs
+    about $110 by itself in October 2026). Buy your own Pi only after 0A says GO.
+  - **0B, cup test: ≈ $145.** A hand vacuum pump on the bench: no mains wiring, no electronics.
+- **The full machine is far above your target and close to the cap.** [Likely ±15%] The BOM comes
+  to about $1,903 with a 15% allowance, about $1,634 if the school supplies its usual shop stock,
+  and about $1,547 with the lean swaps. The target was $1,000–1,400 and the hard cap is $2,000. A
+  realistic worst case buying everything is about $2,170, so plan on the school's shop stock.
 - **Nothing here has moved a real slab yet.** [Certain] The CAD passes its clearance checks and the
   software passes its tests against a simulator. Real labels, the real cup and real wiring are
-  untested. That is why Phase 0 comes first and section 13 has six tests to pass before you trust
+  untested. That is why Phase 0 comes first and section 13 has the tests to pass before you trust
   the machine with inventory.
-- **Plan on 60–85 hours of hands-on work over 6–10 weeks**, plus about 30 hours of printer time.
-  [Guessing] The project README says 40–60 hours. I think that is low once drilling 82 rod holes,
-  the wiring and the acceptance tests are counted.
-- **The CAD and BOM have small gaps you fix during the build.** [Certain, from reading the CAD
-  and BOM] Each one is handled where it comes up:
+- **Plan on 60–85 hours of hands-on work over 6–10 weeks**, plus about 40 hours of printer time.
+  [Guessing] Drilling 82 rod holes, the wiring and the acceptance tests are most of it.
+- **The CAD and BOM still have small gaps you fix during the build.** [Certain, from reading the
+  CAD and BOM] Each one is handled where it comes up:
 
 | Gap | Where it is handled |
 |---|---|
-| The gate posts are modelled with their foot at pad-top height, but they stand on the bare plywood, 3 mm lower. The beam would sit at 211 mm instead of 214. | §5.9 |
-| The `awl_adapter` insert hole is 5.0 mm. An M5 heat-set insert needs a bigger hole (about 6.4 mm for common inserts). | §3.4 |
-| The drop arm is drawn 3 mm into `head_foot`'s socket floor, so its cross holes go at 19 mm and 84 mm from the arm end, not 22 and 87. | §7.5 |
 | The probe flag (the tab that moves into the optical sensor) is not in the CAD. BOM.csv has only the strip to make it from. | §7.6 |
-| The Phase 0 top bridge's post holes go right through, so nothing sets its height. | §1.5 |
 | The CAD has no brackets, and the bed covers the base-rail tops where the upright brackets would go. | §4.3 |
-| The SMC buffer in the BOM is the rotating type ("J"). The flag needs the non-rotating type ("K") or an anti-rotation guide. | §2, §7.6 |
+| The non-rotating SMC buffer code ("K") in the BOM is built from SMC's code pattern and not confirmed orderable. With a rotating ("J") buffer you must add an anti-rotation guide for the flag yourself. | §2, §7.6 |
+| The head camera's board-to-lens-front length (20 mm) and its 32 mm hole pattern are guesses in the CAD. | §1.5, §3.3 |
+| The Z lead screw must be cut to 340 mm below the motor face. | §7.3 |
+| Nothing mounts the occluder (cup, buffer, foot) in the Phase 0A jig. | §1.5 step 7 |
 
 ## Contents
 
@@ -85,11 +85,11 @@ in [OPERATING.md §4](OPERATING.md#4-what-the-machine-does).
 | Item | Value | Source |
 |---|---|---|
 | Footprint | 1416 × 290 mm bed, about 0.65 m tall | `cad/model.py` [Certain] |
-| Motors | X: NEMA17 on a GT2 belt. Z: NEMA17 with a 400 mm T8×8 lead screw. | CONTRACT [Certain] |
+| Motors | X: NEMA17 on a GT2 belt. Z: NEMA17 with a T8×8 lead screw, cut to 340 mm. | CONTRACT [Certain] |
 | Rails | X: MGN12 1300 mm on a 4040 beam. Z: MGN12 330 mm on a 2040 spine. | CONTRACT [Certain] |
 | Pocket | 84 × 139 mm inside, made by 8 mm dowels 218 mm tall | `cad/layout.py` [Certain] |
 | Capacity | 11 × 30 = 330 PSA slabs | [Certain] |
-| Cycle time | about 11 s per slab in the simulator, so about 1 hour for 330 | software README [Guessing until measured] |
+| Cycle time | about 14 s per slab, so about 80 min for 330 (`sim --slabs 330`) | software [Guessing until measured] |
 
 ### 0.1 Build order and time
 
@@ -99,10 +99,10 @@ drill template), so §5 is split: 5A now, 5B after the machine moves (§12).
 
 | # | Step | Section | Hands-on | Printer / waiting | Instructor needed |
 |---|---|---|---|---|---|
-| 1 | Phase 0A: camera test | §1 | 5 h | 9 h print | no |
-| 2 | Phase 0B: cup bench test | §1.10 | 6–8 h | 24 h test | **yes: mains wiring** |
+| 1 | Phase 0A: camera test | §1 | 5–6 h | about 14 h print | no |
+| 2 | Phase 0B: cup bench test (hand pump) | §1.10 | 3–4 h | 24 h test | no |
 | 3 | Order the machine parts | §2 | 1 h | 1–4 weeks delivery | no |
-| 4 | Print the machine parts | §3 | 3 h | about 22 h | no |
+| 4 | Print the machine parts | §3 | 3 h | about 26 h | no |
 | 5 | Frame | §4 | 4–6 h | | **yes: squaring** |
 | 6 | Bed, part A (cut, notch, bolt down, cut pads) | §5A | 3–4 h | | for power-tool rules |
 | 7 | X axis | §6 | 4–5 h | | helpful for the dial indicator |
@@ -119,21 +119,22 @@ drill template), so §5 is split: 5A now, 5B after the machine moves (§12).
 
 ### 0.2 Cost
 
-From [BOM.md](BOM.md). No price is a live checkout price. [Certain that they are search-extract
-prices dated 2023 to August 2026]
+From [BOM.md](BOM.md), with its 15% allowance. No price is a live checkout price. [Certain that
+they are search-extract prices dated 2023 to August 2026]
 
 | | Cost |
 |---|---:|
-| Order 1: Phase 0 parts (Pi, cameras, rings, the whole vacuum system, PSU, switching) | ≈ $860 |
-| Order 2: the machine (frame, motion, bed, controller, sensors, cables) | ≈ $840 |
-| **Full list incl. 10% allowance** | **≈ $1,697** |
-| With school shop stock (filament, wire, glue, fuses, screws) | ≈ $1,440 |
-| Lean (also generic valves and Home Depot plywood) | ≈ $1,352 |
-| Optional light roof, only if Phase 0 shows glare (conditional BOM lines) | + ≈ $37 |
+| Order 1a: Phase 0A (Pi, cameras, rings, USB extension, jig parts) | ≈ $449 (≈ $285 with a borrowed Pi) |
+| Order 1b: Phase 0B (cup and buffer, pads, tube, fittings, hand vacuum pump) | ≈ $145 |
+| Order 2: the machine (frame, motion, bed, vacuum system, electronics, mains box, cables) | ≈ $1,309 |
+| **Full list** | **≈ $1,903** |
+| With school shop stock (filament, wire, glue, fuses, screws) | ≈ $1,634 |
+| Lean (also generic valves and Home Depot plywood) | ≈ $1,547 |
+| Optional light roof, only if Phase 0 shows glare (conditional BOM lines) | + ≈ $39 |
+| Worst case buying everything (tools, HT1 cups, roof, [Guessing] prices 20% high) | ≈ $2,170: over the cap |
+| Junk slabs for §13, if they don't come from your stock | + $150–400 |
 
-**Split order 1 further than the BOM does:** buy the Phase 0A camera parts first (about $300, or
-about $150 with a borrowed Pi). Buy the vacuum half only after the cameras pass. [Guessing on the
-saving; the arithmetic is in §1.1]
+**Keep a tally** of what you actually paid against the $2,000 cap after each order (BOM.md).
 
 ---
 
@@ -141,25 +142,34 @@ saving; the arithmetic is in §1.1]
 
 **Why:** the two riskiest unknowns are (a) whether the cameras read *your* labels, and (b)
 whether the cup marks a slab. Both can be tested on a bench for a fraction of the machine's cost.
-If either fails, you have not bought any motion parts.
+If either fails, you have not bought any motion parts. **Order the machine only if both 0A and
+0B pass.**
 
 ### 1.1 What Phase 0A needs
+
+Rows marked "PHASE 0A" in BOM.csv. [Certain for the list; prices as in the BOM]
 
 | Part | From | Cost |
 |---|---|---:|
 | Raspberry Pi 5 4 GB, 27 W PSU, 64 GB microSD, Active Cooler | BOM, or borrow a school Pi | $143 (or $0) |
 | Camera Module 3 (standard) + 500 mm Pi 5 cable | BOM | $27.50 |
 | ELP 8 MP IMX179 USB camera, 3.6 mm M12 lens | BOM | $66 |
-| Two 12 V COB LED rings, about 60 mm | BOM | $12 |
-| 12 V DC wall adapter, 1 A or more (not in the BOM) | any | about $10 [Guessing] |
-| Two 2020 × 312 mm extrusion posts | BOM (or school scrap) | $12 |
-| M2 screw kit; 4 × M5×10 screws + 4 × M5 slot-6 T-nuts | BOM / school stock | $8 |
-| Printed: `phase0_base`, `phase0_tray`, `phase0_top` | §3 | school filament |
-| **Total** | | **≈ $280 + 10% ≈ $300**, or **≈ $150** with a borrowed Pi |
+| 3 m USB 2.0 extension (the BOM line has two; Phase 0A needs one) | BOM | $22 |
+| LED rings: 40 mm for the head, 60 mm for the station (12 V COB) | BOM | $24 |
+| 12 V DC wall adapter, 1 A or more | BOM | $10 |
+| Two 2020 × 312 mm extrusion posts, cut square to ± 0.5 mm | BOM | $12 |
+| M2 screw kit and M2 standoff kit; 4 × M5×10 screws + 4 × M5 slot-6 T-nuts | BOM / school stock | $17 |
+| Optical endstop board (for `head_foot`'s sensor post) | BOM | $9 |
+| Hookup wire, heat shrink, filament | BOM / school stock | $60 (or $0) |
+| Printed: `phase0_base`, `phase0_tray`, `phase0_top`, and `head_foot` (the machine's own part) | §3 | |
+| **Total** | | **≈ $390 + 15% ≈ $449**, ≈ $285 with a borrowed Pi, ≈ $216 if the school also supplies the wire and filament |
 
 - **Why the 12 V adapter:** it powers the LED rings without any mains wiring, because the
   `phase0` tool leaves the lights on and never switches them. [Certain, `tools/phase0.py`] The
   rings and the cameras are the only powered parts in Phase 0A.
+- **Why the USB extension and `head_foot` already:** in the machine the head camera reaches the
+  Pi through about 4 m of USB, and the foot, buffer, sensor and cup sit between the lens and the
+  slab, inside the ring light. The jig reproduces both, so a GO means the machine's conditions.
 - **With a Pi 4:** use the 15-pin camera cable that ships with the Camera Module 3, not the Pi 5
   cable. [Likely]
 
@@ -174,38 +184,61 @@ the oldest holders.
   ±1.85 / ±1.75 mm]
 - **SGC holders are about 86 mm wide and do not fit at all.** [Likely, `layout.py` comment] Measure
   one if you deal SGC.
+- **Also measure one CGC, one BGS and one TAG holder** if you deal them. [Guessing: no width for
+  them has been measured; BGS may be wider than PSA] Anything wider than 82.6 mm is "do not load"
+  (OPERATING.md §2). CGC matters most, because the machine reads CGC normally.
 
-### 1.3 Print the jig (about 9 h printer time)
+### 1.3 Print the jig (about 14 h printer time)
 
-Print `phase0_base`, `phase0_tray` and `phase0_top` in black PLA or PETG (settings in §3). Black
-matters around the station camera, because it cuts stray light.
+Print `phase0_base`, `phase0_tray` and `phase0_top` in black PLA or PETG, and `head_foot` in PETG
+(settings in §3; it goes on the machine later). Black matters around the cameras, because it cuts
+stray light. Before printing `head_foot`, check the optical endstop board's hole spacing (§3.3).
 
 ### 1.4 Set up the Pi (1–1.5 h)
 
 Do §11.1–11.4 now: the operating system, copying the repository, and `setup_pi.sh`. Phase 0 uses
 the same software as the machine.
 
-### 1.5 Assemble the jig (1 h)
+### 1.5 Assemble the jig (1.5 h)
 
 ![Phase 0 jig](img/phase0_jig.png)
 
-1. Screw the Camera Module 3 to the base's camera mast with four M2 screws. Lead the ribbon out of
-   the cable slot. Use the 500 mm cable to the Pi's CAM/DISP 0 port, fitted with the Pi off.
-2. Put one LED ring in the base's ring seat around the lens.
-3. Push the two 2020 posts into the base sockets. Fix each with an M5×10 screw through the socket's
-   cross hole into a T-nut in the post's slot.
-4. Slide the tray onto the posts. Set the **tray ledge top 140 mm above the station lens front**
-   (± 2 mm), then fix both clamps with M5 screws and T-nuts. [Certain, `model.py`: slab front at
-   lens + 140]
-5. Fit the ELP camera board to the top bridge with four M2 screws.
-   - The CAD assumes a 32 mm square hole pattern. Measure your board first; if it differs,
-     drill new holes. [Guessing in the CAD]
-   - Put the second LED ring in the bridge's ring seat.
-6. **The top bridge has no stop.** [Certain, CAD: its post holes go right through] Slide it down
-   the posts until the head lens front is **140 mm above the top face of a slab lying in the tray**
-   (± 2 mm). Hold it there with a spring clamp or a 2020 corner bracket under each end.
-7. Plug the ELP camera into a black USB 2.0 port. Power both rings from the 12 V adapter (ring +
-   to adapter +).
+1. Screw the Camera Module 3 onto the four bosses in the base's camera mast with M2 self-tapping
+   screws. Lead the ribbon out through the slot in the mast and ring wall. Use the 500 mm cable to
+   the Pi's CAM/DISP 0 port, fitted with the Pi off.
+2. Put the 60 mm LED ring in the base's ring seat around the lens.
+3. Push the two 2020 posts into the base sockets, down to the socket floors. Fix each with an
+   M5×10 screw through the socket's cross hole into a T-nut in the post's slot.
+4. **Face both tray ledges with a strip of the pad microfiber** (spray adhesive): the slab's
+   front label rests on them. Slide the tray onto the posts. Set the **top of the cloth on the
+   ledges 140 mm above the station lens front** (± 2 mm; if you measure to the bare ledge, set it
+   140 mm minus the cloth thickness), then fix both clamps with M5 screws and T-nuts. [Certain,
+   `model.py`: slab front at lens + 140]
+5. **Head camera on the bridge.** The bridge carries the board on four M2 standoffs.
+   - Measure your ELP board's **board-to-lens-front length L**: from the board's underside to the
+     front of the M12 lens holder, with the lens roughly in focus. The CAD guessed 20 mm.
+     [Guessing in the CAD]
+   - Standoff height = **L − 7.4 mm** (12.6 mm for L = 20). Use brass M2 standoffs from the kit
+     (stack two if needed); they screw into the bridge's 1.8 mm blind holes.
+   - The CAD assumes a 32 mm square hole pattern. Measure your board first; if it differs, drill
+     new 1.8 mm holes in the bridge. [Guessing in the CAD]
+   - Fix the board with four M2 screws. Put the 40 mm LED ring in the bridge's ring seat.
+6. **The bridge sits on the post tops in its blind sockets,** so the 312 mm posts set its height.
+   [Certain, CAD: post tops at 314, socket roof at 314] Put a slab in the tray and measure the
+   **head lens front to the slab's top face (its back): 140 ± 2 mm**. If it is off, change the
+   standoff height (washers on the standoffs, or a shorter or longer standoff). Don't pack the
+   post tops unless you have to.
+7. **Put the machine's occluders under the lens** (the CAD has no mount for this in the jig):
+   - Fit the SMC buffer and cup through `head_foot` with its two M10 nuts, as in §7.5. If the SMC
+     part hasn't arrived, use an M10 bolt with a 25 mm washer as a dummy.
+   - Push a 2020 offcut about 70 mm long into the foot's arm socket and fix it with the cross
+     bolt. Screw the optical endstop board onto the sensor post.
+   - Stand the assembly on the slab's back: the cup on the back centre, **on the lens axis
+     (± 2 mm)**, the arm stub toward the back (away from the label end), exactly as in the machine.
+     Tape or clamp the stub to a post so it can't tip. [Guessing on the improvised mount]
+   - Lift the assembly off (and back on) each time you change the slab.
+8. Plug the ELP camera into a black USB 2.0 port **through the 3 m USB extension**, as in the
+   machine. Power both rings from the 12 V adapter (ring + to adapter +).
 
 ### 1.6 Focus both cameras (30 min)
 
@@ -218,8 +251,9 @@ python -m slabscan focus head --no-motion              # turn the M12 lens; watc
 python -m slabscan focus station --no-motion --save    # sweeps LensPosition, saves the best one to config/calibration.toml
 ```
 
-- **Head:** turn the lens slowly past the peak and come back to it. The line shows `READ …` when
-  something decodes. Lock the lens nut once you are at the peak.
+- **Head:** with the occluders in place (§1.5 step 7), turn the lens slowly past the peak and
+  come back to it. The line shows `READ …` when something decodes. Lock the lens nut once you are
+  at the peak.
 - **Station:** note the recommended LensPosition. The machine's station uses the same 140 mm
   distance, so the value carries over. [Certain, CAD]
 
@@ -230,8 +264,10 @@ python -m slabscan phase0 --out phase0_results --lens-position 7.1   # use the v
 ```
 
 For each slab the tool asks you to type the printed cert number, then saves both images and what
-each camera decoded. **Type the cert every time.** The typed number is how it catches a *wrong*
-read, which is the failure that matters.
+each camera decoded. **Type the cert every time:** the typed number is how it catches a *wrong*
+read, which is the failure that matters, and GO needs every slab typed. [Certain,
+`tools/phase0.py`] Scan five 2024+ slabs (back QR) first: they teach the ITF format, in the same
+order the machine learns it.
 
 **Include in the 30–50:**
 - new labels (2024+, 9-digit certs) and old ones (8-digit);
@@ -256,82 +292,80 @@ machine: it settles the open questions in RESEARCH.md.
 | CGC QR payload | `back_reads` for CGC slabs | |
 | Any prefix or suffix around the cert | raw payloads | if yes, set `custom_regex` (§11.5) |
 | Time per side (`back_ms`, `front_ms`) | CSV | replaces the [Guessing] frame times in `cli.py` |
+| Cert lengths seen (8, 9 digits …) | `typed` column | set `psa_cert_digits = [8, 9]` in `calibration.toml` (§11.5) |
+| Widths of your CGC / BGS / TAG holders | your calipers (§1.2) | wider than 82.6 mm: do not load |
 
 ### 1.9 The gate
 
 | Result | Decision |
 |---|---|
-| `WRONG certs vs what you typed` is **0**, and `confident read (ok)` is **≥ 95 %** | **GO** [Certain: the tool's own criteria] |
-| Any wrong cert at all | **NO-GO.** One silent misread is worse than 20 unread slabs. Send `phase0.csv` and the images for tuning before buying anything else. |
+| `WRONG certs vs what you typed` is **0**, every slab typed, and `confident read (ok)` is **≥ 95 %** | **GO** [Certain: the tool's own criteria]. The report also prints the rule-of-three bound (with 0 wrong in n slabs, the true wrong-read rate is probably below 3/n) and the ok rate as if the ITF format had been learned from the start. |
+| Any wrong cert at all | **NO-GO.** One silent misread is worse than 20 unread slabs. Follow the steps the report prints for the failing slabs and re-run; buy nothing else until a re-run gives 0 wrong. |
 | ok below 95 % but no wrong certs | **Hold.** Look at the failing images. Typical fixes: refocus, move the ring, block room light. Then run again. |
 | Back camera fails on most post-2017 labels | **Hold.** Every one of those would need the station detour (+3–5 s each). Fix the head image first. [Likely] |
 | Glare spots over the label in the head images | Plan to build the optional light roof (CONTRACT). |
 
 ### 1.10 Phase 0B: cup bench test (after 0A passes)
 
-**What it proves:** the cup seals on your holders, the valves hold, and the cup leaves no mark.
-**Parts:** the rest of order 1, i.e. the vacuum system, the XGZP6847A sensor, the ADS1115, the
-MOSFET modules and the 24 V supply.
+**What it proves:** the cup seals on your holders, the cup line holds, and the cup leaves no mark.
+**Parts:** order 1b, the rows marked "PHASE 0B": the SMC cup and buffer, spare pads, PU tube and
+push fittings, IPA, and a hand vacuum pump with a gauge (brake-bleeder type). **No mains wiring, no
+electronics, no instructor needed.** The machine's pump, valves, sensor and power supply come in
+order 2 and are tested in §8.3 and §13.
 
-**Instructor:** yes. This is the first mains wiring (IEC inlet → Mean Well LRS-150-24). Have it
-checked before the first plug-in (WIRING.md §1.1 and §14 steps 1–4).
-
-1. **Build the bench subset of the electronics** from WIRING.md:
-   - power: §1.1 mains, F2 fuse, and the 24 V load bus;
-   - switching: Q1–Q3, the pump and both valves (§4);
-   - the I/O board with the sensor and ADS1115 (§5).
-   Every wire goes into the machine later unchanged. (4–6 h)
-2. **Plumb it** as in §8, with the cup and buffer held in a bench vise. (2 h)
-3. In `config/calibration.toml` add `overfill_gate = false` for now (no beam yet). Then:
-   ```bash
-   python -m slabscan selftest -i
-   ```
-   - The controller line FAILS here. That's expected: the Rodent is in order 2. So does the LED
-     ring line if Q4/Q5 aren't wired yet.
-   - It walks you through pressing a slab on the cup: **seal**, **leak** (valves shut) and **vent**.
-4. **Pass:**
-   - `seal` PASS: −35 kPa or better, reached in the time shown. [Certain: `vac_seal_kpa`]
-   - `leak` below 1 kPa/s. selftest passes anything under 2.5 kPa/s, but §13.4 needs the slab to
-     hang on for a minute. [Guessing on the target]
-   - `vent` PASS.
-   - Do it on 5 different slabs, both holder generations.
+1. **Bench set-up** (30 min):
+   - Clamp the buffer body in a bench vise by its M10 nuts (not by the rod), cup pointing down.
+   - Push an M5 push fitting into the buffer's top port. Run about 1 m of 4 mm PU tube to the hand
+     pump's hose (a stretch fit, or a fitting from the kit).
+   - Wipe the cup lip with IPA.
+2. **Seal** (on each slab): lay a junk slab face-down on a soft cloth on a block under the cup and
+   raise the block until the buffer is pushed in about 2 mm, the machine's trip point. Pump to
+   −60 kPa (about 18 inHg). **Pass:** it gets there in a few strokes and holds. [Guessing target]
+3. **Leak:** stop pumping and watch the gauge for 60 s. **Pass: it loses less than 5 kPa in a
+   minute.** [Guessing target] Faster means the tube is not seated, the fitting leaks, or the lip
+   has grit on it. Fix it and repeat. The rate also tells you how often step 5 needs re-pumping.
+4. Do steps 2–3 on 5 different slabs, both holder generations, and a CGC if you deal CGC.
 5. **24 h static mark test on a junk slab:**
    1. Photograph the junk slab's back under raking light: a phone torch held almost flat to the
       surface, about 10–20°, in a dim room.
-   2. Lay the slab face-down on a soft cloth on a block under the vise. Bring the cup (held in the
-      vise, pointing down) onto the slab's back centre until the buffer is pushed in about 2 mm.
-   3. Seal it and shut the valves, so it stays sealed with the pump off:
-      ```bash
-      pinctrl set 22 op dl; pinctrl set 17 op dh; pinctrl set 27 op dh; sleep 3; pinctrl set 27 op dl; pinctrl set 17 op dl
-      ```
-   4. Leave it 24 h.
-   5. Vent: `pinctrl set 22 op dh; sleep 1; pinctrl set 22 op dl`. Photograph the same spot the
-      same way.
-   - `pinctrl` is the Bookworm GPIO tool WIRING.md §15 uses. [Likely] Pins: 17 pump, 27 vacuum
-     valve, 22 vent valve. [Certain, CONTRACT]
+   2. Set it up as in step 2, the cup on the back centre, and pump to −60 kPa.
+   3. **Keep the clamp on.** The closed line leaks, so re-pump to −60 kPa every time you check, at
+      least every 30–60 min while you are around. Write down the time and the reading *before*
+      each re-pump, and the reading next morning.
+   4. After 24 h, open the pump's release valve, then photograph the same spot the same way.
+   - **This is a screen, not the final test.** If most of your readings are above −40 kPa
+     (overnight they will drift), most of the 24 h tested only the buffer spring's 1.4 N, not the
+     ~19 N vacuum clamp. The binding test is §13.2 on the machine, where the pump re-holds the
+     line every few seconds for 24 h and logs it.
 6. **Gate:**
-   - **No ring, haze or residue that survives a dry microfiber wipe → GO.** Order the machine.
+   - **No ring, haze or residue that survives a dry microfiber wipe → GO.** Order the machine
+     (order 2).
    - Anything that needs more than a dry wipe → try the Schmalz HT1 cup (BOM conditional line)
      and repeat.
+   - The cup won't seal on your holders → stop and find out why before ordering anything else.
 
 ---
 
 ## 2. Ordering
 
-Use [BOM.md](BOM.md) and [BOM.csv](BOM.csv). Order 2 is everything not marked "PHASE 0". Get the
-Misumi extrusion quote first, because it moves the total most (BOM.md).
+Use [BOM.md](BOM.md) and [BOM.csv](BOM.csv). Order 2 is everything not marked "PHASE 0A" or
+"PHASE 0B". Get the Misumi extrusion quote first, because it moves the total most (BOM.md).
 
-BOM.csv already has the parts this guide uses: the 236 mm drop arm, the Adafruit #5648 MOSFET
-modules, bare SPDT microswitches, the 1 A / 3 A / 5 A branch fuses, 2.2 kΩ resistors and 100 nF
-capacitors, the I/O perfboard, mains and earth wire, and the probe-flag strip. [Certain, BOM.csv]
+BOM.csv already has the parts this guide uses: the 285 mm drop arm, the Z spine with both ends
+tapped, the Adafruit #5648 MOSFET modules, bare SPDT microswitches, the 1 A / 3 A / 5 A branch
+fuses, 2.2 kΩ resistors and 100 nF capacitors, the I/O perfboard, mains and earth wire, the closed
+mains box, a Class 2 laser, an E-stop with two contact blocks, the 12 V adapter, the hand vacuum
+pump and the probe-flag strip. [Certain, BOM.csv]
 
 **Check these lines when you order:**
 
 | BOM line | What to do | Why |
 |---|---|---|
-| SMC cup + buffer `ZPT25UUJ25-B5-A10` | Ask the SMC configurator for the **non-rotating** buffer, the same code with **K** in place of **J**, if it exists with a 25 mm stroke | Distributor listings decode J = rotating and K = non-rotating. [Certain for the letters; Guessing whether that exact code is orderable] A rotating rod lets the probe flag swing into the sensor (§7.6). |
+| SMC cup + buffer `ZPT25UUK25-B5-A10` | Confirm the code in SMC's configurator or with a distributor: a 25 mm flat urethane pad on a **non-rotating (K)** M10 buffer with 25 mm stroke (20 mm is an acceptable fallback). | The code is built from SMC's pattern (J = rotating, K = non-rotating) and was not found in any listing. [Certain for the letters; Guessing that this exact code is orderable] A rotating rod lets the probe flag swing out of the sensor (§7.6). |
+| Z motor with lead screw | Buy one that lists 1.5–2.0 A per phase, ≤ 4 mH and an **8 mm lead** (T8×8). Not a 0.4–0.6 A "integrated" motor. | The firmware runs Z at 0.8 A and 750 rpm; a high-impedance motor stalls there, and nothing detects a Z stall. |
+| M5 screws | M5×25 for the 16 bed bolts, M5×30 for the 4 bracket-through-plywood bolts, M5×16/20 and M5×12 button heads as the CSV notes say | An M5×30 through the bed bottoms on the profile core before it clamps (§4.3). |
+| Overfill laser | The listing must say ≤ 1 mW or Class 2. | It is on whenever the Pi is on, at face height (WIRING.md §8). |
 | Light roof (foam board, tape, 2 × 2020 posts, qty 0) | Buy only if Phase 0 showed glare (§1.9) | The roof is optional (CONTRACT). |
-| 12 V wall adapter | Optional, for Phase 0A. Not in the BOM. | §1.1 |
 
 **Lead times** [Guessing]: Amazon 2–5 days, Misumi about 1 week, AliExpress 2–4 weeks, the SMC
 buffer can be weeks. The Rodent showed sold out at BIQU US (BOM.md); check the BIQU AliExpress
@@ -339,7 +373,9 @@ and Amazon stores.
 
 **When the parts arrive:**
 - check that the 4040 profile is 20-series slot 6 with **two slots per face**;
-- check that the Z motor's lead screw is **T8×8** (8 mm lead), not T8×2;
+- check that the Z motor's lead screw is **T8×8** (8 mm lead), not T8×2, and **measure the motor's
+  phase resistance: about 1–2 Ω is right; 10 Ω or more is a high-impedance motor, don't use it**;
+- check that the SMC buffer rod does not turn (K) before you design anything around it;
 - count the balls in the MGN12 carriages before you slide them anywhere (§6.1).
 
 ---
@@ -348,8 +384,12 @@ and Amazon stores.
 
 ### 3.1 Printer and material
 
-- **Bed size:** ≥ 230 mm in one direction (or diagonally), for the 226 mm gate posts and the
-  214 mm fill gauge. [Certain, `print_list.json` sizes]
+- **Height and bed size** [Certain, `print_list.json` sizes]:
+  - The gate posts are exported **standing upright, 229 mm tall: they need ≥ 230 mm of Z
+    height.** A Prusa MK3S (210 mm) or MK4 (220 mm) can't do that: there, lay each post on its
+    side with supports.
+  - The fill gauge is exported lying flat and is 214 mm long: it needs 214 mm in one direction
+    (or diagonally).
 - **PETG**, 0.4 mm nozzle, 0.2 mm layers. Prusa's PETG settings are 230 °C nozzle on the first
   layer and 240 °C after, with the bed at 85 °C then 90 °C, on a powder-coated or textured sheet.
   [Certain, Prusa knowledge base as quoted in search results] Use your filament maker's numbers if
@@ -364,39 +404,38 @@ and Amazon stores.
 
 ### 3.2 Parts
 
-STL files are in `cad/out/printed/`. Times are for a classic 0.2 mm printer (Prusa MK3-class,
-Ender 3) running about 5 mm³/s, estimated from each part's volume. Fast printers (Bambu, MK4) take
-roughly half. [Guessing]
+STL files are in `cad/out/printed/` (`print_list.json` has every size and note). Times are for a
+classic 0.2 mm printer (Prusa MK3-class, Ender 3) running about 5 mm³/s, estimated from each
+part's volume. Fast printers (Bambu, MK4) take roughly half. [Guessing]
 
 | STL | Qty | Material | Orientation | Walls / infill | Supports | Time |
 |---|---:|---|---|---|---|---:|
-| `phase0_base` | 1 | PLA/PETG black | as exported (plate down) | 3 / 25 % | none | 5 h |
-| `phase0_tray` | 1 | PLA/PETG | as exported | 3 / 25 % | none | 2 h |
-| `phase0_top` | 1 | PLA/PETG | as exported (ring up) | 3 / 25 % | none | 2 h |
-| `station_mount` | 1 | PETG black | as exported (base plate down) | 3 / 25 % | none; the cable slot bridges | 2.7 h |
-| `x_motor_mount` | 1 | PETG | as exported (foot down) | 5 / 40 % | none | 1.4 h |
-| `x_idler_mount` | 1 | PETG | as exported (foot down) | 5 / 40 % | none | 0.5 h |
-| `x_bracket` | 1 | PETG | as exported: flat plate down, belt-clamp tab up | 6 / 50 % | none | 3.7 h |
-| `z_motor_mount` | 1 | PETG | as exported: motor face down, tab up | 5 / 40 % | none | 1 h |
-| `z_plate` | 1 | PETG | as exported: carriage face down, nut shelf up | 6 / 50 % | none | 1.9 h |
-| `head_foot` | 1 | PETG | as exported | 5 / 40 % | none | 1.3 h |
-| `camera_bracket` | 1 | PETG matte black | as exported | 4 / 40 % | **yes**: under the ring and shelf; brim | 1.1 h |
-| `gate_post_L`, `gate_post_R` | 1 + 1 | PETG | **see note** | 4 / 30 % | see note | 1.7 h each |
+| `phase0_base` | 1 | PLA/PETG black | as exported (plate down) | 3 / 25 % | none | 6.5 h |
+| `phase0_tray` | 1 | PLA/PETG | as exported (ledges down) | 3 / 25 % | none | 2.8 h |
+| `phase0_top` | 1 | PLA/PETG | as exported (ring up) | 3 / 25 % | none | 3 h |
+| `head_foot` (Phase 0A, then the machine) | 1 | PETG | as exported | 5 / 40 % | none | 1.7 h |
+| `station_mount` | 1 | PETG black | as exported (base plate down) | 3 / 25 % | none; the ribbon slot bridges | 3 h |
+| `x_motor_mount` | 1 | PETG | as exported: beam face down | 5 / 40 % | none | 1.3 h |
+| `x_bumper_L` | 1 | PETG | as exported: beam face down | 4 / 40 % | none | 0.2 h |
+| `x_idler_mount` | 1 | PETG | as exported (foot down) | 5 / 40 % | none | 1 h |
+| `x_idler_slider` | 1 | PETG | as exported | 5 / 50 % | none | 0.3 h |
+| `x_bracket` | 1 | PETG | as exported: flat on its spine face | 6 / 50 % | none | 3.9 h |
+| `belt_clamp` | 2 | PETG | flat | 100 % | none | 0.1 h each |
+| `z_motor_mount` | 1 | PETG | as exported: motor face down, tab up | 5 / 40 % | none | 2.5 h |
+| `z_end_cap` | 1 | PETG | as exported (lips up) | 5 / 50 % | none | 0.5 h |
+| `z_plate` | 1 | PETG | as exported: carriage face down, nut shelf up | 6 / 50 % | none | 2.3 h |
+| `camera_bracket` | 1 | PETG matte black | as exported: shelf face down | 4 / 40 % | tree supports under the ring seat if your printer sags (it bridges about 30 mm between its 4 legs) | 0.9 h |
+| `gate_post_L`, `gate_post_R` | 1 + 1 | PETG | as exported: upright on the foot, 10 mm brim (needs 230 mm Z) | 4 / 30 % | none upright; on its side: supports | 2.2 h each |
 | `drill_template` | 1 | PETG (or PLA) | as exported (plate down) | 4 walls, 50 %, bosses solid | none | 3.6 h |
 | `awl_adapter` | 1 | PETG | as exported | 100 % | none | 0.2 h |
-| `fill_gauge` | 2 | PLA | **rotate to lie flat** (4 mm tall) | 3 / 20 % | none | 0.4 h each |
-| **Total** | | | | | | **≈ 31 h** (≈ 22 h without Phase 0) |
+| `fill_gauge` | 2 | PLA | as exported (lying flat) | 3 / 20 % | none | 0.6 h each |
+| **Total** | | | | | | **≈ 39 h** (≈ 26 h after the Phase 0 prints) |
 
 **Notes**
-- **Gate posts:** the exported orientation leaves the long bar floating 17 mm above the bed (the
-  foot hangs below it), so it needs supports along its whole length. [Certain, measured on the
-  STL] It's better to stand each post upright on its foot if your printer has ≥ 230 mm of Z
-  height. Use a 5 mm brim and slow down the last 50 mm. If you can't, print as exported with tree
-  supports from the build plate.
-- **Fill gauge:** exported standing on its 4 mm edge, as a thin fin. Lying flat it prints in a
-  third of the time and the notches still go through. [Certain, from the STL]
-- **`camera_bracket`:** it touches the bed with only 1.6 cm² and has 24 cm² of overhang. [Certain,
-  measured] Use a brim and supports.
+- **Gate posts:** slow down the last 50 mm of the upright print; a tall thin part wobbles. If your
+  printer is shorter than 230 mm, lay each post on its side with supports from the build plate.
+- **`camera_bracket`:** print it shelf face down, as exported; the LED ring seat hangs between four
+  legs and bridges about 30 mm. Use a brim.
 
 ![Printed parts](img/printed_parts.png)
 
@@ -407,8 +446,10 @@ Measure the real parts first, because the CAD guessed these [Guessing in the CAD
 | Part | CAD value | Fits into |
 |---|---|---|
 | ELP camera board hole pattern | 32 × 32 mm, M2 | `camera_bracket`, `phase0_top` |
+| ELP board-to-lens-front length (board underside to the lens holder front) | 20 mm (`HEAD_LENS_PROJ`) | `camera_bracket` shelf height; the `phase0_top` standoffs (§1.5) |
+| ELP lens-holder footprint | 16 mm square (a 25 mm window passes it) | `camera_bracket`, `phase0_top` |
 | Optical endstop board hole spacing | 19 mm, M3 self-tapping | `head_foot` sensor post |
-| Head LED ring OD/ID | seat 46–56 mm | `camera_bracket`, `phase0_top` |
+| Head LED ring OD/ID | 40 mm ring: seat bore 41 mm, lip 33 mm | `camera_bracket`, `phase0_top` |
 | Station LED ring OD/ID | seat 52–60 mm | `station_mount`, `phase0_base` |
 | Camera Module 3 holes | 21 × 12.5 mm, M2 | `station_mount`, `phase0_base` |
 
@@ -420,9 +461,9 @@ CadQuery), or drill new holes by hand.
 - **Clearance holes:** run a 3.4 mm drill through every M3 clearance hole and a 5.5 mm drill
   through every M5 hole by hand. Printed holes come out undersize. [Likely]
 - **`awl_adapter`:**
-  - **The insert hole is drawn 5.0 mm, too small for an M5 heat-set insert.** [Certain, CAD]
-    Drill it to the size your insert's maker gives (about 6.4 mm for common M5 inserts [Likely])
-    before you set the insert with the iron.
+  - The insert pocket is drawn **6.4 mm**, the size for common M5 heat-set inserts (for example
+    ruthex M5×9.5). [Certain, CAD; Likely for your insert] If your insert's maker gives another
+    size, drill to it before you set the insert with the iron.
   - Press a 3 mm hardened pin (or a 3 mm drill-bit shank, ground to a point) into the 3.1 mm
     bottom hole with a drop of CA glue.
   - The point must be on the cup axis within 0.3 mm. Spin the adapter on the buffer and watch the
@@ -431,10 +472,13 @@ CadQuery), or drill new holes by hand.
     the pad goes. [Guessing] If your buffer differs, make an equivalent: a sleeve that fits where
     the pad goes, carrying a 3 mm point on the axis.
 - **Test-fit before assembly:**
-  - each MGN12 carriage's four M3 screws through `x_bracket` and `z_plate`;
-  - the T8 nut in the `z_plate` shelf;
+  - each MGN12 carriage's four M3×8 screws through `x_bracket` and `z_plate` (counterbored);
+  - the T8 nut flange on the `z_plate` shelf, and its four M3×16 + nuts;
   - the M10 buffer body through `head_foot`;
-  - both LED rings in their seats.
+  - both LED rings in their seats;
+  - the `x_idler_slider` sliding between the `x_idler_mount` cheeks, its M3 nut in the slot;
+  - the M3 nuts in the `x_bracket` tab's nut traps, under the `belt_clamp` caps;
+  - an M3 set screw in each gate post (2.5 mm hole: let it form its own thread, or tap M3).
 
 ---
 
@@ -449,8 +493,9 @@ From `cad/out/cut_list.csv` [Certain]. Misumi cuts to ±0.5 mm with square ends 
 | 2040 | base rail, lying flat under the bed | 1416 | 2 |
 | 4040 | upright | 401 | 2 |
 | 4040 | X beam, on top of the uprights | 1416 | 1 |
-| 2040 | Z spine | 340 | 1 |
-| 2020 | head drop arm | 236 | 1 |
+| 2040 | Z spine, **both ends tapped M5** (the two centre bores) | 340 | 1 |
+| 2020 | head drop arm | 285 | 1 |
+| T8×8 lead screw | Z screw, measured from the motor face: cut the motor's 400 mm screw (§7.3) | 340 (311–356 works) | 1 |
 | 2020 | Phase 0 jig posts (not in `cut_list()`) | 312 | 2 |
 | 2020 | optional rear brace stock (§6.7) | 600 | 1 |
 | 8 mm hardwood dowel | guide rod | 236 | 82 |
@@ -483,32 +528,39 @@ beam sits **on top of** the uprights, flush with their outer faces.
 - two 4040 L brackets in the inside corner, on the upright's inner face and the beam's bottom
   face, one in each slot pair;
 - one flat L joining plate on the back face, across the upright and the beam.
-- **No brackets on the front faces.** The X rail ends only 18 mm from each upright (BOM.md open gap 1).
+- **No brackets on the front faces.** The X rail ends only 18 mm from each upright (BOM.md open gap 1),
+  and at the right end the `x_motor_mount` plate covers the beam's front face (§6.4).
 
 **Upright to back base rail (×2):**
 - The bed covers the base-rail top all round the notch, so an L bracket can't reach the rail
   directly.
 - Use two L brackets on the upright's **inner face**, sitting on top of the plywood.
-- Bolt each one down with an M5×30 screw through its foot, the 18 mm plywood and a T-nut in the
-  base rail's top slot (slots at Y = 117 and 137).
-  - Check that the screw pulls the bracket down hard before it bottoms in the slot. If it
-    bottoms, use M5×25.
+- Bolt each one down with an M5×30 screw and a washer through its foot, the 18 mm plywood and a
+  T-nut in the base rail's top slot (slots at Y = 117 and 137).
+  - **Test one on a rail offcut first:** the screw must pull the bracket down hard before it
+    bottoms in the slot. If it bottoms, add a second washer. Don't go to M5×25 here: with the
+    bracket foot it leaves only 1–2 mm of thread in the T-nut. [Likely]
 - The plywood then acts as part of the joint. Fit these after the bed (§5A).
 - If it still racks, end-tap the upright bottom M5 (4 corner holes) and bolt up through drilled
   holes in the base rail.
 
 **Bed to base rails:**
-- 16 × M5×30 into T-nuts, 8 per rail, in the rail's **outer** slot:
+- **16 × M5×25** with washers into T-nuts, 8 per rail, in the rail's **outer** slot. [Likely] An
+  M5×30 through 18 mm plywood leaves about 11 mm below the rail face, but the slot is only about
+  6 mm deep to the profile core, so it bottoms before it clamps the bed. **Test one on a rail
+  offcut before you drill the bed.**
   - front rail at Y = −77.5, which is 40 mm from the front edge;
   - back rail at Y = 137, which is 35 mm from the back edge.
 - Put the front-rail bolts on the cell wall lines (X = −4 + 92·k). That keeps them 16 mm clear of
   the nearest front rod hole and outside the pads. [Certain, CAD arithmetic]
-- **Feet:** four rubber feet into the base rails' bottom slots.
+- **Feet:** six rubber feet into the base rails' bottom slots, at both ends and at midspan
+  (X ≈ 640). Shim every foot to the bench: a free midspan sags 1–3 mm under a full load. [Certain,
+  CAD has the six; Guessing on the sag]
 
 ### 4.4 Assembly steps (4–6 h, with the instructor for squaring)
 
 1. Slide T-nuts into every slot you will need **before** you close any joint. Drop-in T-nuts can
-   be added later, but sliding ones can't. Count them per the BOM: about 122 M5 and 65 M3.
+   be added later, but sliding ones can't. Count them per the BOM: about 124 M5 and 65 M3.
 2. Lay both base rails on a flat bench, 194.5 mm apart centre to centre (Y = −67.5 and 127).
 3. Bed part A (§5A) goes on now, because the upright brackets bolt through it.
 4. Stand the uprights in the notches on the back rail. Brackets snug, not tight.
@@ -606,7 +658,11 @@ For each pocket the software:
 3. Moves to the right dimple. You swing the template on the left dimple until the right one is
    under the point, then **clamp the template** (two small clamps, or double-sided tape plus a
    clamp).
-4. Parks the head three pockets away and waits while you drill.
+4. Parks the head three pockets away and prints **which holes to drill** for this pocket.
+5. Waits until you type **`clear`** (drill and hands off the bed). Only then does the head move
+   on. `s` = this pocket is drilled, stop here; `q` (or no keyboard) = stop without recording it.
+   Every sideways move is slow (1500 mm/min), because the drill is right there. [Certain,
+   `ops.mark`]
 
 Drilling each hole:
 1. Hold the guide block on top of the template boss, hole over hole.
@@ -626,9 +682,12 @@ Order and the end pockets:
   drilled off, or X lost steps.
 - The station cell (7) needs no holes of its own: its side rods belong to pockets 6 and 7.
   [Certain]
-- Neighbouring cells share side holes. The template's side bosses simply re-enter holes already
-  drilled.
-- Break: `python -m slabscan mark --only 0,12` (or `--start N`) carries on.
+- Neighbouring cells share side holes. **Don't drill through the bosses over a neighbour's holes:**
+  `mark` tells you which side to skip. Each template is placed by its own dimples, a few tenths of
+  a mm off the neighbour's, so drilling those holes again would cut them oval and the dowels
+  would lean. [Certain, `ops.drill_instruction`]
+- Break: `python -m slabscan mark --start N` carries on **in the marking order** from pocket N, so
+  pockets 0 and 12 still come last. `--only 0,12` does just those.
 
 **5.7 Glue the rods** (2 h + 24 h cure).
 1. Put a drop of Titebond II in each hole and spread it with a cotton swab.
@@ -654,15 +713,20 @@ glue's full strength, or ream the hole and re-glue.
   - It has its own 3 mm base plate. Fix it with four #8 wood screws.
   - The camera ribbon exits toward the back.
   - Measure the station lens front height above the pad tops. It should be 23 ± 1 mm. If it
-    isn't, set `station_read_c = <your height> + 146.6` in `calibration.toml`. [Certain:
-    `STATION_READ_C = 23 + 140 + 6.6`]
+    isn't, set `station_read_c = <your height> + 148.6` in `calibration.toml`. [Certain:
+    `STATION_READ_C = 23 + 140 + 6.6 + 2`, the last 2 mm being the free cup's hang below its
+    calibrated height]
 - **Gate posts:**
   - Left post at X = −20 (laser), right post at X = 1300 (receiver), both on Y = 0. [Certain,
     `model.py`]
-  - **Put a 3 mm shim under each foot** (plywood or a printed plate). The CAD puts the foot at
-    pad-top height (Z 0), but the posts stand on the bare bed (Z −3). Without the shim the beam
-    sits at 211 mm, only 1 mm above the MAX line. [Certain, CAD]
-  - Fix each post with two wood screws.
+  - **They stand on the bare plywood, with no shim.** The CAD puts the barrel 217 mm above the
+    foot, so the beam lands at 214 mm above the pad top. [Certain, `model.gate_post`] A shim would
+    lift the beam to 217 mm, and a stack up to about 216 mm would then pass the overfill check.
+  - Fix each post with two wood screws through the slotted foot holes (they allow about ±9° of
+    yaw for aiming).
+  - Push the Class 2 laser into the left post's barrel hole and the receiver into the right one;
+    lock each with an M3 set screw. Stick a "LASER - do not stare into the beam - Class 2" label
+    on both posts.
   - Final beam alignment is in §12.5.
 
 ---
@@ -693,26 +757,38 @@ glue's full strength, or ream the hole and re-glue.
      into aluminium. [Likely]
 
 **6.3 Carriage and X bracket.**
-- Bolt `x_bracket` to the MGN12H carriage with 4 × M3×10 (20 × 20 mm pattern).
+- Bolt `x_bracket` to the MGN12H carriage with **4 × M3×8** in the counterbores (20 × 20 mm
+  pattern). Not M3×10: the carriage threads are only about 3.5 mm deep. [Likely]
 - The belt-clamp tab reaches back over the beam top.
 - The carriage must still roll freely end to end. If it binds near the ends, a screw head is
   touching.
 
-**6.4 Motor and idler.**
-- `x_motor_mount` goes on the beam top at the **right** end, motor axis at X = 1322: 4 × M5 into
-  the beam's two top slots.
-  - The motor sits behind the beam, its shaft pointing forward.
-  - The GT2 20T pulley goes on the shaft, and the grub screw must sit on the shaft's flat. Use
-    blue threadlocker.
-- `x_idler_mount` goes on the beam top at the **left** end, axle at X = −32. Toothed idler on an
-  M5×30 axle through the slotted cheeks. [Certain, CAD]
+**6.4 Motor, idler and end bumpers.** [Certain, CAD]
+- **`x_motor_mount`** is a face plate on the beam's **front** face at the **right** end (X 1292 …
+  1348): 4 × M5 into T-nuts in both front slots (M5×10 through the 5 mm plate, and an M5×20 with its
+  head sunk through the bumper block).
+  - The motor sits **in front of the plate, its shaft pointing back** over the beam top. Fix it
+    with 4 × M3×8 through the plate (heads on the beam side). A standard 24 mm shaft is long
+    enough: the pulley needs 22.5 mm. [Likely]
+  - The GT2 20T pulley goes on the shaft, teeth next to the plate, and the grub screw must sit on
+    the shaft's flat. Use blue threadlocker.
+  - The left end of this plate is the **right X hard stop** (the `x_bracket` lands on it at cup
+    X 1262).
+  - Because the plate covers the beam's front face here, the right upright gets back-face brackets
+    only (§4.3).
+- **`x_idler_mount`** goes on the beam top at the **left** end: 2 × M5×10 into T-nuts in the
+  **rear** top slot, at X −52 and −26. The toothed idler sits in the `x_idler_slider` between the
+  cheeks, on an M5×30 axle through the cheek slots and the slider. The M3×20 tension screw goes
+  through the end wall into the nut in the slider's bridge.
+- **`x_bumper_L`**, the left X hard stop: 1 × M5×20 (head sunk) into a T-nut in the beam's **lower
+  front** slot, its face at X −15, so the `x_bracket` lands on it at cup X 15.
 
 **6.5 Belt.**
-1. Route the GT2 belt as a closed loop in a vertical plane just above the beam top: around the
-   motor pulley and the idler.
-2. Clamp both ends in the `x_bracket` tab's split clamp, one end each side, teeth into the
-   clamp's grooves.
-3. The lower strand runs **2.6 mm above the beam top** and must not rub it anywhere. [Certain, CAD]
+1. Route the GT2 belt around the motor pulley and the idler in a vertical plane just above the
+   beam top. Both ends come back to the `x_bracket` tab on the upper strand.
+2. Lay each belt end **teeth down on the tab's GT2 rack** and press it with a printed `belt_clamp`
+   cap: 2 × M3×12 + nut per cap (the nuts sit in the traps under the tab).
+3. The lower strand runs **12.9 mm above the beam top** and must not rub it anywhere. [Certain, CAD]
 4. Check pulley and idler alignment: the belt runs centred on both flanges, and the lower strand
    sits at the same height above the beam at both ends.
 
@@ -725,7 +801,9 @@ empty] Use this as a starting point and check it works:
   - The strand should rise **13–23 mm**, which corresponds to 15–25 N.
   - The formula is T = F·L / (4·d), with L = 1.35 m, the pulley-to-idler distance. [Certain,
     statics]
-  - Tighten by pulling more belt through the clamp. Fine-tune with the idler's ±3 mm slot.
+  - Tighten by re-clamping one belt end one tooth further. Fine-tune with the M3 tension screw:
+    it pulls the idler slider toward −X (its axle travels −6 … +2 mm in the cheek slots). Then
+    tighten the M5 axle to lock the slider.
 - **Functional checks** (after §10):
   - no tooth skips on full-speed moves end to end;
   - homing repeats within 0.2 mm (FIRMWARE.md step 6);
@@ -752,9 +830,9 @@ midspan from the head's 127 mm overhang. [Guessing in DESIGN] Measure it once th
 
 **6.8 X home switch** (WIRING.md §7):
 - Mount it at the left end of the beam so it clicks when the cup axis is at **X ≈ 19 mm**, about
-  23 mm left of pocket 0's centre (± 3 mm).
-- Add a printed or rubber bumper as a hard stop at X ≈ 14. The carriage leaves its rail at 12.7.
-  [Certain, FIRMWARE.md]
+  23 mm left of pocket 0's centre, **± 2 mm**.
+- It must click at least 2 mm before the `x_bracket` reaches `x_bumper_L` at X 15 (§6.4). The
+  carriage still has 2.3 mm of rail at the bumper. [Certain, `checks.txt`]
 
 ---
 
@@ -769,9 +847,14 @@ All heights below are from `cad/layout.py` and `cad/model.py`. [Certain]
   slots (bracket holes at Z 340 and 365).
 - The spine sits **10 mm left of the cup axis**, so the Z rail in its right slot lands on the cup
   axis. (CONTRACT)
-- **Set the spine's bottom end 226 ± 1 mm above the pad top.** That's 229 above the bare
-  plywood; measure from a rod top + 8 if rods are in.
-  - The spine bottom sweeps over the rod tops with only 8 mm to spare. [Certain, `checks.txt`]
+- **Set the spine's bottom end 275 ± 1 mm above the pad top.** That's 278 above the bare plywood,
+  or 57 above a rod top if the rods are in.
+- **`z_end_cap`** goes under the spine's bottom end: 2 × M5×12 **button heads** up into the tapped
+  end bores (heads sunk). Its two lips sit under the Z carriage's skirts beside the rail: they are
+  the **Z bottom hard stop** at c = −14. [Certain, CAD]
+- The end cap's underside (267 mm above the pad) sweeps 49 mm over the rod tops, and everything
+  fixed to the X carriage stays at least 5 mm above a held slab even at the Z top hard stop.
+  [Certain, `checks.txt`]
 
 **7.2 Z rail.**
 - MGN12 330 mm in the spine's right slot, 13 × M3×10 into T-nuts. Its bottom is 1 mm above the
@@ -781,27 +864,34 @@ All heights below are from `cad/layout.py` and `cad/model.py`. [Certain]
   digital level at 0.1°. [Guessing target: the cup's position must not drift across its 250 mm of
   travel]
 
-**7.3 Z motor and nut.**
-- `z_motor_mount` on the spine top: 2 × M5 into the two slots.
-- NEMA17 with its integrated 400 mm T8×8 screw, screw pointing down (4 × M3×8).
-- `z_plate` on the Z carriage (4 × M3, 20 × 20).
-- The brass T8 nut sits on the plate's nut shelf (4 × M3×16 + nuts). Leave those screws loose.
-  Run the plate up and down the full travel by turning the screw by hand, then tighten. The nut
-  then centres itself.
+**7.3 Z motor, lead screw and nut.**
+1. **Cut the lead screw first: 340 mm below the motor's mounting face** (anything from 311 to
+   356 mm works). [Certain, CAD `Z_SCREW_LEN`] Left at 400 mm, its tip would end about 60 mm
+   lower, inside the path of every held slab: each lift would drive the slab's back into it.
+   - Wrap the cut point in tape, cut with a fine hacksaw, file the end square, and chamfer the
+     first thread so the brass nut starts cleanly. Run the nut over the cut end by hand.
+   - A screw sold as "350 mm" fits uncut if it measures 311–356 mm from the motor face.
+2. `z_motor_mount` sits **on the spine's top end face**: 2 × M5×16 into the tapped end bores,
+   plus 1 × M5×10 through its tab into a T-nut in the spine's **left** slot, 15 mm below the top.
+   The tab stays clear of the rail and the carriage.
+3. Motor **under** the mount, screw pointing down: 4 × M3×8 from below, heads in the
+   counterbores (the `z_plate` meets this face at the top hard stop).
+4. `z_plate` on the Z carriage: 4 × M3×8 in the counterbores (20 × 20 pattern). Not M3×10.
+5. The brass T8 nut: **flange on top of the shelf**, 4 × M3×16 + nuts through the four holes at
+   45°. Leave those screws loose, run the plate up and down the full travel by turning the screw by
+   hand, then tighten. The nut then centres itself. The screw runs 8 mm clear of the plate face.
 - **The screw must not whip or push the carriage sideways at any height.**
 
 **7.4 Z top switch** (WIRING.md §7):
 - On the spine top, hit by the Z plate.
-- It must click at c ≈ 258 mm: the cup face 258 above the pad top, ± 2 mm.
+- It must click at c ≈ 258 mm: the cup face 258 above the pad top, ± 2 mm. At that point the
+  `z_plate` top is still 4 mm below the `z_motor_mount`, which is the top hard stop at c = 262.
 
 **7.5 Drop arm, foot and cup.**
-1. **Drill the two 5.5 mm cross holes in the 2020 × 236 drop arm**, through the centres of two
-   opposite faces.
-   - **The CAD draws the arm 3 mm into the floor of `head_foot`'s socket** (arm from 62 mm, socket
-     floor at 65 mm above the cup face). Measured from an arm end that bottoms in the socket, the
-     holes are at **19 mm** (for `head_foot`) and **84 mm** (for `camera_bracket`), not the 22 and
-     87 the drawn arm suggests. [Certain, `model.py`: foot hole at 84, camera hole at 149, socket
-     floor at 65]
+1. **Drill the two 5.5 mm cross holes in the 2020 × 285 drop arm**, through the centres of two
+   opposite faces, **19 mm** (for `head_foot`) and **84 mm** (for `camera_bracket`) from the end
+   that goes into `head_foot`'s socket. The arm bottoms on the socket floor. [Certain, `model.py`:
+   arm from 65 mm, foot hole at 84, camera hole at 149 above the cup face]
    - **Match-drill the foot hole:** push `head_foot` onto the arm until it bottoms, clamp it
      square, and drill through the printed hole and the arm together on the drill press.
    - Then mark the second hole **65 mm above the first**, centre to centre, and drill it.
@@ -809,13 +899,15 @@ All heights below are from `cad/layout.py` and `cad/model.py`. [Certain]
 2. Fit `head_foot` with an M5×30 cross bolt and a nylock nut.
 3. **Spring buffer:** the M10×1 body goes through the foot's 10.4 mm hole, with a nut each side.
    Fit the cup pad (SMC ZP25UU) on the buffer.
-4. Bolt the arm to `z_plate` with 2 × M5×12 into T-nuts in the arm's slot. The arm can still slide.
+4. Bolt the arm to `z_plate` with **2 × M5×12 button heads** into T-nuts in the arm's slot, heads
+   in the plate's 2.5 mm recesses. A socket head doesn't fit: there are only 5 mm to the Z rail
+   face. The two bolts sit below and above the carriage block. The arm can still slide.
 5. **Set the height chain in this order** (buffer at rest, steel rule):
    1. With the camera bracket on (§7.7), move the buffer on its M10 nuts until the **head lens
       front is 140 ± 1 mm above the cup face**.
-   2. Then slide the arm in its T-nuts until **the Z carriage's bottom edge is 243 ± 2 mm above
-      the cup face**. [Certain, CONTRACT: with this the carriage stays on its rail down to
-      c = −12, and `calibrate z` lands in −4 … 0]
+   2. Then slide the arm in its T-nuts until **the Z carriage's bottom edge is 295 ± 2 mm above
+      the cup face**. [Certain, CONTRACT: with this the end cap stops the carriage at c = −14 while
+      it is still on its rail, and `calibrate z` lands in −4 … 0]
 6. Vacuum tube from the buffer's top port (M5 female, via an M5 push fitting). Leave **30 mm of
    slack**, because the rod rises up to 25 mm on contact. (WIRING.md §11)
 
@@ -834,9 +926,10 @@ pushed up.
   - its tip turns up into the slot's path.
 - **Clearance:** the tip must pass through the 3.1 mm gap with ≥ 0.5 mm to each arm over the full
   25 mm stroke.
-- **Rotation:** with the BOM's rotating ("J") buffer, the rod and flag can turn. Add a guide (a
-  slot in a printed tab on the foot that the flag rides in) or use the non-rotating "K" buffer
-  (§2).
+- **Rotation:** the BOM specifies the non-rotating ("K") buffer, so the rod and flag cannot turn.
+  If you could only get the rotating ("J") buffer, you must add a guide yourself: a slot in a tab
+  glued or screwed to the foot that the flag rides in, ≥ 0.5 mm clear each side. The CAD has none.
+  [Certain that the CAD has no guide]
 
 **Wiring:** fail-safe (WIRING.md §6). **At rest the slot must be clear**; contact pushes the flag
 in.
@@ -851,29 +944,50 @@ in.
    slots so the board can move, until it reads 1.5–2.5 mm.
 5. Push the cup through the full stroke. The flag must never touch the sensor, and OUT must stay
    high all the way up.
+6. **Write the measured trip travel into `config/calibration.toml`** (after §11):
+   `buffer_trip_mm = <your number>` and `buffer_trip_tol_mm = 0.1`. The software places the slow
+   part of the peel around that point, and a trip later than 2 mm also raises both travel heights
+   by the difference. [Certain, `config.py`, `runner._peel`] Re-measure it after any change to the
+   flag or the sensor.
 
 Re-check after any knock. `calibrate z` (§12.1) also checks it in software: the probe must trigger
 when you push the cup up by hand, and release when you let go.
 
 **7.7 Camera bracket and LED ring.**
-- `camera_bracket` clamps the arm with the second cross bolt.
+- `camera_bracket` clamps the arm with the second cross bolt (M5×30 + nylock).
 - **The head lens front is 140 ± 1 mm above the cup face.** [Certain, CAD `CAM_TO_SLAB`] That is
   the held slab's back. Set it with the buffer nuts (§7.5 step 5).
-- Fit the ELP board (4 × M2) and the LED ring in the ring seat around the lens.
+- Fit the ELP board on the shelf (4 × M2 + nuts) and the 40 mm LED ring in the ring seat around
+  the lens. The shelf height assumes a 20 mm board-to-lens-front length (§3.3).
 - The lens looks straight down on the cup axis.
 - Run the camera USB and the ring wires along the arm in clips every 50 mm (WIRING.md §11).
 
-**7.8 Z hold test** (FIRMWARE.md open issue 4, after §10):
-1. With the head at Z 240 and a 200 g weight hanging on the cup, press the E-stop.
-2. Watch for 1 minute.
+**7.8 Z hold test and Z lift test** (after §10; the lift test after §12.1)
+
+**Hold test** (FIRMWARE.md open issue 4):
+1. Put a 20–30 mm foam or wood block on the bed under the cup, and lower the cup to about 15 mm
+   above it. The back-drive torque is the same at any height, so a low test checks the same thing
+   and a fall costs nothing. Do the first trial before the camera is fitted.
+2. With a 200 g weight hanging on the cup, press the E-stop.
+3. Watch for 1 minute.
 - **Any creep means a friction brake or counterweight is needed before unattended use.**
   [Guessing in DESIGN: detent torque should hold]
+
+**Lift test** (the Z motor runs at about half its rated current and nothing detects a stall):
+1. One junk slab in pocket 1, pocket 0 empty, `calibrate z` done (§12.1).
+2. `python -m tools.bench_tests lifts 100`: it probes pocket 0's bare pad, does 100 full-height
+   lifts at full Z speed with the slab held, puts it back and probes the pad again without homing.
+3. **Pass: the two pad readings agree within 0.1 mm.**
+- **Fail:** Z lost steps. Set Z `max_rate_mm_per_min` in `config.yaml` and `feed_z` in
+  `calibration.toml` to 3000 and repeat. Check the motor is the specified 1.5–2.0 A, ≤ 4 mH type
+  (BOM) and that `run_amps` is 50–70 % of its rating.
 
 ---
 
 ## 8. Vacuum plumbing
 
-(2–3 h, most of it already done in Phase 0B)
+(2–3 h. Phase 0B used only the cup, buffer and tube; the pump, valves, reservoir and sensor are
+new here.)
 
 **8.1 Order of parts, from the pump to the cup** [Certain, BOM + `hw.py` + WIRING.md §5]:
 
@@ -914,13 +1028,27 @@ when you push the cup up by hand, and release when you let go.
 6. **Cup line:** cut the PU tube square with a knife and push it fully into every fitting until it
    bottoms, then tug it.
 
+**Why the reservoir sits on the pump side** [Certain, `hw.py`]: opening the vacuum valve onto a
+pre-evacuated reservoir seals the cup within the software's 0.4 s seal window. The cost: when the
+power goes (E-stop, mains), the closed valve cuts the reservoir off, and a held slab hangs only on
+the small cup line until it leaks down. §13.4 measures how long. **Only if §13.4 fails even with a
+tight line**, the alternative is to put the reservoir on the cup side (pump → check valve → Q2 →
+reservoir → sensor/vent tee → cup): the slab then hangs much longer on a power cut, but every vent
+and every seal has to empty or fill the reservoir. Then raise `vent_s`, `vent_timeout_s` and
+`vac_seal_timeout_s` (to about 2–3 s [Guessing]) in `calibration.toml`, re-run `selftest -i`, and
+re-time the cycle.
+
 **8.3 Leak test** [Certain for the selftest thresholds, Guessing for my tighter targets]
+
+Run it once §9 has wired the pump, the valves and the sensor. Until the gate posts are on (§5.9),
+put `overfill_gate = false` in `config/calibration.toml`, or selftest's `overfill beam` line
+fails; §12.5 removes it again.
 
 | Test | How | Pass |
 |---|---|---|
 | Seal | `python -m slabscan selftest -i`, press a slab on the cup | `seal` reaches −35 kPa |
-| Cup line holds | same run: the `leak` line (valves shut, pump off) | < 1 kPa/s (selftest's own pass is < 2.5) |
-| Vent | same run: the `vent` line | > −6 kPa after venting |
+| Cup line holds | same run: the `leak` line (valves shut, pump off) | < 1 kPa/s (selftest's own pass is < 2.5); the line also prints how long a slab would hang on the closed line |
+| Vent | same run: the `vent` line | back **within 1 kPa of atmosphere** after venting (selftest's own pass): at −5 kPa the cup still holds about 3× a slab's weight |
 | Reservoir holds | block the cup with a slab, pump down with the valve open, shut both valves, and watch `kpa` | holds −60 kPa for 60 s with the pump off (BOM.md valve test) |
 
 **Finding a leak:**
@@ -941,17 +1069,19 @@ Follow [WIRING.md](WIRING.md) section by section. The block diagram:
 
 **Order of work**
 1. **Panel** (1/4 in plywood behind the machine, Pi centred near X ≈ 690). It holds:
-   - the PSU;
+   - the PSU (terminal cover on) and the closed mains box with the IEC inlet;
    - the E-stop feed;
    - the Wago buses and fuse holders;
    - the Rodent;
    - the Pi;
    - the I/O board and the five MOSFET modules.
-2. **Mains:** inlet → PSU, and PE to the frame (WIRING.md §1.1, §12). **Instructor checks it
-   before the first plug-in.** Set the LRS-150's 115/230 V switch to your mains (115 V in the US).
-   [Certain, WIRING.md]
+2. **Mains:** the IEC inlet snaps into the ABS mains box, never into the plywood; insulated
+   receptacles on every tab; W2–W4 leave through the cable gland to the LRS; PE to the frame
+   (WIRING.md §1.1, §12). **Instructor checks it before the first plug-in: box closed, no exposed
+   mains metal anywhere with the cord plugged in.** Set the LRS-150's 115/230 V switch to your
+   mains (115 V in the US). [Certain, WIRING.md]
 3. **24 V side:**
-   - E-stop in the +24 V line;
+   - E-stop in the +24 V line, **both NC contact blocks in series** (WIRING.md §1.3);
    - fuses F1 5 A (Rodent), F2 3 A (pump/valves), F3 1 A (buck);
    - the 12 V buck.
 4. **Rodent:**
@@ -963,8 +1093,10 @@ Follow [WIRING.md](WIRING.md) section by section. The block diagram:
    - Z top switch (NC) → Z-MAX;
    - optical probe → **Y-MAX** (not the Probe connector).
    - All three are fail-safe: a cut wire reads as triggered. (CONTRACT)
-6. **Pi side:** MOSFET modules on GPIO 17/27/22/23/24, the I/O board (ADS1115 at 0x48 and the
-   sensor divider), and the laser gate on GPIO 5 with its 2.2 kΩ pull-up **at the receiver**.
+6. **Pi side:** MOSFET modules on GPIO 17/27/22/23/24, each with a 10 kΩ SIG-to-GND pull-down
+   unless you measured one already there (WIRING.md §4), the I/O board (ADS1115 at 0x48 and the
+   sensor divider), and the laser gate on GPIO 5 with its 2.2 kΩ pull-up **at the receiver**. The
+   laser is the ≤ 1 mW (Class 2) module, not the kit's KY-008 (WIRING.md §8).
 7. **Moving cables:** the drag chain (fixed end at the beam's top-back, X ≈ 640) and the Z service
    loop (WIRING.md §11). The 8-core cable's colours go in WIRING.md's table.
 8. **Strain relief and labels on both ends of every cable** (WIRING.md §13).
@@ -972,13 +1104,17 @@ Follow [WIRING.md](WIRING.md) section by section. The block diagram:
 **Crimping:** JST-XH and Dupont crimps with the proper tool (BOM.md tools). **Pull-test each one,
 and have the instructor look at the first ten.** Or buy pre-crimped leads.
 
-**Pre-power checklist:** do all 15 steps of WIRING.md §14 with a meter, mains unplugged. The ones
+**Pre-power checklist:** do every step of WIRING.md §14 with a meter, mains unplugged. The ones
 that bite:
+- **Mains box closed, nothing at mains voltage exposed.**
 - **24 V bus to the Pi 5 V pin: open.** 0 V bus to Pi GND: < 1 Ω.
-- **E-stop pressed:** PSU +V to the 24 V switched bus open.
+- **E-stop pressed:** PSU +V to the 24 V switched bus open, and each of the two contact blocks
+  opens it on its own.
+- **MOSFET SIG to GND ≈ 10 kΩ on all five modules.** Open = add the pull-down now: without it a
+  booting Pi can run the pump or open the vent.
 - **Motor coils** 1–4 Ω each, coil to coil open, and **Y and E empty**.
-- **Sense resistor value in `config.yaml` matches the board.** A 0.075 setting on a 22 mΩ board
-  gives 3.4× the motor current. [Certain, FIRMWARE.md]
+- **Sense resistor value in `config.yaml` matches the board.** The file ships with 0.022 (the
+  safe guess); change all four lines to 0.075 only if you read "R075". [Certain, FIRMWARE.md]
 
 **First power-up:** WIRING.md §15, in its order:
 1. Pi alone: I2C `48`, sensor ≈ 3.0 V at A0, gate ≈ 3 V clear and < 0.4 V blocked.
@@ -994,14 +1130,14 @@ that bite:
 
 | Step | What | The check that matters |
 |---|---|---|
-| 0 | Board set-up, power off | Resistor marking → `r_sense_ohms`. Jumpers 5V / 5V / NPN off / VUSB off / no DIAG. |
+| 0 | Board set-up, power off | Resistor marking → `r_sense_ohms` (ships 0.022; R075 → all four lines 0.075). Jumpers 5V / 5V / NPN off / VUSB off / no DIAG. |
 | 1 | Flash FluidNC v4.1.1+ (web installer) | The banner appears at 115200 baud |
 | 2 | Load `firmware/fluidnc/config.yaml` | Then `$WiFi/Mode=Off`. **Never `$CD=config.yaml`.** |
 | 3 | `$SS`, `$CD`, `?`, `$Limits` | No `ERR`; 4 drivers pass; Alarm until homed; nothing active at rest |
 | 4 | Motor direction, soft limits off for this test only | +X moves **right**, +Z moves **up**; 100 mm jog = 100 ± 0.5 mm |
 | 5 | Switches and probe, fail-safe rows | **Unplugging any switch or the probe must read as triggered.** If not, stop and fix it. |
-| 6 | First homing, hand on the E-stop (instructor present) | Z up first, then X left; `MPos:22.000,0.000,255.000`; repeat within 0.2 mm; cup over pocket 0 at X ≈ 42 ± 3 |
-| 7 | `G38.3` probe test over pocket 0 | Trips at about −2; spread < 0.1 mm; unplugged probe gives `ALARM:4` and no motion |
+| 6 | First homing, hand on the E-stop (instructor present) | Z up first, then X left; `MPos:22.000,0.000,255.000`; repeat within 0.2 mm; cup over pocket 0 at X ≈ 42 ± 2; motors below about 50 °C after 10 min holding |
+| 7 | `G38.3` probe test over pocket 0, and the probe hard limit | Trips at about −2; spread < 0.1 mm; unplugged probe gives `ALARM:4` and no motion; pushing the cup up during a slow upward `G1` gives the "Probe Hard Limit" alarm |
 
 Then do the Z hold test (§7.8) and the beam twist check (§6.7).
 
@@ -1044,18 +1180,24 @@ whenever `cad/layout.py` changes. It writes `config/machine.toml` and never touc
 `config/calibration.toml`. [Certain]
 
 **11.5 Your own settings** go in `config/calibration.toml`. It overrides `machine.toml`, and the
-calibrate commands write there too.
+calibrate commands write there too. A misspelt key is refused when the config loads.
 
 ```toml
 serial_port = "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0"   # stable name for the Rodent's CH340 (CONTRACT)
+psa_cert_digits = [8, 9]     # the PSA cert lengths Phase 0 saw (§1.8); another length becomes needs_review
+buffer_trip_mm = 2.0         # your measured trip travel (§7.6)
+buffer_trip_tol_mm = 0.1     # once it is measured
 # lid_switch = true          # only if you fitted the optional lid switch on GPIO 25
 # custom_regex = "..."       # only if Phase 0 found a prefix/suffix around the cert (one capture group)
+# cam_head: see §12.3 (the whole table must be given if you change any part of it)
 ```
 
 **11.6 Check everything:** `python -m slabscan selftest -i --motion`. It must end `SELFTEST PASSED`
-(exit code 0). The gate posts go on in §5.9, so keep `overfill_gate = false` from Phase 0B in
-`calibration.toml` until §12.5, or the `overfill beam` line fails. A `calibration` WARN is
-normal before §12.
+(exit code 0). With `-i` it offers to store the empty-cup vacuum reading as the sensor zero
+(`vac_baseline_kpa`): say yes with the cup empty. If you installed the boot service, stop it first
+(`sudo systemctl stop slabrail-web`): only one slabscan program may use the machine. The gate
+posts go on in §5.9, so keep `overfill_gate = false` (from §8.3) in `calibration.toml` until
+§12.5, or the `overfill beam` line fails. A `calibration` WARN is normal before §12.
 
 **11.7 Learn the commands on the simulator** before touching the machine:
 `python -m slabscan sim --slabs 330` and `python -m slabscan --sim web`.
@@ -1075,7 +1217,8 @@ python -m slabscan calibrate z
 What it does:
 1. Homes.
 2. Asks you to push the cup up by hand (the probe must trigger) and let go (it must release).
-3. Probes the bare pad of pocket 0 four times and writes `pad_trigger_c`.
+3. Probes the bare pad of pocket 0 four times and writes `pad_trigger_c`, and stores the
+   empty-cup vacuum zero.
 - Probing never goes below Z −7.5. [Certain, `ops.z_floor`]
 
 Pass:
@@ -1083,7 +1226,7 @@ Pass:
 - repeat spread < 0.1 mm (it warns above 0.3).
 
 If it is off:
-- **Outside −4 … 0:** re-check the 243 mm carriage-to-cup height (§7.5) before going on.
+- **Outside −4 … 0:** re-check the 295 mm carriage-to-cup height (§7.5) before going on.
 - **"No contact down to Z −7.0":** the head sits too high. (−7.0 = 255 − 250 − 12, the default
   `--extra-depth`; it is never lower than −7.5.)
 
@@ -1114,10 +1257,22 @@ Larger means the belt or a pulley grub screw slipped. Fix that, don't paper over
 python -m slabscan focus head
 ```
 
-- The cup comes down and rests on the slab: the same 140 mm as a held slab.
+- The cup comes down and rests on the slab: within about 2 mm of a held slab's distance.
 - Turn the M12 lens to the peak score and lock the nut.
 - The best frame is saved in `focus/`. Open it: the QR and barcode must look crisp, with no glare
   spot on the label.
+- **Check the head-camera crop.** The run crops every head frame to the pocket under the cup,
+  because the 3.6 mm lens also sees the neighbours' labels. The crop is computed from `cam_head`'s
+  `hfov_deg` (full field of view across the image width), `row_axis` (`"x"` if the image width
+  runs along the pocket row) and `lens_to_label_mm`. [Certain, `runner._head_roi`]
+  - Lay a ruler across the slab along the row and read the width the saved frame shows: hfov =
+    2 × atan(half that width ÷ 140 mm).
+  - If the image width does not run along the row, set `row_axis = "y"`.
+  - Put the whole table in `calibration.toml`, e.g.
+    `cam_head = { type = "usb", device = "auto", width = 3264, height = 2448, hfov_deg = 64.0, row_axis = "x", lens_to_label_mm = 140.0 }`.
+  - Too large an `hfov_deg` makes the crop too narrow and cuts the label off: every slab then
+    takes the slow station detour. Too small lets a neighbour's label in, which shows up as
+    `conflict` rows.
 
 **12.4 `focus station --save`.**
 
@@ -1126,7 +1281,7 @@ python -m slabscan focus station --save
 ```
 
 The machine picks the slab out of pocket 0 and holds it over the station camera at
-c = 169.6. It sweeps LensPosition, writes the sharpest value that decodes, then puts the slab
+c = 171.6 (the slab front hangs 140 mm above the lens). It sweeps LensPosition, writes the sharpest value that decodes, then puts the slab
 back.
 
 ![Station read](img/station_read.png)
@@ -1134,14 +1289,16 @@ back.
 **12.5 Overfill beam.**
 1. Measure the beam height at both ends and in the middle (a card held in the beam, then a ruler):
    **214 ± 1 mm above the pad top.** That is above the 210 MAX line and below the 218 rod tops.
-   [Certain, CONTRACT] Shim the posts (§5.9) if it's low.
+   [Certain, CONTRACT] The posts stand on the bare bed and need no shim (§5.9); only if it is more
+   than 1 mm low, shim under the foot, and if it is high, file the foot.
 2. Aim the laser dot at the centre of the receiver.
 3. With the room lights on, turn the receiver's trimmer until a hand in the beam reads blocked.
    (WIRING.md §8: non-modulated receivers can be fooled by room light.)
-4. If you added `overfill_gate = false` in Phase 0B, delete that line from `calibration.toml` now.
+4. If you added `overfill_gate = false` in §8.3, delete that line from `calibration.toml` now.
    Then `python -m slabscan selftest -i` → `overfill beam` PASS and `overfill beam blocked` PASS.
-5. Stand a `fill_gauge` in a pocket. Its top notch is the MAX line; the beam must pass just above
-   it.
+5. Stand a `fill_gauge` in a pocket's front finger gap, foot on the bed. The **underside of its top
+   bar** is the MAX line (the gauge marks it 3 mm low, because the bed is 3 mm below the pad top);
+   its top notch (198 mm) is not. The beam must pass about 3 mm above the gauge's top.
 
 **12.6 Check the whole set.** `python -m slabscan selftest -i --motion` → PASSED. Keep a copy of
 `config/calibration.toml` somewhere off the Pi.
@@ -1150,138 +1307,40 @@ back.
 
 ## 13. Acceptance tests before real slabs
 
-**Use junk slabs only:** cheap graded cards you can afford to scuff. Get 15–20, including at least
-one CGC, one BGS or TAG, one thick holder, and one old label if you can. **All six tests must pass
-before your inventory goes in.**
+**Use junk slabs only:** 15–20 cheap graded cards you can afford to scuff, including at least one
+CGC, one BGS or TAG (only if it measures ≤ 82.6 mm wide), one thick holder, and one old label if
+you can. **Take the lowest-value slabs from your own stock** and write off the ones the
+destructive tests use; buying 15–20 costs about $150–400 and is not in the BOM total (conditional
+line). **All tests must pass before your inventory goes in.**
 
-### 13.0 The bench test script
+**Destructive on purpose:** §13.3 drops two slabs (one onto the bare pad from about 240 mm).
+**May damage a slab:** §13.4 (a slab can fall from carry height when the vacuum leaks down) and
+§13.2 (that slab is the marking test). Use your least valuable slabs there.
+
+### 13.0 The bench test tool
 
 The CLI has no command to cycle the cup 300 times on one slab, drop a slab on purpose, or log the
-vacuum through an E-stop. Save this as `software/bench_tests.py`.
+vacuum through an E-stop. `software/tools/bench_tests.py` does, using the runner's own pick, carry
+and place code, so each cycle is a real one. Run it from `software/` with the venv active:
 
-- It uses the runner's own pick, carry and place code, so the cycle is a real one.
-- **[Certain] I ran `cycles`, `rest` and `powercut` against the simulator on 2026-10-22.** `drop`
-  correctly ends in the simulator's "dropped slab" crash, because the simulator treats any drop as
-  a fault.
-- **Not yet run on hardware.**
-- It uses private runner methods (`_home`, `_go`, `_probe`), so re-test it with `--sim` after any
-  software update.
-
-```python
-"""SlabRail bench tests (docs/BUILD_GUIDE.md section 13). Save as software/bench_tests.py and run it
-from software/ with the venv active. JUNK SLABS ONLY. Add --sim to try any test on the simulator first.
-
-  python bench_tests.py cycles 300            move the stack in pocket 1 to pocket 0 slab by slab, then back, 300 transfers
-  python bench_tests.py rest 24               cup sealed on the top slab of pocket 1 for 24 hours (re-sealed every 30 min)
-  python bench_tests.py drop 2                pick the top slab of pocket 1, carry it over pocket 2, vent: it DROPS
-  python bench_tests.py powercut 300          pick the top slab of pocket 1, hold it high, log the vacuum while you press the E-stop
-"""
-
-import argparse
-import time
-from pathlib import Path
-
-from slabscan.cli import DEFAULT_CONFIG
-from slabscan.config import load
-from slabscan.factory import open_hardware
-from slabscan.motion import ControllerLost
-from slabscan.results import BatchWriter
-from slabscan.runner import Runner, Stop
-
-
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("test", choices=["cycles", "rest", "drop", "powercut"])
-    ap.add_argument("n", type=float, help="cycles: transfers | rest: hours | drop: pocket to drop into | powercut: seconds to log")
-    ap.add_argument("--src", type=int, default=1, help="pocket the junk slabs start in (default 1)")
-    ap.add_argument("--sim", action="store_true", help="simulator instead of the machine")
-    a = ap.parse_args()
-    cfg = load(DEFAULT_CONFIG, DEFAULT_CONFIG.parent / "calibration.toml")
-    kw = {}
-    if a.sim:
-        from slabscan.simworld import SimSlab
-
-        kw["stacks"] = {**{p.index: [] for p in cfg.pockets}, a.src: [SimSlab(str(148069831 + 7919 * i), 6.6) for i in range(3)]}
-    hw = open_hardware(cfg, sim=a.sim, **kw)
-    w = BatchWriter(Path(cfg.out_dir), f"bench-{a.test}-" + time.strftime("%Y%m%d-%H%M%S"))
-    r = Runner(cfg, hw.motion, hw.vacuum, hw.lights, hw.head_cam, hw.station_cam, w, log=print)
-    vac, src = hw.vacuum, cfg.pocket(a.src)
-    try:
-        r._home()
-        if a.test == "cycles":
-            r.survey()  # pocket 0 and pocket 12 must be empty, like a real run
-            here, there, done = a.src, 0, 0
-            while done < a.n:
-                if not r.transfer(here, there):  # source empty: turn round
-                    here, there = there, here
-                    if not r.transfer(here, there):
-                        raise SystemExit("no slabs left to move (did they all go to the exception pocket?)")
-                done += 1
-            rows = w.rows
-            ok = sum(1 for x in rows if x.verdict.status == "ok")
-            print(f"{done} transfers, {ok} read ok, certs seen: {sorted({x.verdict.cert for x in rows if x.verdict.cert})}")
-            print(f"rows in {w.csv_path}. Put the slabs back by hand before a real run (pocket 0 must start empty).")
-        elif a.test == "rest":
-            top = r._find_top(src)
-            if top is None or top < cfg.t_min / 2:
-                raise SystemExit(f"pocket {src.index} is empty")
-            r._probe(r.c(top) + cfg.approach_gap, r.c(top) - 3.0)  # cup resting on the slab, buffer at its trip point
-            t_end = time.monotonic() + a.n * 3600
-            while True:
-                vac.hold()
-                time.sleep(2.0)
-                k = vac.kpa()
-                vac.close()  # pump off, both valves shut: the cup stays sealed
-                print(f"{time.strftime('%H:%M')}  sealed at {k:.0f} kPa")
-                left = t_end - time.monotonic()
-                if left <= 0:
-                    break
-                time.sleep(min(1800.0, left))
-                print(f"{time.strftime('%H:%M')}  {vac.kpa():.0f} kPa after waiting (leak check)")
-            vac.release()
-            r._z(r.c(cfg.c_safe_empty))
-            print("done: the cup is up. Inspect the slab under raking light before touching the contact spot.")
-        elif a.test == "drop":
-            over = cfg.pocket(int(a.n))
-            below = r._find_top(over) or 0.0
-            r.pick_top(src.index)
-            r._go(over.x, over.y)
-            input(f"The slab will DROP about {r.s(r.z) - 6.6 - below:.0f} mm into pocket {over.index}. Hands clear, press Enter ")
-            vac.release()
-            r.holding, r.held_from = False, None
-            r._z(r.c(cfg.c_safe_empty))
-            print("dropped. Inspect corners and faces of the dropped slab and the top slab below it.")
-        else:  # powercut
-            r.pick_top(src.index)
-            print(f"Holding a slab {r.s(r.z):.0f} mm above the pad over pocket {src.index}. PRESS THE E-STOP NOW. Logging for {a.n:.0f} s.")
-            t0, t_cut, lost = time.monotonic(), None, False
-            while time.monotonic() - t0 < a.n:
-                if not lost:
-                    try:
-                        hw.motion.status() if hasattr(hw.motion, "status") else None
-                    except ControllerLost:
-                        lost, t_cut = True, time.monotonic()
-                        print("controller gone (E-stop works). Watching the cup vacuum:")
-                k = vac.kpa()
-                since = f"{time.monotonic() - t_cut:5.0f} s after the cut" if t_cut else "before the cut"
-                print(f"  {since}: {k:6.1f} kPa")
-                if t_cut and k > -3.0:
-                    print("vacuum gone: the slab drops (or has dropped) here.")
-                    break
-                time.sleep(1.0)
-            print("Take the slab off by hand, release the E-stop, then `python -m slabscan home`.")
-    except (Stop, KeyboardInterrupt) as e:
-        print(f"stopped: {e}")
-        note = r.secure()
-        if note:
-            print(note)
-    finally:
-        hw.close()
-
-
-if __name__ == "__main__":
-    main()
+```bash
+python -m tools.bench_tests cycles 300     # 300 pick-read-place transfers between pocket 1 and pocket 0 (13.2)
+python -m tools.bench_tests rest 24        # cup sealed on the top slab of pocket 1 for 24 h, re-held whenever above -40 kPa (13.2)
+python -m tools.bench_tests lifts 100      # Z lift test (7.8)
+python -m tools.bench_tests drop 2         # DESTRUCTIVE: carry the top slab of pocket 1 over pocket 2 and vent (13.3)
+python -m tools.bench_tests powercut 300   # hold a slab at carry height and log the vacuum while you cut the power (13.4)
 ```
+
+- Add `--sim` to try any test on the simulator first. `tests/test_bench_tests.py` runs every
+  subcommand against the simulator. [Certain]
+- Every test runs inside the runner's own guard, like a real run: a planned stop or an
+  unexpected error (camera, controller ALARM) puts a held slab back or keeps the pump holding it
+  and asks you to take it; Ctrl-C halts the motors at once. It never ends with a slab hanging on
+  shut valves. [Certain, tested in the simulator]
+- `cycles` reads the same slab again and again, so the run's rule "a cert already in the batch is a
+  conflict" is switched off inside this tool only.
+- It uses private runner methods, so re-run `pytest tests/test_bench_tests.py` after any software
+  update. **Not yet run on hardware.**
 
 ### 13.1 Dry run: 100 cycles with 10 junk slabs
 
@@ -1293,12 +1352,14 @@ if __name__ == "__main__":
    and run again.
 4. Ten runs = 100 transfers.
 - Make one of the ten runs `--front-photo always`, so the station path gets exercised too.
-- If you have them, swap in the BGS/TAG and the old-label slab for two of the runs.
+- If you have them, swap in the BGS/TAG and the old-label slab for two of the runs. The old-label
+  (and any CGC) slab stops at the face-down check: check it, then `resume --face-down-ok`. That
+  is the expected behaviour; note how often it happens.
 
 **Pass:**
 - 100/100 transfers with no unexplained stop;
 - every PSA/CGC slab `ok` with the **right** cert (check `certs.txt` against your list);
-- BGS/TAG lands in pocket 12 as `other_grader`;
+- BGS/TAG lands in pocket 12 as `other_grader`, without rubbing on the rods;
 - `count check: every stack matches` in every summary;
 - no visible marks.
 - Note `mean cycle` from the summary: that's your real speed.
@@ -1309,15 +1370,22 @@ if __name__ == "__main__":
 
 1. Photograph the junk slab's back under raking light (§1.10).
 2. Put it in pocket 1, with pockets 0 and 12 empty.
-3. `python bench_tests.py cycles 300`. The slab ping-pongs between pockets 1 and 0, one full pick,
-   read and place each time. The CSV also gives you 300 reads of one cert.
-4. `python bench_tests.py rest 24`. The cup sits sealed on the same slab for 24 h, re-sealed every
-   30 min. The log also shows how fast the cup line leaks.
+3. `python -m tools.bench_tests cycles 300`. The slab ping-pongs between pockets 1 and 0, one full
+   pick, read and place each time. The CSV also gives you 300 reads of one cert.
+4. `python -m tools.bench_tests rest 24`. The cup sits sealed on the same slab for 24 h. The tool
+   reads the line every 5 s and re-holds it for 2 s (pump on, valve open) whenever it rises above
+   −40 kPa. At the end it prints the mean and minimum kPa, the % of time below −40 kPa, the
+   re-holds per hour and the pump duty.
 5. Inspect under the same raking light. Then wipe with a dry microfiber cloth and inspect again.
 
 **Pass:**
 - no ring, haze or residue after a dry wipe;
 - 300/300 reads `ok` with the same cert;
+- **zero "Probe Hard Limit" alarms in the 300 cycles.** Any alarm means the probe flag chatters at
+  the slot edge during the slow lift: add hysteresis to the sensor output (WIRING.md §6), or set
+  `probe_hard_limit: false` in `config.yaml`, and repeat;
+- the rest test prints `vacuum: PASS` (**mean ≤ −40 kPa over the 24 h**); otherwise the clamp was
+  not held and the marking result doesn't count: fix the leak (§8.3) and repeat;
 - the cup lip is undamaged.
 
 **Fail:** switch to the Schmalz HT1 cup (BOM conditional line), re-run `calibrate z`, and repeat.
@@ -1326,10 +1394,13 @@ if __name__ == "__main__":
 
 (30 min)
 
+**DESTRUCTIVE.**
+
 1. Pocket 1: two junk slabs. Pocket 2: a stack of about 10 junk slabs. Pocket 0: empty.
-2. `python bench_tests.py drop 2`. The script says how far the slab will fall (about 170 mm here).
-3. Put the dropped slab back in pocket 1. Then `python bench_tests.py drop 0`, onto the bare pad:
-   about 236 mm, the worst case. [Certain, DESIGN.md: ≤ 236 mm]
+2. `python -m tools.bench_tests drop 2`. The tool says how far the slab will fall (about 170 mm
+   here) and drops it only after you type `DROP`; anything else puts the slab back.
+3. Put the dropped slab back in pocket 1. Then `python -m tools.bench_tests drop 0`, onto the bare
+   pad: about 240 mm, the worst case. [Certain, DESIGN.md]
 
 **Inspect:** corners, edges, both faces, and the top slab of the stack it hit.
 
@@ -1344,12 +1415,18 @@ before going on: there is no config key for that yet, so it's a software change.
 
 (30 min, **instructor present for the first E-stop**)
 
+**May drop a junk slab from carry height onto the stack in pocket 1.**
+
 1. Pocket 1: three junk slabs.
-2. `python bench_tests.py powercut 300`. The machine lifts the top slab to carry height.
+2. `python -m tools.bench_tests powercut 300`. The machine lifts the top slab to carry height.
 3. **Press the E-stop.**
-   - The script logs the cup vacuum every second, using the Pi's own sensor (still powered).
+   - The tool logs the cup vacuum every second, using the Pi's own sensor (still powered).
+   - The E-stop also cut the pump, and the closed vacuum valve cuts the reservoir off (§8.2): only
+     the cup line holds the slab.
    - It stops logging when the vacuum rises above −3 kPa. The slab falls off at about −1.7 kPa.
      [Certain, arithmetic: 65 g over 78 % of a 25 mm cup]
+   - Release the E-stop: the pump comes back and holds the slab; type `vent` at the prompt with a
+     hand under it.
 4. Repeat two more ways:
    - **pull the Pi's USB-C power** with the controller on: the Pi's GPIOs stop driving, so the
      modules' 10 kΩ pull-downs must switch the pump off and let both valves close;
@@ -1365,7 +1442,8 @@ before going on: there is no config key for that yet, so it's a software change.
 **Fail cases:**
 - the pump keeps running when the Pi is unplugged: the 10 kΩ SIG pull-downs are missing (WIRING.md
   §4);
-- the slab drops in seconds: there's a leak in the cup line (§8.3).
+- the slab drops in seconds: there's a leak in the cup line (§8.3);
+- it drops in under 60 s with a tight line: see the cup-side reservoir option in §8.2.
 
 ### 13.5 Double-pick test
 
@@ -1375,17 +1453,21 @@ before going on: there is no config key for that yet, so it's a software change.
    between them, so they lift as one. The pair is about 13–14 mm thick.
 2. Put the pair on top of a 5-slab junk stack in pocket 1.
 3. `python -m slabscan run --name double`.
+4. Then the realistic case, **untaped pairs, repeated:** wipe two slabs clean, press them together
+   face to back, put the pair on top of pocket 1 and run again; do it 10 times. Count how many
+   come up as a double. [Guessing target: 0; the slow peel is meant to stop air-film doubles]
 
 **Pass:**
-- The pair is carried over the rods without touching. Carry height 243 mm is set so even a 15 mm
-  double clears the rods by 10 mm. [Certain, CONTRACT]
+- The pair is carried over the rods without touching. Carry height 248 mm is set so even a double
+  of two 11.5 mm thick holders clears the rods by 5 mm. [Certain, CAD]
 - The pair is placed without a stop.
-- The row shows `needs_review` with the note **`DOUBLE PICK: an unread slab is directly under this
-  one in pocket 0`**.
+- The read slab's row shows `needs_review` with the note **`DOUBLE PICK: an unread slab is directly
+  under this one in pocket 0`**, and the slab under it has its own `no_read` row whose note starts
+  `UNREAD:` (same `position`, `out_index` one lower) (OPERATING.md §5.4).
 - `count check` still matches.
+- No untaped pair comes up as a double (step 4).
 
-This is exactly what the simulator does with `sim --clingy-rate 0.15`. [Certain, run on
-2026-10-22] Note that the lower slab of the pair has **no row** in `certs.csv` (OPERATING.md §5.4).
+This is what the simulator does with `sim --clingy-rate 0.15`. [Certain]
 
 ### 13.6 Sensor-fault test: the machine must refuse to probe
 
@@ -1400,7 +1482,7 @@ documented in FIRMWARE.md]
 | `python -m slabscan selftest` | `[FAIL] probe: reads TRIGGERED at rest …` |
 | `python -m slabscan calibrate z` | refuses: "The probe reads TRIGGERED with the head at the top …" |
 | `python -m slabscan jog`, then `probe` | "Refused: the probe already reads TRIGGERED …" |
-| `python -m slabscan run`, with junk slabs loaded | It homes, goes to pocket 0 and drops to 216 mm, the start of the first probe window, which is above the MAX line where nothing can be. The first `G38.3` is then refused by FluidNC (`ALARM:4`) and the run stops with a `MotionError … ALARM:4` message. **No probe move happens.** [Certain, `runner._find_top`] |
+| `python -m slabscan run`, with junk slabs loaded | It homes and goes to pocket 0 at the empty travel height, where the first probe window starts. The first `G38.3` is refused by FluidNC (`ALARM:4`) and the run stops with an `Unexpected error: MotionError … ALARM:4 …` message. **No probe move happens.** [Certain, `runner._find_top`] |
 
 **B. Flag blocked from entering the slot** (tape it back), probe plugged in:
 - `run` → the survey of pocket 0 stops with **"Pocket 0: probe never touched anything (not even the
@@ -1412,19 +1494,16 @@ documented in FIRMWARE.md]
 **C. Cut the sensor's 5 V or cover its emitter:** same as A (FIRMWARE.md step 5's fail-safe rows).
 
 **Pass:**
-- no probe move in A or C: the cup never goes below 216 mm;
+- no probe move in A or C: the cup never goes below the empty travel height;
 - a clean stop in B.
 
 Plug back in and run `selftest -i`.
 
-**Known gap** [Certain, from code; reproduced in the simulator with a camera fault]:
-- An error that isn't a planned stop arrives **while a slab is in the cup**. Examples: an
-  `ALARM:4` during placement, or a camera that returns no frame.
-- The run then stops **without putting the slab back**: "The machine stopped without parking".
-- The pump and valves are left as they were, then shut when the program exits. The slab hangs
-  until the cup line leaks down.
-- Until the software sends these errors through its normal secure step, treat that message as
-  "catch the slab now" (OPERATING.md §8).
+**D. An unplanned error with a slab in the cup** (junk slabs): start a run, and while a slab is
+held at carry height, pull the head camera's USB plug. Expect "Unexpected error: … The slab that
+was in the cup was put back on top of pocket N". [Certain, `runner._guarded`; tested in the
+simulator] If the controller is in ALARM instead, nothing moves: the pump keeps holding the slab
+and the prompt asks you to take it.
 
 ### 13.7 Stop, E-stop and resume
 
@@ -1433,13 +1512,17 @@ Plug back in and run `selftest -i`.
 1. 20 junk slabs across pockets 1–4. Start a run from the web page.
 2. Press **Stop after this slab** mid-stack. Expect a park with nothing held, then **Resume**.
 3. Press the **E-stop** while a slab is being carried.
-   - Do what the message says: take the slab off, put it face-down on top of the pocket it names.
+   - The E-stop cut the pump too, so take the slab off **at once**, then put it face-down on top
+     of the pocket the message names.
    - Release the E-stop and resume. The machine reconnects and homes first.
-4. During a stop, take one slab off a stack and resume. It must refuse with "The stacks changed
+4. Press **Ctrl-C twice** (CLI run) while a slab is carried: the motors halt, nothing moves, the
+   prompt asks you to hold the slab and type `vent`. Put it back as told and resume.
+5. During a stop, take one slab off a stack and resume. It must refuse with "The stacks changed
    since the run stopped …". Put it back and resume.
 
 **Pass:**
-- every slab appears **exactly once** in `certs.csv` (no repeated `position`, no repeated cert);
+- every physical slab has **exactly one row** in `certs.csv`, and no cert repeats. (A double
+  pick's `UNREAD` row shares the `position` of the slab above it: that is the one allowed repeat.)
 - the count check matches.
 
 ### 13.8 Summary
@@ -1447,12 +1530,13 @@ Plug back in and run `selftest -i`.
 | Test | Pass criterion | Result |
 |---|---|---|
 | 13.1 Dry run | 100/100, all certs right, count check OK | |
-| 13.2 Marking | no mark after dry wipe; 300/300 reads | |
-| 13.3 Drop | no damage, lands in the pocket | |
+| 13.2 Marking | no mark after dry wipe; 300/300 reads; 0 probe hard-limit alarms; rest mean ≤ −40 kPa | |
+| 13.3 Drop (destructive) | no damage, lands in the pocket | |
 | 13.4 Power cut | holds ≥ 60 s in all three cases | |
-| 13.5 Double pick | flagged, carried clear, no crash | |
-| 13.6 Sensor fault | refuses to probe; clean stop | |
-| 13.7 Resume | every slab exactly once | |
+| 13.5 Double pick | flagged with an UNREAD row, carried clear, no crash; no untaped doubles | |
+| 13.6 Sensor fault | refuses to probe; clean stop; a slab is put back after an unplanned error | |
+| 13.7 Resume | every slab exactly one row | |
+| 7.8 Z lift | bare pad within 0.1 mm after 100 lifts | |
 
 ---
 
@@ -1461,6 +1545,9 @@ Plug back in and run `selftest -i`.
 1. **Start small:** 30 low-value slabs in one pocket.
    - Before loading, record their certs another way: a phone app, a hand scanner, or by typing.
    - Then you can check the machine against something independent.
+   - Slabs without a PSA back QR (older labels, CGC) stop the run at the face-down check: check
+     each one and `resume --face-down-ok`. Use `--all-face-down` only once you trust your own
+     loading.
 2. **Watch the whole run.**
    - Hand near the E-stop for the first ten cycles.
    - Listen for scraping (a rod touched) and watch each set-down.
@@ -1483,8 +1570,9 @@ Plug back in and run `selftest -i`.
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | `selftest`: probe reads TRIGGERED at rest | Cut wire, sensor unplugged, flag sitting in the slot, or a board with an LED circuit that holds the input | Check the flag is clear at rest; FIRMWARE.md step 5; WIRING.md §6 fallback (bare TCST2103) |
-| Probe never triggers when the cup is pushed | Flag misses the slot, a rotating buffer turned the flag away, or the sensor is mounted the wrong way round | §7.6; guide the flag or use the K buffer |
-| `calibrate z`: no contact down to Z −7.0 | Head sits too high: carriage-to-cup > 245 mm, or the Z switch is low | Re-set 243 ± 2 mm (§7.5), re-check the Z switch position (§7.4) |
+| Probe never triggers when the cup is pushed | Flag misses the slot, a rotating buffer turned the flag away, or the sensor is mounted the wrong way round | §7.6; use the K buffer or guide the flag |
+| "Probe Hard Limit" alarm during a run | The flag chatters at the slot edge during the slow lift, or something touched the cup during a lift or traverse | §13.2; hysteresis on the sensor output (WIRING.md §6); look for what touched the cup |
+| `calibrate z`: no contact down to Z −7.0 | Head sits too high: carriage-to-cup > 297 mm, or the Z switch is low | Re-set 295 ± 2 mm (§7.5), re-check the Z switch position (§7.4) |
 | `calibrate z`: spread > 0.3 mm | Loose cup or buffer nuts; pad not flat; flag loose | Tighten the M10 nuts; re-glue pad 0; tighten the flag |
 | `calibrate x`: error > 1.5 mm | Belt slipping, pulley grub screw loose, or the holes weren't drilled with `mark` | Grub screw on the flat with threadlocker; re-tension (§6.6) |
 | Positions drift during a run | Lost steps: belt too loose, X current too low, or carriage binding | Tension; roll the carriage by hand power-off; check `run_amps` |
@@ -1493,16 +1581,20 @@ Plug back in and run `selftest -i`.
 | Stop: "Vacuum lost in transit" | Leak, pump weak, slab knocked a rod | Leak test; watch the next carry; check rods near that pocket |
 | Stop: "taller than expected" on a pocket you didn't touch | A slab sitting crooked on a rod; double-placed slab | Seat the slab flat; resume |
 | Stop: "contact … above the stack - something is in the way" | Slab crooked in the output pocket, or a rod leaning in | Fix the slab; slab drop test on that pocket (§5.8) |
-| Head camera vanishes or errors mid-run | USB extension through the drag chain (about 4 m) | Re-seat; check bend radius ≥ 40 mm; drag-chain-rated USB cable (BOM note). **A slab may be hanging: §13.6 known gap.** |
+| Head camera vanishes or errors mid-run | USB extension through the drag chain (about 4 m) | Re-seat; check bend radius ≥ 40 mm; drag-chain-rated USB cable (BOM note). The run puts a held slab back ("Unexpected error: …"). |
+| Every slab goes to the station camera ("confirmed by OCR", slow runs) | The head crop cuts the label off: `cam_head.hfov_deg` or `row_axis` is wrong | §12.3 crop check |
+| The run stops at every older-label or CGC slab | The face-down check: they have no PSA back QR | Expected. `resume --face-down-ok` per slab, or `run --all-face-down` for stacks you checked |
+| "Another slabscan process is using the machine" | The boot web service, or a command in another window | `sudo systemctl stop slabrail-web`, or close the other window |
 | Station camera not found | Ribbon backwards or not latched; wrong port | Power off, re-seat per the Raspberry Pi camera guide, CAM/DISP 0 |
 | Labels read on the bench but fail on the machine | Focus moved; ring not on; glare from room lights | `focus head` / `focus station --save`; fit the light roof |
 | Many `needs_review` "ITF only; padding vs check digit not learned yet" | Not enough slabs yet where QR and ITF both read | Normal on the first batches; it learns from 3 agreeing slabs |
 | Overfill beam reads blocked with nothing there | Misaligned laser, receiver trimmer, a receiver wire cut (reads blocked by design) | §12.5; WIRING.md §8 |
 | Overfill beam reads clear when blocked | Room light swamps the receiver, or its GND wire is cut | Trimmer under room light; check the GND wire; light roof |
 | Controller lost (E-stop) and resume says "still not answering" | The CH340 is slow to come back | Wait 10 s and press resume again; check the USB cable and the 24 V supply |
-| Motors hot (> 60 °C) | `r_sense_ohms` doesn't match the board | Power off. FIRMWARE.md step 0. |
+| Motors hot (> 50 °C) | `r_sense_ohms` doesn't match the board, or the current is above 70 % of the motor's rating | Power off. FIRMWARE.md step 0. |
+| Z position drifts after many lifts | Z stalls: motor too weak at 0.8 A / 6000 mm/min, or a high-impedance motor | §7.8 lift test; lower Z speed to 3000 |
 | Z drops when the E-stop is pressed | Detent torque too low with the head's weight | Brake or counterweight before unattended use (§7.8) |
-| Scraping as the head crosses the row | Spine bottom below 226 mm, a tall rod, a loose cable loop | §7.1 height; trim that rod; re-tie the Z loop (WIRING.md §11) |
+| Scraping as the head crosses the row | Spine bottom below 275 mm, an uncut lead screw, a tall rod, a loose cable loop | §7.1 height; §7.3 screw length; trim that rod; re-tie the Z loop (WIRING.md §11) |
 | `run` says calibration missing | `calibration.toml` lacks `pad_trigger_c` / `offset_x` | §12.1–12.2 |
 
 ---
