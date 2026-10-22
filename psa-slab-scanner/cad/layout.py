@@ -63,6 +63,7 @@ X_HARD_STOP = (15.0, 1262.0)  # cup X where the x_bracket meets the left / right
 HEAD_ENVELOPE = (70.0, 116.0)  # X, Y footprint of everything below C+POST_H; must fit in a pocket
 PROBE_WINDOW = 12.0  # max probing travel past predicted contact (< buffer stroke 25)
 BUFFER_STROKE = 25.0
+PROBE_TRIP_TOL = 0.5  # the flag may trip within CUP_HANG +/- this (BUILD_GUIDE 7.6; = software buffer_trip_tol_mm default)
 Y_ROW = 0.0  # pocket row centre line = cup Y
 
 
@@ -188,6 +189,10 @@ def check() -> list[str]:
         problems.append("rods too close to pocket corners")
     if PROBE_WINDOW >= BUFFER_STROKE:
         problems.append("probe window must be shorter than buffer stroke")
+    if CUP_HANG - PROBE_TRIP_TOL < 1.0:
+        problems.append("the probe flag must sit >= 1 mm of buffer travel below the beam at rest, or a bump trips it")
+    if CUP_HANG + PROBE_TRIP_TOL + PROBE_WINDOW > BUFFER_STROKE - 5:
+        problems.append("a late trip plus the probe window leaves < 5 mm of buffer stroke")
     if C_MAX < C_SAFE_LOADED:
         problems.append("Z travel cannot lift a slab clear of the rods")
     if C_SAFE_LOADED - CUP_HANG - 2 * SLAB_T_THICK_MAX < POST_H + CARRY_CLEAR:
