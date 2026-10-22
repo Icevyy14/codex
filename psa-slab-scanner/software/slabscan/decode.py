@@ -98,6 +98,8 @@ def _padded_tiles(gray: np.ndarray) -> list[np.ndarray]:
 
 
 _OCR_TOKEN_RE = re.compile(r"\d{8,10}")
+OCR_MIN_STD = 8.0  # grey-level spread below this = nothing printed in view (blank label back, empty frame)
+OCR_TIMEOUT_S = 30.0  # tesseract on a noisy frame can run for minutes; a real label takes ~4 s on a PC, more on a Pi
 
 
 def ocr_available() -> bool:
@@ -118,10 +120,17 @@ def ocr_digits(gray: np.ndarray, camera: str = "") -> list[CodeRead]:
     """
     if not ocr_available():
         return []
+    if float(np.std(gray)) < OCR_MIN_STD:
+        # Otsu would turn pure sensor noise into thousands of specks, and tesseract --psm 11 then
+        # takes minutes (measured: 100 s for one blank 900x1800 frame) to find nothing.
+        return []
     import pytesseract
 
     _, bw = cv2.threshold(_clahe.apply(gray), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    text = pytesseract.image_to_string(bw, config="--psm 11 -c tessedit_char_whitelist=0123456789")
+    try:
+        text = pytesseract.image_to_string(bw, config="--psm 11 -c tessedit_char_whitelist=0123456789", timeout=OCR_TIMEOUT_S)
+    except RuntimeError:  # pytesseract raises RuntimeError on timeout
+        return []
     tokens = sorted(set(_OCR_TOKEN_RE.findall(text)), key=len, reverse=True)
     out = []
     for t in tokens[:1]:

@@ -35,20 +35,56 @@ class Pose:
 class GcodeMachine:
     """Blocking, line-by-line G-code sender (one command, wait for 'ok')."""
 
-    def __init__(self, port: str, baud: int = 115200, timeout_s: float = 60.0):
+    LOST = ("Lost the controller: its USB serial port went away. The E-stop cuts the controller's power, so this "
+            "usually means the E-stop was pressed (or the USB cable came out). Release it, then home again and resume.")
+
+    def __init__(self, port: str, baud: int = 115200, timeout_s: float = 60.0, boot_s: float = 8.0):
         import serial  # pyserial
 
+        self._serial_errors = (serial.SerialException, OSError)
         self.ser = serial.Serial(port, baud, timeout=0.2)
         self.timeout_s = timeout_s
-        time.sleep(2.0)  # ESP32 resets when the port opens
+        self.banner = ""
+        # Opening the port resets the ESP32 (CH340 auto-reset). Wait for FluidNC's start-up banner
+        # instead of a fixed sleep: boot time varies with the config and the WiFi/BT setup.
+        deadline = time.monotonic() + boot_s
+        while time.monotonic() < deadline:
+            line = self._readline()
+            if "Grbl" in line or "FluidNC" in line:
+                self.banner = line
+                time.sleep(0.3)  # the rest of the boot messages
+                break
         self.ser.reset_input_buffer()
-        self.send("$X")  # clear alarm lock after reset (homing still required)
+        for attempt in range(5):  # clear the alarm lock after reset (homing is still required)
+            try:
+                self._send("$X", timeout_s=3.0)
+                break
+            except MotionError:
+                if attempt == 4:
+                    raise MotionError(f"controller on {port} does not answer $X (is FluidNC running? baud {baud}?)")
+                time.sleep(1.0)
 
     def _readline(self) -> str:
-        return self.ser.readline().decode("ascii", "replace").strip()
+        try:
+            return self.ser.readline().decode("ascii", "replace").strip()
+        except self._serial_errors as e:
+            raise MotionError(f"{self.LOST} ({e})") from e
+
+    def _write(self, data: bytes) -> None:
+        try:
+            self.ser.write(data)
+        except self._serial_errors as e:
+            raise MotionError(f"{self.LOST} ({e})") from e
+
+    def _send(self, line: str, timeout_s: float) -> list[str]:
+        old, self.timeout_s = self.timeout_s, timeout_s
+        try:
+            return self.send(line)
+        finally:
+            self.timeout_s = old
 
     def send(self, line: str) -> list[str]:
-        self.ser.write((line.strip() + "\n").encode("ascii"))
+        self._write((line.strip() + "\n").encode("ascii"))
         deadline = time.monotonic() + self.timeout_s
         replies: list[str] = []
         while time.monotonic() < deadline:
@@ -64,7 +100,7 @@ class GcodeMachine:
 
     def status(self) -> tuple[str, Pose]:
         """(state, machine position). A WPos report is converted with the G54 offset."""
-        self.ser.write(b"?")
+        self._write(b"?")
         deadline = time.monotonic() + 2.0
         while time.monotonic() < deadline:
             line = self._readline()
@@ -104,8 +140,14 @@ class GcodeMachine:
         raise MotionError("timeout waiting for Idle")
 
     def home(self) -> None:
-        self.send("$H")
-        self.wait_idle()
+        # Z (263 mm at 1500 mm/min seek) then X (1231 mm at 3000 mm/min) is ~40 s before the slow
+        # second touches; allow well beyond that so a long first homing is not reported as a failure.
+        old, self.timeout_s = self.timeout_s, max(self.timeout_s, 180.0)
+        try:
+            self.send("$H")
+            self.wait_idle()
+        finally:
+            self.timeout_s = old
         self.send("G90")  # absolute
         self.send("G21")  # mm
         self.send("G54")

@@ -47,12 +47,12 @@
     "part": "z_motor_mount",
     "qty": 1,
     "size_mm": [
-      69.0,
+      79.0,
       48.0,
       35.0
     ],
-    "volume_cm3": 16.8,
-    "note": "PETG, 5 walls, 40% infill"
+    "volume_cm3": 16.9,
+    "note": "PETG, motor face down, tab up, 5 walls, 40% infill"
   },
   {
     "part": "z_plate",
@@ -63,7 +63,7 @@
       23.0
     ],
     "volume_cm3": 35.5,
-    "note": "PETG, print flat, 6 walls, 50% infill"
+    "note": "PETG, carriage face down, nut shelf up, 6 walls, 50% infill"
   },
   {
     "part": "head_foot",
@@ -119,6 +119,39 @@
     ],
     "volume_cm3": 64.4,
     "note": "PLA/PETG, 0.2 mm, 100% infill bosses (build tool)"
+  },
+  {
+    "part": "phase0_base",
+    "qty": 1,
+    "size_mm": [
+      170.0,
+      130.0,
+      24.0
+    ],
+    "volume_cm3": 118.3,
+    "note": "PLA/PETG black (Phase 0 test jig)"
+  },
+  {
+    "part": "phase0_tray",
+    "qty": 1,
+    "size_mm": [
+      154.0,
+      151.0,
+      20.0
+    ],
+    "volume_cm3": 45.2,
+    "note": "PLA/PETG (Phase 0 test jig)"
+  },
+  {
+    "part": "phase0_top",
+    "qty": 1,
+    "size_mm": [
+      154.0,
+      56.0,
+      16.0
+    ],
+    "volume_cm3": 59.6,
+    "note": "PLA/PETG (Phase 0 test jig), ring up"
   },
   {
     "part": "awl_adapter",

@@ -55,10 +55,13 @@ def test_stop_then_resume_from_the_page(tmp_path):
     assert c.post("/api/stop", headers=H).status_code == 200
     s = _wait(c)
     assert s["state"] == "stopped" and "Stopped on request" in s["message"]
-    assert c.post("/api/start", json={}, headers=H).status_code == 200 or True  # a new start is allowed after a stop
-    _wait(c)
     b = {x["id"]: x for x in c.get("/api/batches").get_json()}
-    assert b[bid]["resumable"] and b[bid]["stopped"]
+    assert b[bid]["resumable"] and "Stopped on request" in b[bid]["stopped"]
+    time.sleep(1.1)  # batch ids have 1 s resolution
+    r = c.post("/api/start", json={}, headers=H)  # a fresh start is allowed after a stop (new simulated load)
+    assert r.status_code == 200 and r.get_json()["batch_id"] != bid
+    assert c.post("/api/start", json={}, headers=H).status_code == 409  # but not while one is running
+    assert _wait(c)["state"] == "finished"
 
 
 def test_resume_continues_the_same_simulated_bed(tmp_path):

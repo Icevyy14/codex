@@ -1,0 +1,7 @@
+# Development / test machine (any PC, no hardware): everything, from pip.
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+#   .venv/bin/python -m pytest -q tests
+-r requirements.txt
+numpy>=1.24
+opencv-python-headless>=4.6
+pytest>=7

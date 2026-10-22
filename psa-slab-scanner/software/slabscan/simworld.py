@@ -18,6 +18,7 @@ from .sim import Degrade, slab_view
 
 BUFFER_STROKE = 25.0
 TRIGGER_COMPRESSION = 2.0  # buffer compression at which the optical sensor trips
+HEAD_SIDE_CLEAR = 7.0  # (pocket 84 - head envelope 70) / 2: an empty head may shift this far inside a pocket below the rod tops
 
 
 class Crash(Exception):
@@ -83,6 +84,11 @@ class SimWorld:
     def check_xy_path(self, x1, y1):
         lp = self.lowest_point()
         if lp < self.cfg.post_h + 5:
+            # only an empty head may shift a few mm inside one pocket (jog / calibration); a held slab has 1.85 mm of play
+            p = self.pocket_at(self.x, self.y, tol=HEAD_SIDE_CLEAR)
+            if (not self.held and p is not None and abs(p.x - x1) <= HEAD_SIDE_CLEAR and abs(p.y - y1) <= HEAD_SIDE_CLEAR
+                    and lp >= self.stack_top(p.index) + 0.5):
+                return
             raise Crash(f"XY move from ({self.x:.0f},{self.y:.0f}) to ({x1:.0f},{y1:.0f}) with lowest point at {lp:.1f} mm (rods are {self.cfg.post_h:.0f})")
         tallest = max((self.stack_top(i) for i in self.stacks), default=0.0)
         if lp < tallest + 5:

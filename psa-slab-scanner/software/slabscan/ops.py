@@ -174,6 +174,10 @@ class Jogger:
 
     # moves
     def move_x(self, x_to: float, feed: float | None = None) -> bool:
+        lo, hi = self.cfg.x_travel
+        if not lo <= x_to <= hi:
+            self.con.say(f"X {x_to:.2f} is outside the travel the controller allows ({lo:g} .. {hi:g}); going to the end instead")
+            x_to = min(max(x_to, lo), hi)
         reason = self.check_xy(x_to)
         if reason:
             self.con.say(reason)
@@ -186,6 +190,9 @@ class Jogger:
     def move_z(self, z_to: float) -> float | None:
         """Up = plain move. Down = probe move. Returns the contact Z if it touched."""
         z_to = min(z_to, self.top())
+        if z_to < self.cfg.z_min + 0.5:
+            self.con.say(f"Z {z_to:.2f} is below the lowest Z the controller allows ({self.cfg.z_min:g}); stopping at {self.cfg.z_min + 0.5:g}")
+            z_to = self.cfg.z_min + 0.5
         if z_to >= self.z:
             self.m.move(self.cfg.feed_z, z=z_to)
             self.m.wait_idle()
@@ -332,7 +339,7 @@ class Jogger:
 
 
 # ---------------------------------------------------------------------- calibrate z
-def calibrate_z(cfg: Config, hw, con: Console, cal_path: Path, yes: bool = False, extra_depth: float = 15.0) -> dict:
+def calibrate_z(cfg: Config, hw, con: Console, cal_path: Path, yes: bool = False, extra_depth: float = 12.0) -> dict:
     """Probe the bare pad of pocket 0 from the top of Z travel -> pad_trigger_c (and c_max if travel is short)."""
     m, vac = hw.motion, hw.vacuum
     con.say("calibrate z: pocket 0 must be EMPTY (bare pad). The cup (not the awl) must be fitted.")
@@ -354,14 +361,14 @@ def calibrate_z(cfg: Config, hw, con: Console, cal_path: Path, yes: bool = False
     p0 = cfg.pocket(0)
     m.move(cfg.feed_xy, x=machine_x(cfg, p0.x, p0.y))
     m.wait_idle()
-    floor = z_top - cfg.c_max - extra_depth
+    floor = max(z_top - cfg.c_max - extra_depth, cfg.z_min + 0.5)  # never ask for a target past the Z soft limit
     con.say(f"probing down from Z {z_top:.1f} to at most Z {floor:.1f} at {cfg.feed_probe:.0f} mm/min (first time: keep a hand near the e-stop)")
     hit = walk_down(m, z_top, floor, cfg.probe_window, cfg.feed_probe, vac, cfg.vac_seal_kpa)
     if hit is None:
         m.move(cfg.feed_z, z=z_top)
         m.wait_idle()
         raise CalError(f"No contact down to Z {floor:.1f}. Either the head sits higher than the CAD (check the Z home switch and the "
-                       f"head foot), or the sensor is not working. Rerun with --extra-depth 30 only after checking.")
+                       f"head foot: the cup face must reach the pad before Z {cfg.z_min:g}, the controller's lower limit), or the sensor is not working.")
     hits = []
     for _ in range(3):
         m.move(cfg.feed_z, z=hit + 5)
@@ -457,15 +464,31 @@ def mark_positions(cfg: Config) -> list[dict]:
     return out
 
 
-def mark(cfg: Config, hw, con: Console, start: int = 0) -> list[int]:
+def mark_order(cfg: Config, start: int = 0, only: list[int] | None = None) -> list[dict]:
+    """Pockets to mark, in order: those whose two dimples are both inside the X travel first, then the
+    end pockets (one dimple is past the travel limit), so their neighbour's shared holes exist by then."""
+    lo, hi = cfg.x_travel
+    rows = [r for r in mark_positions(cfg) if (only is None and r["pocket"] >= start) or (only is not None and r["pocket"] in only)]
+    for r in rows:
+        r["reach"] = [k for k in ("left", "right") if lo <= r[k] <= hi]
+    return [r for r in rows if len(r["reach"]) == 2] + [r for r in rows if len(r["reach"]) < 2]
+
+
+def mark(cfg: Config, hw, con: Console, start: int = 0, only: list[int] | None = None) -> list[int]:
     """Walk the awl over every pocket so the printed drill_template is aligned to the machine's own X axis:
     the awl drops into the template's left dimple, then its right dimple (centre +/- 40 mm), the operator
     clamps the template and drills the 8 rod holes. Holes drilled this way sit exactly where the machine
-    thinks the pockets are, whatever the belt or switch position."""
+    thinks the pockets are, whatever the belt or switch position.
+
+    Pocket 0's left dimple and pocket 12's right dimple are outside the X travel. Those two pockets are
+    done last: two 8 mm pins through the template's shared-side holes into the neighbour's holes set it,
+    and the one reachable dimple checks it."""
     allpos = mark_positions(cfg)
-    rows = [r for r in allpos if r["pocket"] >= start]
+    rows = mark_order(cfg, start, only)
     con.say("mark: for drilling the rod holes. The bed must have NO rods and nothing taller than the template on it -\n"
-            "the awl moves sideways just above the template. Fit the awl adapter in place of the cup.")
+            "the awl moves sideways just above the template. Fit the awl adapter in place of the cup; set its pin so\n"
+            "the point is level with where the cup face was (within 2 mm).")
+    con.say("order: " + ", ".join(str(r["pocket"]) for r in rows))
     if not con.confirm("The bed has no rods and the awl is fitted?"):
         raise CalError("cancelled")
     m = hw.motion
@@ -473,38 +496,59 @@ def mark(cfg: Config, hw, con: Console, start: int = 0) -> list[int]:
     jog = Jogger(cfg, m, con, rods=False)
     z_touch = None
     done: list[int] = []
+    lowest = cfg.z_min + 0.5
+
+    def touch(what: str) -> float:
+        floor = max(lowest, (z_touch - 4.0) if z_touch is not None else cfg.pad_trigger_c - 6.0)
+        if z_touch is not None and jog.move_z(z_touch + 15.0) is not None:
+            raise CalError(f"The awl touched something 15 mm above the template. Clear the bed and run `mark --start {r['pocket']}`.")
+        hit = walk_down(m, jog.z, floor, cfg.probe_window, cfg.feed_probe)
+        jog.refresh()
+        if hit is None:
+            raise CalError(f"The awl never touched the {what} down to Z {floor:.1f}. Check the probe sensor, the awl pin length, and that the template is under the awl.")
+        return hit
+
     for r in rows:
         i = r["pocket"]
         con.say(f"=== pocket {i} (cell {r['cell']}, bed X {r['bed_x']:.1f}, machine X {r['centre']:.2f}, dimples at {r['left']:.2f} / {r['right']:.2f})")
         jog.move_z(jog.top())
-        jog.move_x(r["left"], cfg.feed_xy)
-        con.ask("Put the template on this cell with its LEFT dimple under the awl point. Press Enter - the awl comes down until it touches ")
-        if z_touch is not None and jog.move_z(z_touch + 15.0) is not None:
-            raise CalError("The awl touched something 15 mm above the template. Clear the bed and run `mark --start %d`." % i)
-        # first cell: the template top is ~1 mm above the pad level (bed is 3 mm below it before the pads go on);
-        # never go more than 15 mm past that, well inside the 25 mm buffer stroke, if the sensor failed
-        floor = (z_touch - 4.0) if z_touch is not None else cfg.pad_trigger_c - 15.0
-        hit = walk_down(m, jog.z, floor, cfg.probe_window, cfg.feed_probe)
-        jog.refresh()
-        if hit is None:
-            raise CalError(f"The awl never touched the template down to Z {floor:.1f}. Check the probe sensor, and that the template is under the awl.")
-        if z_touch is None:
-            z_touch = hit
-        con.ask("Nudge the template until the point sits IN the left dimple. Press Enter ")
-        jog.move_z(z_touch + 15.0)
-        jog.move_x(r["right"])
-        jog.move_z(z_touch - 4.0)  # probe move: stops in (or on) the right dimple
-        con.ask("Swing the template (pivot on the left dimple) until the RIGHT dimple is under the point. Clamp it. Press Enter ")
+        if len(r["reach"]) == 2:
+            jog.move_x(r["left"], cfg.feed_xy)
+            con.ask("Put the template on this cell with its LEFT dimple under the awl point. Press Enter - the awl comes down until it touches ")
+            hit = touch("template")
+            if z_touch is None:
+                z_touch = hit
+            con.ask("Nudge the template until the point sits IN the left dimple. Press Enter ")
+            jog.move_z(z_touch + 15.0)
+            jog.move_x(r["right"])
+            jog.move_z(z_touch - 4.0)  # probe move: stops in (or on) the right dimple
+            con.ask("Swing the template (pivot on the left dimple) until the RIGHT dimple is under the point. Clamp it. Press Enter ")
+        elif len(r["reach"]) == 1:
+            side = r["reach"][0]
+            nb = i + 1 if side == "right" else i - 1
+            shared = "right" if side == "right" else "left"
+            jog.move_x(r[side], cfg.feed_xy)
+            con.ask(f"Put the template on this cell. Push two 8 mm pins (drill bits) through its {shared.upper()}-hand guide holes into pocket {nb}'s "
+                    f"already-drilled {'left' if shared == 'right' else 'right'}-hand holes. Press Enter - the awl comes down onto the {side} dimple ")
+            hit = touch(f"{side} dimple")
+            if z_touch is None:
+                z_touch = hit
+            con.ask(f"The point should sit in the {side} dimple. If it is off by more than 1 mm, stop: pocket {nb} was drilled off, or X lost steps. "
+                    "Otherwise clamp the template and press Enter ")
+        else:
+            con.say(f"pocket {i}: neither dimple is reachable - skipped")
+            continue
         jog.move_z(jog.top())
         away = [q for q in allpos if abs(q["pocket"] - i) >= 3]
         if away:  # park the head 3 pockets away so the drill has room
             jog.move_x(min(away, key=lambda q: abs(q["pocket"] - i))["centre"], cfg.feed_xy)
-        a = con.ask("Drill the 8 rod holes square to the bed (drill guide), then press Enter for the next pocket (s = stop here) ").strip().lower()
+        a = con.ask("Drill the rod holes square to the bed (drill guide), then press Enter for the next pocket (s = stop here) ").strip().lower()
         done.append(i)
         if a == "s":
             break
-    if done and done[-1] < allpos[-1]["pocket"]:
-        con.say(f"stopped after pocket {done[-1]}; continue with: python -m slabscan mark --start {done[-1] + 1}")
+    left = [r["pocket"] for r in rows if r["pocket"] not in done]
+    if left:
+        con.say(f"not marked yet: {left}; continue with: python -m slabscan mark --only {','.join(map(str, left))}")
     con.say(f"marked pockets {done}. The station cell needs no holes of its own.")
     return done
 

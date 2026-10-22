@@ -1,0 +1,9 @@
+# SlabRail Pi software - pip part. Run setup_pi.sh, which installs these into a venv made with
+# --system-site-packages. numpy, OpenCV, picamera2, gpiozero/lgpio and Pillow come from apt
+# (python3-*), NOT from pip: a pip numpy shadows the apt one and breaks picamera2.
+# pip skips any line below that apt already satisfies (Flask and pyserial on Bookworm).
+zxing-cpp>=3.1,<4        # barcode/QR decoder; 3.1.x has aarch64 cp311 wheels (no compiling on the Pi)
+pytesseract>=0.3.10,<0.4 # OCR fallback; needs the tesseract-ocr apt package
+smbus2>=0.4,<1           # ADS1115 vacuum sensor ADC on I2C1
+pyserial>=3.5,<4         # USB serial to the FluidNC controller
+flask>=2.2,<4            # web page (Bookworm's python3-flask 2.2 is fine)

@@ -59,6 +59,9 @@ class Config:
     accepted_graders: tuple = ("PSA", "CGC")
     allow_ocr: bool = True
     axes: str = "XZ"  # SlabRail has no Y axis; Y words are never sent
+    # machine travel the controller allows (soft limits in firmware/fluidnc/config.yaml - keep them equal)
+    x_travel: tuple = (22.0, 1253.0)
+    z_min: float = -8.0
     gate_z: float = 214.0  # overfill light beam height (MAX line + 4); only valid with the head up
     overfill_gate: bool = True  # GPIO 5 beam receiver fitted
     lid_switch: bool = False  # optional lid/door switch on GPIO 25
@@ -91,7 +94,7 @@ class Config:
         return len(self.sources) * self.stack_max
 
 
-_TUPLE_FIELDS = ("station_xy", "accepted_graders")
+_TUPLE_FIELDS = ("station_xy", "accepted_graders", "x_travel")
 
 
 def load(path: Path, calibration: Path | None = None) -> Config:
@@ -119,8 +122,10 @@ def from_layout() -> Config:
         sys.path.insert(0, str(cad))
     import layout as L
 
+    ps = L.pockets()
     return Config(
-        pockets=[PocketCfg(p.index, p.x, p.y, p.role) for p in L.pockets()],
+        pockets=[PocketCfg(p.index, p.x, p.y, p.role) for p in ps],
+        x_travel=(round(ps[0].x - 20.0, 3), round(ps[-1].x + 15.0, 3)),  # = firmware soft limits 22 .. 1253
         station_xy=L.station_xy(),
         station_read_c=round(L.STATION_READ_C, 2),
         c_safe_empty=L.C_SAFE_EMPTY,

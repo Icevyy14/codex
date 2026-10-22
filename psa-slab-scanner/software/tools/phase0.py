@@ -50,7 +50,8 @@ def open_cameras(args):
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", default="phase0_results")
-    ap.add_argument("--head-device", type=int, default=0)
+    ap.add_argument("--head-device", type=lambda v: int(v) if v.isdigit() else v, default="auto",
+                    help="USB head camera: auto (first /dev/v4l/by-id/usb-*; on a Pi 5 /dev/video0 is the CSI pipeline), a number, or a path")
     ap.add_argument("--lens-position", type=float, default=7.1, help="Camera Module 3 dioptres; 1/0.14 m = 7.1")
     ap.add_argument("--frames", type=int, default=2)
     ap.add_argument("--sim", type=int, default=0, help="run N synthetic slabs instead of real cameras")

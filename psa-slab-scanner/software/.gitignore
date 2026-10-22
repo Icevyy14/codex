@@ -1,0 +1,7 @@
+.venv/
+batches/
+selftest/
+focus/
+config/calibration.toml
+config/*.tmp
+__pycache__/

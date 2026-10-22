@@ -105,7 +105,7 @@ def test_focus_station_sweep_recommends_the_sharp_lens_position(tmp_path):
 def test_focus_head_live(tmp_path):
     code, out = _run(["--sim", "focus", "head", "--frames", "2", "--images", str(tmp_path)])
     assert code == 0, out
-    assert "READ back_qr:148069831" in out
+    assert "READ " in out and "back_qr:148069831" in out
 
 
 def test_mark_dry_run_lists_every_pocket():
@@ -129,3 +129,34 @@ def test_resume_refuses_sim(tmp_path):
     (tmp_path / "journal.jsonl").write_text("")
     code, out = _run(["--sim", "resume", str(tmp_path)])
     assert code == 1 and "real machine" in out
+
+
+def test_mark_walks_every_pocket_on_a_bare_bed():
+    """mark on a bed with no rods yet: the template lies everywhere at 1 mm. The awl may move sideways
+    low, but never while it is down in a dimple, and never past the X travel."""
+    from slabscan.factory import Hardware
+    from slabscan.ops import mark
+    from slabscan.simworld import Crash, SimMotion, SimWorld
+
+    class BareBed(SimWorld):
+        def surface_below(self):
+            return 1.0
+
+        def check_xy_path(self, x1, y1):
+            lo, hi = self.cfg.x_travel
+            if not lo <= x1 <= hi:
+                raise Crash(f"X {x1} outside the soft limits")
+            if self.lowest_point() < 1.0 + 5:
+                raise Crash("sideways with the awl in the template")
+
+        def check_z(self, z1):
+            if z1 < self.z and z1 < self.surface_below() - 0.01:
+                raise Crash("fast move into the template")
+
+    cfg = from_layout()
+    world = BareBed(cfg, stacks={})
+    hw = Hardware(cfg=cfg, motion=SimMotion(world), world=world, sim=True)
+    con = ScriptedConsole(["y"] + [""] * 80)
+    done = mark(cfg, hw, con)
+    assert sorted(done) == list(range(13)) and done[-2:] == [0, 12]
+    assert not any("Refused" in ln for ln in con.lines)

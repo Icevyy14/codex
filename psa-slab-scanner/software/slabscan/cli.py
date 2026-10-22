@@ -29,7 +29,7 @@ import tomllib
 from pathlib import Path
 
 from .config import Config, from_layout, load
-from .ops import CalError, Console, calibrate_x, calibrate_z, focus, mark, mark_positions, selftest
+from .ops import CalError, Console, calibrate_x, calibrate_z, focus, mark, mark_order, selftest
 from .results import BatchWriter
 from .runner import Runner, Stop
 
@@ -230,16 +230,17 @@ def cmd_focus(args, con):
 
 def cmd_mark(args, con):
     cfg, _ = load_config(args)
+    only = [int(x) for x in args.only.split(",")] if args.only else None
     if args.dry_run or args.sim:
-        con.say("pocket cell   bed X   machine X   left dimple  right dimple")
-        for r in mark_positions(cfg):
-            if r["pocket"] >= args.start:
-                con.say(f"{r['pocket']:6d} {r['cell']:4d} {r['bed_x']:7.1f} {r['centre']:11.2f} {r['left']:12.2f} {r['right']:13.2f}")
-        con.say("(dry run - nothing moved; the station cell needs no holes of its own)")
+        con.say("order pocket cell   bed X   machine X   left dimple  right dimple")
+        for n, r in enumerate(mark_order(cfg, args.start, only), 1):
+            reach = lambda k: f"{r[k]:12.2f}" if k in r["reach"] else f"{'(no reach)':>12}"  # noqa: E731
+            con.say(f"{n:5d} {r['pocket']:6d} {r['cell']:4d} {r['bed_x']:7.1f} {r['centre']:11.2f} {reach('left')} {reach('right'):>13}")
+        con.say("(dry run - nothing moved; the station cell needs no holes of its own; end pockets come last: pins in the neighbour's holes set them)")
         return 0
     hw = _hw(args, cfg, ("motion",))
     try:
-        mark(cfg, hw, con, start=args.start)
+        mark(cfg, hw, con, start=args.start, only=only)
         return 0
     except CalError as e:
         con.say(f"mark: {e}")
@@ -471,7 +472,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("axis", choices=["z", "x"])
     p.add_argument("--no-rods", action="store_true", help="(x) the bed has no rods yet")
     p.add_argument("--yes", action="store_true", help="(z) skip the questions and the hand sensor check")
-    p.add_argument("--extra-depth", type=float, default=15.0, help="(z) how far below the CAD pad height to keep probing")
+    p.add_argument("--extra-depth", type=float, default=12.0, help="(z) how far below the CAD pad height to keep probing (limited by the Z soft limit)")
     p.set_defaults(fn=cmd_calibrate)
 
     p = sub.add_parser("focus", help="focus head | focus station")
@@ -486,7 +487,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(fn=cmd_focus)
 
     p = sub.add_parser("mark", help="walk the awl over every pocket for the drill template")
-    p.add_argument("--start", type=int, default=0, help="first pocket (to continue after a break)")
+    p.add_argument("--start", type=int, default=0, help="skip pockets below this one")
+    p.add_argument("--only", help="comma-separated pockets, e.g. 0,12 (to continue after a break)")
     p.add_argument("--dry-run", action="store_true", help="only print the positions")
     p.set_defaults(fn=cmd_mark)
 
