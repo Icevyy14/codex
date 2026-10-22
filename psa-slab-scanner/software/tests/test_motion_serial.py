@@ -16,7 +16,7 @@ import pytest
 serial = pytest.importorskip("serial")
 pty = pytest.importorskip("pty")
 
-from slabscan.motion import GcodeMachine, MotionError  # noqa: E402
+from slabscan.motion import ControllerLost, GcodeMachine, MotionError  # noqa: E402
 
 
 class FakeFluidNC(threading.Thread):
@@ -134,3 +134,63 @@ def test_lost_controller_reports_estop(fake):
         for _ in range(3):
             m.status()
             time.sleep(0.05)
+
+
+def test_probe_targets_are_clamped_to_the_soft_limit(fake):
+    """CONTRACT.md: Z soft limit -8, every probe target >= -7.5; a plain move below it is refused before sending."""
+    m = GcodeMachine(fake.port, boot_s=3.0)
+    with pytest.raises(MotionError, match="before homing"):
+        m.move(3000, x=100.0)  # $X on connect marks FluidNC's axes homed, so the software keeps its own flag
+    m.home()
+    m.move(6000, z=20.0)
+    assert m.probe(-20.0, 1200) == pytest.approx(3.0)
+    assert any(ln.startswith("G38.3 Z-7.500") for ln in fake.lines)
+    assert not any(ln.startswith("G38.3 Z-20") for ln in fake.lines)
+    m.move(6000, z=20.0)
+    with pytest.raises(MotionError, match="refusing Z"):
+        m.move(6000, z=-9.0)
+    assert not any("Z-9" in ln for ln in fake.lines)
+    m.close()
+
+
+def test_reconnect_after_estop_then_home_required():
+    """E-stop: the port vanishes -> ControllerLost. The next command reopens the port (here a new pty,
+    found again through find_port) and nothing moves until home() has run on the new connection."""
+    first = FakeFluidNC()
+    first.start()
+    where = {"port": first.port}
+    m = GcodeMachine(first.port, boot_s=2.0, find_port=lambda: where["port"], reconnect_s=5.0)
+    m.home()
+    first.kill()
+    with pytest.raises(ControllerLost, match="E-stop"):
+        for _ in range(3):
+            m.move(3000, x=200.0)
+            m.wait_idle()
+    assert m.lost and not m.homed
+    second = FakeFluidNC()  # power back: FluidNC reboots, the CH340 comes back (maybe under another name)
+    second.start()
+    where["port"] = second.port
+    try:
+        with pytest.raises(MotionError, match="before homing"):
+            m.move(3000, x=200.0)  # refused before anything is sent
+        m.home()  # reconnects, then homes
+        assert m.reconnects == 1 and second.lines[0] == "$X" and "$H" in second.lines
+        m.move(3000, x=200.0)
+        m.wait_idle()
+        assert m.position()[0] == pytest.approx(200.0)
+        assert second.lines.index("$H") < second.lines.index("G1 X200.000 F3000")
+    finally:
+        second.alive = False
+        m.close()
+
+
+def test_reconnect_gives_up_while_the_estop_is_still_pressed(fake):
+    m = GcodeMachine(fake.port, boot_s=2.0, find_port=lambda: "/dev/does-not-exist-slabrail", reconnect_s=1.0)
+    m.home()
+    fake.kill()
+    with pytest.raises(ControllerLost):
+        for _ in range(3):
+            m.status()
+            time.sleep(0.05)
+    with pytest.raises(ControllerLost, match="still not answering"):
+        m.home()

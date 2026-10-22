@@ -22,12 +22,13 @@ class Config:
     pockets: list[PocketCfg]
     station_xy: tuple[float, float]
     station_read_c: float
-    c_safe_empty: float = 192.0
-    c_safe_loaded: float = 199.0
-    c_max: float = 210.0
-    post_h: float = 182.0
-    stack_max: int = 25
-    max_line: float = 175.0
+    # defaults = cad/layout.py (machine.toml always sets them; a stale default must never be unsafe)
+    c_safe_empty: float = 228.0
+    c_safe_loaded: float = 243.0
+    c_max: float = 250.0
+    post_h: float = 218.0
+    stack_max: int = 30
+    max_line: float = 210.0
     # slab thickness classes (mm), measured as the placement contact step
     t_min: float = 6.0
     t_std_max: float = 7.9  # PSA standard 6.25-6.9, TAG ~7.25, CGC ~7.5

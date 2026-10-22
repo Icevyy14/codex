@@ -32,6 +32,7 @@ import cv2
 from .certs import CodeRead, ItfModel, Verdict, consensus
 from .config import Config
 from .decode import decode_frame
+from .motion import ControllerLost
 from .results import BatchWriter, SlabResult
 
 NOMINAL_T = 6.6  # mm, used only to turn heights into rough slab counts
@@ -152,9 +153,15 @@ class Runner:
     def s(self, c: float) -> float:
         return c - self.cfg.pad_trigger_c
 
+    @property
+    def z_floor(self) -> float:
+        """Lowest machine Z ever commanded or probed toward: 0.5 mm inside the firmware soft limit
+        (Z -8, CONTRACT.md). The CAD keeps the Z carriage on its rail down to c = -12."""
+        return self.cfg.z_min + 0.5
+
     # ------------------------------------------------------------------ primitives
     def _z(self, c: float, feed: float | None = None) -> None:
-        c = min(c, self.c(self.cfg.c_max))
+        c = max(min(c, self.c(self.cfg.c_max)), self.z_floor)
         self.m.move(feed or self.cfg.feed_z, z=c)
         self.m.wait_idle()
         self.z = c
@@ -179,7 +186,10 @@ class Runner:
         Callers choose c_to so the cup can never be driven more than probe_window past the
         surface it is looking for - well inside the 25 mm spring-buffer stroke.
         """
+        c_to = max(c_to, self.z_floor)  # never ask for a probe target past the Z soft limit
         self._z(c_from)
+        if c_to >= self.z - 0.05:  # already at the floor: nothing left to probe
+            return None
         hit = self.m.probe(c_to, self.cfg.feed_probe)
         self.z = hit if hit is not None else c_to
         return hit
@@ -241,10 +251,11 @@ class Runner:
         self._go(p.x, p.y)
         top = None
         c = self.c(cfg.max_line + 6)
+        floor = max(self.c(-2), self.z_floor)
         self.vac.hold()  # an open cup that suddenly seals = contact the optical sensor missed
         try:
-            while c > self.c(-2):  # walk down in probe windows until contact
-                hit = self._probe(c, max(self.c(-2), c - cfg.probe_window))
+            while c > floor + 0.05:  # walk down in probe windows until contact
+                hit = self._probe(c, max(floor, c - cfg.probe_window))
                 if hit is not None:
                     top = self.s(hit)
                     break
@@ -498,6 +509,8 @@ class Runner:
             if self.z is None or self.z < self.c(self.cfg.c_safe_empty) - 0.01:
                 self._z(self.c(self.cfg.c_safe_empty))
             return ""
+        except ControllerLost:
+            return self.lost_note()
         except Exception as e:  # noqa: BLE001 - report, never mask the original Stop
             return f"Could not park the machine automatically ({e}). Check the head before touching the bed."
 
@@ -529,9 +542,33 @@ class Runner:
         if self.should_stop is not None and self.should_stop():
             raise Stop("Stopped on request - nothing held. Resume to continue.")
 
+    def lost_note(self) -> str:
+        """The controller lost power (E-stop) or its USB link: nothing can move. Shut the cup valves
+        from the Pi side and tell the operator what to do by hand."""
+        self.homed = False
+        try:
+            self.vac.close()  # pump off, both NC valves shut, no vent: a held slab stays sealed on the cup
+        except Exception:  # noqa: BLE001
+            pass
+        msg = ("The controller lost power or its USB link (E-stop pressed, or the cable came out). The head stopped where it was; "
+               "the motors are off.")
+        if self.holding and self.held_from is not None:
+            src = self.held_from[0]
+            msg += (f" A slab from pocket {src} is still on the cup (the closed valves keep it sealed for a while). Hold it, pull it off gently "
+                    f"and put it face-down on top of pocket {src}; it will be read again.")
+            self.holding = False
+            self.held_from = None
+        msg += " Twist the E-stop to release it, then resume: the machine reconnects and homes first (Z straight up, then X)."
+        return msg
+
     def _guarded(self, body: Callable[[], dict]) -> dict:
         try:
             return body()
+        except ControllerLost as e:
+            note = self.lost_note()
+            self._journal({"stop": str(e), "lost_controller": True, "secured": note, "t": round(time.time(), 1)})
+            self.phase = "stopped"
+            raise Stop(note) from None
         except Stop as e:
             note = self.secure()
             self._journal({"stop": str(e), "secured": note, "t": round(time.time(), 1)})

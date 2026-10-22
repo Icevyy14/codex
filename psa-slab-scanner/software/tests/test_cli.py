@@ -160,3 +160,58 @@ def test_mark_walks_every_pocket_on_a_bare_bed():
     done = mark(cfg, hw, con)
     assert sorted(done) == list(range(13)) and done[-2:] == [0, 12]
     assert not any("Refused" in ln for ln in con.lines)
+
+
+def test_calibrate_z_low_pad_keeps_probe_targets_inside_the_soft_limit(tmp_path):
+    """Regression: the three repeat probes went to (pad - 3); with the pad at Z -6 that was G38.3 Z-9,
+    past the firmware's -8 soft limit. The simulator now enforces the soft limits."""
+    cal = tmp_path / "calibration.toml"
+    code, out = _run(["--sim", "--sim-z-offset", "-6.0", "--calibration", str(cal), "calibrate", "z", "--yes"])
+    assert code == 0, out
+    assert tomllib.loads(cal.read_text())["pad_trigger_c"] == pytest.approx(-6.0, abs=0.01)
+
+
+def test_phase0_from_the_cli(tmp_path):
+    code, _ = _run(["phase0", "--sim", "2", "--out", str(tmp_path)])
+    assert code == 0
+    assert (tmp_path / "phase0.csv").exists()
+    assert "confident read (ok): 2/2" in (tmp_path / "phase0_report.txt").read_text()
+
+
+def test_jog_after_estop_rehomes_before_moving():
+    """E-stop during jog: the command that hit the lost port reports it; the next command homes first
+    (and is not run), and only then do moves work again."""
+    from slabscan.motion import ControllerLost
+
+    cfg = from_layout()
+    hw = sim_hardware(cfg, slabs=0)
+    inner = hw.motion
+    inner.home()
+
+    class Flaky:
+        def __init__(self):
+            self.cut = False
+
+        def __getattr__(self, name):
+            return getattr(inner, name)
+
+        def move(self, feed, **kw):
+            if self.cut:
+                self.cut = False
+                inner.homed = False
+                raise ControllerLost("Lost the controller: its USB serial port went away (E-stop, test)")
+            inner.move(feed, **kw)
+
+    m = Flaky()
+    con = ScriptedConsole([])
+    jog = Jogger(cfg, m, con)
+    jog.execute("p 3")
+    x3 = jog.x
+    m.cut = True
+    jog.execute("x +3")
+    assert any("STOP" in ln and "E-stop" in ln for ln in con.lines)
+    jog.execute("p 5")  # homes instead
+    assert any("Homing again first" in ln for ln in con.lines) and inner.homed
+    assert jog.x == pytest.approx(cfg.x_travel[0])  # at the home position, p 5 was not run
+    jog.execute("p 3")
+    assert jog.x == pytest.approx(x3)

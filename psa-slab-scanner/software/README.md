@@ -74,6 +74,7 @@ All commands are `python -m slabscan <command>`. Add `--sim` to use the simulato
 | `resume BATCH_DIR [--accept-heights]` | Continues a stopped batch (below). |
 | `sim [--slabs N]` | Full simulated batch. Prints the summary and a time estimate. |
 | `web [--port 8080]` | Phone page (below). |
+| `phase0 [--sim N] [--out DIR]` | The Phase 0 camera test (same as `python -m tools.phase0`): reads 30-50 of your slabs in the Phase 0 jig before you buy any motion parts. |
 
 **Jog safety rules** (enforced in software):
 - Nothing moves before homing.
@@ -81,6 +82,9 @@ All commands are `python -m slabscan <command>`. Add `--sim` to use the simulato
 - Below the rod tops, the head moves sideways only within ±5 mm of a pocket centre. The head is
   70 mm wide and a pocket is 84 mm.
 - A move is never started while the probe already reads triggered.
+- No move or probe target goes below machine Z −7.5. The firmware's soft limit is −8, and the CAD keeps
+  the Z carriage on its rail down to −12. A probe that would reach further is cut short there.
+- After an E-stop the next command homes first (Z straight up, then X) and is not run itself.
 
 `--no-rods` lifts the sideways rule. Use it only while the bed has no rods.
 
@@ -104,6 +108,18 @@ to check by hand: unreadable ones, or graders other than PSA and CGC.
   cup.
 - Ctrl-C twice stops at once. A slab may then still be in the cup.
 - Use the e-stop for anything dangerous.
+
+**E-stop.** It cuts the 24 V supply: the controller, the motors, the pump and both valves. The
+controller's USB port disappears. The software then:
+- stops at once and moves nothing more (it can't: the motors have no power),
+- shuts the valves from the Pi side, so nothing switches on when the power comes back,
+- tells you what to do. If a slab was in the cup, the closed valves keep it there for a while. Hold
+  it, pull it off gently and put it face-down on top of the pocket the message names.
+
+Twist the E-stop to release it, then resume (command line or web page). The software reconnects to
+the controller and homes before anything else moves. It does not trust the controller's position
+after a reboot, because FluidNC's unlock command (`$X`) marks the axes as homed without homing them
+(**[Certain]**, FluidNC source `ProcessSettings.cpp`, `disable_alarm_lock`).
 
 **When the machine stops on its own**, it prints what to do. Examples: a cup that won't seal, a
 stack taller than expected, lost vacuum, or a full exception pocket. If a slab was still in the

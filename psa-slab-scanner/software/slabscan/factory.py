@@ -3,7 +3,8 @@
 Every backend has the same small interface, so the runner, the CLI tools and the web page
 never care which one they got:
 
-  motion   home() move(feed, x=, z=) wait_idle() probe(z, feed) position() pins() close()
+  motion   home() move(feed, x=, z=) wait_idle() probe(z, feed) position() pins() close()   (+ .homed)
+           a lost controller (E-stop) raises motion.ControllerLost; the next call reconnects, then home() is required
   vacuum   hold() release() kpa() close()
   lights   head(on) station(on)
   cameras  capture() -> BGR or gray ndarray   (+ set_lens_position / lens_range on the Pi camera)
@@ -78,7 +79,8 @@ def make_part(cfg: Config, part: str):
     if part == "motion":
         from .motion import GcodeMachine
 
-        return GcodeMachine(find_serial_port(cfg.serial_port))
+        # find_port is asked again after an E-stop: the CH340 can come back as another /dev/ttyUSB*
+        return GcodeMachine(find_serial_port(cfg.serial_port), find_port=lambda: find_serial_port(cfg.serial_port), z_floor=cfg.z_min + 0.5)
     if part == "vacuum":
         from .hw import PiVacuum
 

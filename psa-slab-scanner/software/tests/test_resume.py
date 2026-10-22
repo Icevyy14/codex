@@ -14,6 +14,7 @@ from slabscan.config import from_layout
 from slabscan.results import BatchWriter, SlabResult
 from slabscan.runner import Runner, State, Stop, read_journal, rebuild_state
 from slabscan.certs import Verdict
+from slabscan.motion import ControllerLost, Z_FLOOR
 from slabscan.simworld import SimCamera, SimGate, SimLights, SimMotion, SimSlab, SimVacuum, SimWorld, make_batch
 
 
@@ -159,3 +160,91 @@ def test_batchwriter_reopen_drops_torn_row(tmp_path):
     assert [r.position for r in w2.rows] == [1]
     assert w2.rows[0].verdict.sources == ("back_qr", "back_barcode")
     assert (tmp_path / "b5" / "certs.csv").read_text().count("\n") == 2
+
+
+class EStopMotion:
+    """SimMotion whose controller loses power (E-stop) at the first motion command for which ``when()``
+    is true: that command raises ControllerLost and the controller comes back reset (unhomed), like
+    FluidNC after its 24 V returns. ``after`` counts motion commands issued after the loss."""
+
+    def __init__(self, inner, when):
+        self.inner, self.when, self.fired, self.after = inner, when, False, 0
+
+    def _tick(self):
+        if self.fired:
+            self.after += 1
+        elif self.when():
+            self.fired = True
+            self.inner.homed = False
+            raise ControllerLost("Lost the controller: its USB serial port went away (E-stop, test)")
+
+    def home(self):
+        self.after += self.fired
+        self.inner.home()
+
+    def move(self, feed, **kw):
+        self._tick()
+        self.inner.move(feed, **kw)
+
+    def probe(self, z, feed):
+        self._tick()
+        return self.inner.probe(z, feed)
+
+    def wait_idle(self):
+        pass
+
+    def position(self):
+        return self.inner.position()
+
+    def pins(self):
+        return self.inner.pins()
+
+    @property
+    def homed(self):
+        return self.inner.homed
+
+    @property
+    def probe_targets(self):
+        return self.inner.probe_targets
+
+
+def test_estop_with_a_slab_in_the_cup_stops_cleanly_and_resume_rehomes(tmp_path):
+    """CONTRACT.md E-stop: the serial port vanishes mid-transfer. The run must become a clean Stop that
+    moves nothing more, tell the operator which pocket the held slab goes back on, and the next run
+    must home first; every slab is then moved exactly once."""
+    cfg = from_layout()
+    original = _stacks(cfg)
+    world = SimWorld(cfg, stacks={k: list(v) for k, v in original.items()})
+    writer = BatchWriter(tmp_path, "b6")
+    motion = EStopMotion(SimMotion(world), when=lambda: bool(world.held) and len(writer.rows) == 2)
+    r1 = Runner(cfg, motion, SimVacuum(world), SimLights(), SimCamera(world, "head"), SimCamera(world, "station"), writer,
+                gate=SimGate(world), log=lambda *_: None)
+    with pytest.raises(Stop, match="lost power") as e:
+        r1.run()
+    assert "pocket 2" in str(e.value) and "homes first" in str(e.value)
+    assert motion.fired and motion.after == 0  # nothing tried to move after the loss (no put-back, no park)
+    assert not world.vacuum_on  # Pi side shut the valves
+    events = read_journal(tmp_path / "b6" / "journal.jsonl")
+    assert events[-1].get("lost_controller") is True
+    # operator: slab off the cup, face-down back on top of pocket 2
+    assert world.held
+    for slab in reversed(world.held):
+        world.stacks[2].append(slab)
+    world.held, world.gripping = [], False
+    r2 = Runner(cfg, motion, SimVacuum(world), SimLights(), SimCamera(world, "head"), SimCamera(world, "station"),
+                BatchWriter.reopen(tmp_path / "b6"), gate=SimGate(world), log=lambda *_: None)
+    summary = r2.resume()  # SimMotion raises Crash on any move before homing, so this proves resume homes first
+    _check_complete(cfg, world, original, tmp_path / "b6", summary)
+
+
+def test_low_pad_never_probes_past_the_z_soft_limit(tmp_path):
+    """Regression: with the pad trigger at machine Z -7.4 (head lower than the CAD's -2, still inside the
+    calibration window), lifting the last slab of a stack probed toward c(s - 7) = Z -8.01, past the -8
+    soft limit (an ALARM on the real controller, a Crash in the simulator). Targets are now clamped to -7.5."""
+    cfg = dataclasses.replace(from_layout(), pad_trigger_c=-7.4)
+    original = _stacks(cfg, per_pocket=1, sources=2)
+    world = SimWorld(cfg, stacks={k: list(v) for k, v in original.items()})
+    r = _runner(cfg, world, BatchWriter(tmp_path, "b7"))
+    summary = r.run()
+    _check_complete(cfg, world, original, tmp_path / "b7", summary)
+    assert min(r.m.probe_targets) >= Z_FLOOR - 1e-9

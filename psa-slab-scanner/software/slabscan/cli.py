@@ -11,6 +11,7 @@
   resume BATCH_DIR [--accept-heights]
   sim [--slabs N]                 full simulated batch, no hardware
   web [--port 8080]               phone page: start/stop/resume, progress, downloads
+  phase0 [--sim N] [--out DIR]    Phase 0 camera read-rate test (tools/phase0.py; its own options)
 
 Add --sim to any hardware command to run it against the simulator.
 """
@@ -29,6 +30,7 @@ import tomllib
 from pathlib import Path
 
 from .config import Config, from_layout, load
+from .motion import ControllerLost, MotionError
 from .ops import CalError, Console, calibrate_x, calibrate_z, focus, mark, mark_order, selftest
 from .results import BatchWriter
 from .runner import Runner, Stop
@@ -270,7 +272,7 @@ def cmd_run(args, con):
         return 1
     if not args.yes and not args.sim:
         con.say("Before starting: slabs FACE-DOWN, label end toward you, in pockets 1-11, none above the MAX line.\n"
-                "Pocket 0 and pocket 12 empty. Cup wiped. Hands out, roof on.")
+                "Pocket 0 and pocket 12 empty. Cup wiped. Hands out (light roof on, if fitted).")
         if not con.confirm("Start the run?"):
             return 1
     hw = _hw(args, cfg, ("motion", "vacuum", "lights", "head_cam", "station_cam", "gate", "lid"))
@@ -424,6 +426,20 @@ def cmd_sim(args, con):
     return 0
 
 
+def run_phase0(argv: list[str]) -> int:
+    """``python -m slabscan phase0 ...`` = ``python -m tools.phase0 ...`` (the camera test before any motion parts)."""
+    if str(SOFTWARE_DIR) not in sys.path:
+        sys.path.insert(0, str(SOFTWARE_DIR))
+    from tools import phase0
+
+    return int(phase0.main(argv) or 0)
+
+
+def cmd_phase0(args, con):
+    # Only reached as `python -m slabscan --sim phase0`; `phase0 ...` with options is handed to tools.phase0 in main().
+    return run_phase0(["--sim", "10"] if args.sim else [])
+
+
 def cmd_web(args, con):
     from .web import RealProvider, SimProvider, create_app, lan_address
 
@@ -515,6 +531,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--quiet", action="store_true", help="no per-slab lines")
     p.set_defaults(fn=cmd_sim)
 
+    sub.add_parser("phase0", help="Phase 0 camera read-rate test, see `phase0 --help` (same as python -m tools.phase0)").set_defaults(fn=cmd_phase0)
+
     p = sub.add_parser("web", help="phone-friendly web page")
     p.add_argument("--port", type=int, default=8080)
     p.add_argument("--host", default="0.0.0.0")
@@ -523,12 +541,21 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None, console: Console | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["phase0"]:  # its options belong to tools/phase0.py (it has its own --sim N and --out)
+        return run_phase0(argv[1:])
     args = build_parser().parse_args(argv)
     con = console or Console()
     try:
         return int(args.fn(args, con) or 0)
     except BrokenPipeError:  # output piped into `head`
         return 0
+    except ControllerLost as e:
+        con.say(f"STOP: {e}\nNothing will move until the controller is back and homed: twist the E-stop to release it, then `python -m slabscan home`.")
+        return 1
+    except (MotionError, Stop, CalError) as e:
+        con.say(f"error: {e}")
+        return 1
     except (OSError, RuntimeError, ValueError) as e:
         con.say(f"error: {e}")
         return 1

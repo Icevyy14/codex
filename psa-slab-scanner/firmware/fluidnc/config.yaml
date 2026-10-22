@@ -189,9 +189,9 @@ axes:
     # Why -8: probing the bare pad trips at about c = -2 (2 mm of buffer squeeze).
     # The software then probes up to 2 mm further, plus +/-3 mm of calibration
     # spread. The top is 255 because the contract's C_MAX is 250.
-    # WARNING: in cad/layout.py as of October 2026, the Z carriage reaches the
-    # bottom end of its rail at c = -4. The CAD must give at least c = -12 on
-    # the rail before this machine is built (see docs/FIRMWARE.md "Open issues").
+    # cad/layout.py puts the Z carriage 243 mm above the cup face, so it stays on
+    # its rail down to c = -12 (it would leave the rail at c = -16). The -8 limit
+    # is inside that with margin (cad/out/checks.txt).
     max_travel_mm: 263.000
     soft_limits: true
     homing:
@@ -201,7 +201,7 @@ axes:
       # Home toward Z maximum (top).
       positive_direction: true
       # Machine Z (cup face height) after homing and pull-off. The switch trips at
-      # about c = 258. The Z carriage only runs out of rail at c = 280.
+      # about c = 258. The Z carriage only runs out of rail at about c = 268.
       mpos_mm: 255.000
       feed_mm_per_min: 150.000
       seek_mm_per_min: 1500.000

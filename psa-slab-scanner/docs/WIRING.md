@@ -133,7 +133,8 @@ sits **in the +24 V line straight after the supply**. Pressing it cuts:
 | F2 | Pump + both valves (24 V load bus) | 3 A | Pump start current. Protects the 22 AWG load wiring. |
 | F3 | 24→12 V buck (LED rings) | 1 A | Protects the 22/24 AWG ring wiring |
 
-The BOM lists 2 A and 5 A fuses. Add one 3 A and one 1 A. [Certain, arithmetic]
+The BOM's "Branch fuses" line has three inline holders with 1 A, 3 A and 5 A fuses. [Certain,
+BOM.csv]
 
 ### 1.5 12 V buck for the LED rings
 
@@ -277,10 +278,10 @@ as quoted by several resellers]
 - **The 30 V rating is enough on a 24.5 V bus**, because the diode clamps coil spikes to about
   25.5 V. [Likely]
 
-**Against the BOM's choice:** the BOM lists "D4184" (AOD4184) modules plus separate 1N5819
-diodes. Those modules switch more current, but they have no flyback diode. Their makers also give
-no 3.3 V drive figure, so whether they switch fully at 3.3 V is unconfirmed. [Likely] If you use
-them:
+**If you substitute "D4184" (AOD4184) modules** (the BOM keeps 1N5819 diodes as a qty-0
+conditional line for this case): those modules switch more current, but they have no flyback
+diode. Their makers also give no 3.3 V drive figure, so whether they switch fully at 3.3 V is
+unconfirmed. [Likely] If you use them:
 - solder a diode across each pump and valve coil, cathode (stripe) to +;
 - with the load on, check that the voltage across the module's output is under 0.2 V.
 
@@ -398,8 +399,8 @@ config.yaml.)
 - Solder the cable to **C** and **NC**: closed at rest, open when pressed.
 - C goes to the connector's GND pin and NC to its signal pin. Leave V-Lim empty.
 
-**Don't use the 3D-printer "mechanical endstop" boards as they come** (BOM: 6-pack of boards). Their
-LED-and-resistor circuit differs between makers. On some, it feeds the Rodent's opto LED and hides
+**Don't use the 3D-printer "mechanical endstop" boards as they come.** (The BOM lists bare lever
+microswitches for this reason.) Their LED-and-resistor circuit differs between makers. On some, it feeds the Rodent's opto LED and hides
 a pressed switch. [Likely: forum reports]
 - If you only have those boards, desolder the switch, or cut the traces and wire straight to its
   C and NC tabs. Check C, NO and NC with a meter.
@@ -464,7 +465,8 @@ be **high when the beam is received**. If your module is the other way round, sw
 invert in software, because a cut wire would then read "clear".
 
 **Room light:** non-modulated receivers can be held HIGH by bright room light. Adjust the module's
-trimmer under the light roof until a blocked beam reads LOW with the room lights on.
+trimmer (under the light roof, if you fitted the optional roof) until a blocked beam reads LOW
+with the room lights on.
 
 ## 9. LED rings
 
@@ -573,8 +575,8 @@ the bundle along the drop arm every 50 mm down to the head.
 **Loop size:**
 - Make it about 350 mm long, with no bend tighter than 40 mm radius.
 - Check by hand at c = 0 and c = 255. The loop must never hang lower than the top of the drop arm.
-  At c = 0, that point is about 290 mm above the pads, well above the 218 mm rod tops. [Certain,
-  layout numbers]
+  At c = 0, that point is about 298 mm above the pads (243 + 55, `model.ARM_Z`), well above the
+  218 mm rod tops. [Certain, layout numbers]
 
 **Tube slack:** leave 30 mm at the cup fitting. The buffer rod rises up to 25 mm on contact.
 
@@ -684,16 +686,16 @@ Do this with everything wired, **mains unplugged**, and the E-stop released.
 
 ## 16. Open risks
 
-1. **[Likely] The MOSFET choice differs from the BOM.** This page picks Adafruit #5648. The BOM
-   lists D4184 modules + 1N5819 diodes. Either works if §4's checks pass. Reconcile the BOM.
-2. **[Likely] Endstop boards.** The BOM buys 3D-printer endstop boards. This page says to use bare
-   microswitch C/NC contacts (§7). Bare lever microswitches cost less.
-3. **[Likely] Laser receiver output varies by maker.** The 2.2 kΩ pull-up and divider make both
+1. **[Likely] Laser receiver output varies by maker.** The 2.2 kΩ pull-up and divider make both
    common output types safe, but measure before wiring.
-4. **[Likely] Sensor output direction.** It is assumed to be 0.5 V at −100 kPa. Check about 4.5 V
+2. **[Likely] Sensor output direction.** It is assumed to be 0.5 V at −100 kPa. Check about 4.5 V
    at atmosphere on first power-up.
-5. **[Guessing] E-stop DC rating.** Confirm ≥ 5 A at 24 V DC, or use two contacts in series.
-6. **[Guessing] Head USB at about 4 m.** It works on paper. A cheap extension in a moving chain
+3. **[Guessing] E-stop DC rating.** Confirm ≥ 5 A at 24 V DC, or use two contacts in series.
+4. **[Guessing] Head USB at about 4 m.** It works on paper. A cheap extension in a moving chain
    is the weakest cable in the machine. Watch for camera dropouts in the soak test.
-7. **[Certain, CAD] Z rail bottom margin** (FIRMWARE.md open issue 1). That is a CAD change, not
-   wiring, but it blocks probing.
+5. **[Guessing] Whether Adafruit #5648 has a SIG pull-down.** Measure SIG to GND with the power off
+   and add 10 kΩ if it reads open (§4).
+
+**Resolved:** the BOM now lists Adafruit #5648 modules, bare microswitches and the 1/3/5 A fuses
+used on this page, and the CAD keeps the Z carriage on its rail down to c = −12 (CONTRACT), so the
+old Z-rail bottom-margin issue is closed.

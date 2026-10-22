@@ -24,8 +24,9 @@ gap I filled.
    firmware, so reflash even a new board. [Likely]
 3. **Never plug or unplug a motor while the board has 24 V.** It can destroy the driver.
    [Certain, standard for TMC drivers]
-4. **The CAD needs a change before you build Z** (see [Open issues](#open-issues)). The Z
-   carriage reaches the bottom of its rail at c = −4 mm, and probing needs about −8 mm.
+4. **The Z soft limit of −8 is safe with the current CAD.** [Certain, `cad/out/checks.txt`] The Z
+   carriage sits 243 mm above the cup face, so it stays on its rail down to c = −12 (4 mm of
+   margin there). An earlier draft had the carriage leave the rail at c = −4; that is fixed.
 
 ## Why this board
 
@@ -102,7 +103,8 @@ the chain's data alignment breaks"]
 - Pocket centres run from X = 42 to 1238.
 - The X carriage leaves its rail when the cup is below X 12.7 or above 1267. The X bracket hits the
   idler and motor mounts at X 8 and 1266. [Certain, computed from the CAD]
-- Z's top of travel is 250 (C_MAX). The Z carriage runs off the top of its rail at c = 280.6.
+- Z's top of travel is 250 (C_MAX). The Z carriage runs off the top of its 330 mm rail at
+  c ≈ 268.6 (557 − 243 − 45.4) and off the bottom at c ≈ −16. [Certain, computed from the CAD]
 - If the rail lengths or pocket count change, recompute `max_travel_mm` and `mpos_mm` with the same
   margins.
 
@@ -255,8 +257,8 @@ WIRING.md, sections 6 and 7, shows the right way. The `?` report also lists acti
      and a large offset eats into the soft-limit margins.
    - Do the same for Z after `calibrate z`: `pad_trigger_c` must be between −4 and 0.
 
-Homing takes up to about 40 s in the worst case. The software allows 60 s per command. [Certain,
-arithmetic: 1354 mm at 50 mm/s plus 289 mm at 25 mm/s]
+Homing takes up to about 40 s in the worst case. The software allows 180 s for `$H` and 60 s for
+other commands. [Certain, arithmetic: 1354 mm at 50 mm/s plus 289 mm at 25 mm/s; `motion.home()`]
 
 ## Step 7: probe test with `G38.3`
 
@@ -289,9 +291,11 @@ G38.3 Z-6 F1200
 
 **Connection**
 - Opens the CH340 port at 115200 baud. Prefer `/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0`
-  in `machine.toml`, because `ttyUSB0` can renumber.
-- Waits 2 s, because opening the port resets the ESP32.
-- Sends `$X`. The machine stays unhomed until `$H`.
+  as `serial_port` in `config/calibration.toml`, because `ttyUSB0` can renumber. If the configured
+  port is missing, the software tries `/dev/serial/by-id/*`, `/dev/ttyUSB*`, then `/dev/ttyACM*`.
+- Opening the port resets the ESP32, so it waits up to 8 s for the FluidNC start-up banner.
+- Sends `$X` (up to 5 tries). The software still refuses every move and probe until it has sent
+  `$H` on this connection, because `$X` marks the axes homed without homing them.
 
 **Commands**
 
@@ -311,29 +315,26 @@ The probe report prints machine coordinates. [Certain, `report_probe_parameters`
 - Any `error:` or `ALARM:` reply raises `MotionError`, and the runner stops with the cup in a safe
   state.
 
-**What the software must handle** (for the software owners):
+**How the software handles power loss and limits** [Certain, `motion.py`, `runner.py`]:
 - **E-stop = controller power off.** The E-stop cuts the Rodent's 24 V (WIRING.md §1), and the
   CH340 is powered from the board. So the serial device **disappears**, and pyserial raises
-  `SerialException` rather than `MotionError`.
-  - Catch that and stop with the message "controller lost power (E-stop?)".
-  - After release, reconnect, wait for the FluidNC banner, and home again.
-- **Boot time.** A fixed 2 s wait can be too short while FluidNC boots. Waiting for the startup
-  banner (or retrying `$X` until `ok`) is more robust. [Likely]
-- **Probe targets** must stay above Z = −8 (machine). `calibrate z` must not probe lower than
-  about −7.
-- `[PRB:…]` has three numbers before `:1`/`:0`, so the existing regex matches. [Certain]
+  `SerialException`.
+  - `GcodeMachine` turns that into `ControllerLost`. The runner stops without moving, shuts the cup
+    valves from the Pi, and prints "The controller lost power or its USB link (E-stop pressed, or
+    the cable came out) …".
+  - The next command reconnects (it waits up to 15 s for the port), waits for the banner, and
+    must home again before anything moves.
+- **Probe targets** are clamped to machine Z −7.5 (`z_min + 0.5`), inside the −8 soft limit.
+  `calibrate z` probes no lower than −7.0 by default.
+- `[PRB:…]` has three numbers before `:1`/`:0`, so the regex matches. [Certain]
 
 ## Open issues
 
-1. **[Certain, CAD] The Z rail is too short at the bottom for probing.**
-   - In `layout.py`, the Z carriage's lower edge meets the rail end at c = −4. That is
-     `Z_SPINE_BOTTOM + 1 − Z_CARRIAGE_ABOVE_CUP` = 227 − 231.
-   - Probing the bare pad trips at about c = −2, and the software probes up to 2 mm past that.
-   - Fix in CAD before building: raise `Z_CARRIAGE_ABOVE_CUP` by about 12 mm (longer drop arm),
-     or extend the rail lower. The carriage then stays on the rail to c = −12.
-   - Top of travel still clears: 258 + 243 + 45.4 = 546 mm < 557 rail top.
-   - Until then, the −8 soft limit lets a failed probe push the carriage up to 4 mm off the rail
-     end.
+1. **Resolved: Z rail bottom margin.** [Certain, CAD] `Z_CARRIAGE_ABOVE_CUP` is now 243 mm (the
+   236 mm drop arm), so the carriage's lower edge meets the rail end at c = −16
+   (`Z_SPINE_BOTTOM + 1 − Z_CARRIAGE_ABOVE_CUP` = 227 − 243). `checks.txt` shows 4 mm of margin at
+   c = −12. Top of travel still clears: at the Z switch (c ≈ 258) the carriage top is at
+   258 + 243 + 45.4 = 546 mm, under the 557 mm rail top.
 2. **[Likely] Sense resistor value by board version.** See "Read this first". If BTT publishes a
    V1.1 config, compare it with this file.
 3. **[Likely] Optical endstop boards differ.** Some have an indicator LED circuit that can hold

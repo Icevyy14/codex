@@ -130,11 +130,22 @@ class SimMotion:
         self.move_time_s = 0.0
         self.travel_mm = 0.0
         self.homed = False
+        self.probe_targets: list[float] = []  # machine Z of every G38.3 target (tests check the soft-limit clamp)
 
     def home(self):
         self.w.z = 250.0
-        self.w.x, self.w.y = 0.0, 0.0
+        self.w.x, self.w.y = self.w.cfg.x_travel[0] - self.x_offset, 0.0  # FluidNC: X = 22 after homing (mpos_mm)
         self.homed = True
+
+    def _soft_limits(self, x=None, z=None, what="move"):
+        """FluidNC soft limits (firmware/fluidnc/config.yaml, machine mm): X 22..1253, Z -8..255.
+        A target outside them is an ALARM on the real controller, so the simulator calls it a crash."""
+        cfg = self.w.cfg
+        lo, hi = cfg.x_travel
+        if x is not None and not lo - 1e-6 <= x <= hi + 1e-6:
+            raise Crash(f"{what} to machine X {x:.3f} is outside the X soft limits {lo:g}..{hi:g}")
+        if z is not None and z < cfg.z_min - 1e-6:
+            raise Crash(f"{what} to machine Z {z:.3f} is below the Z soft limit {cfg.z_min:g}")
 
     def wait_idle(self):
         pass
@@ -152,6 +163,7 @@ class SimMotion:
     def move(self, feed, x=None, y=None, z=None):
         if not self.homed:
             raise Crash("move before homing")
+        self._soft_limits(x, z)
         w = self.w
         x = None if x is None else x - self.x_offset
         y = None if y is None else y
@@ -175,6 +187,8 @@ class SimMotion:
     def probe(self, z_target, feed):
         if not self.homed:
             raise Crash("probe before homing")
+        self._soft_limits(z=z_target, what="probe target")
+        self.probe_targets.append(z_target)
         w = self.w
         surf = w.surface_below()
         self.log.append(f"G38.3 Z{z_target:.2f}")

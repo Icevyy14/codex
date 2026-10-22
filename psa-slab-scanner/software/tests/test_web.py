@@ -82,3 +82,51 @@ def test_resume_continues_the_same_simulated_bed(tmp_path):
     s = _wait(c)
     assert s["state"] == "finished", s["message"]
     assert s["done"] == 3 and s["counts"] == {"ok": 3}
+
+
+def test_estop_shows_the_stop_message_and_resume_rehomes(tmp_path):
+    """E-stop mid-run (the controller's serial port vanishes): the page shows a clean Stop with what to do;
+    Resume on the same (kept-open) machine homes first and finishes every slab once."""
+    from slabscan.motion import ControllerLost
+
+    cfg = from_layout()
+
+    class EStopProvider(SimProvider):
+        def get(self, fresh):
+            hw = super().get(fresh)
+            if fresh:
+                inner, world = hw.motion, hw.world
+
+                class Cut:
+                    fired = False
+
+                    def __getattr__(self, name):
+                        return getattr(inner, name)
+
+                    def move(self, feed, **kw):
+                        if not Cut.fired and world.held and mgr.writer.rows:
+                            Cut.fired = True
+                            inner.homed = False
+                            raise ControllerLost("Lost the controller: its USB serial port went away (E-stop, test)")
+                        inner.move(feed, **kw)
+
+                hw.motion = Cut()
+            return hw
+
+    provider = EStopProvider(cfg, slabs=3)
+    app = create_app(cfg, provider, out_dir=tmp_path)
+    mgr = app.config["MANAGER"]
+    c = app.test_client()
+    bid = c.post("/api/start", json={}, headers=H).get_json()["batch_id"]
+    s = _wait(c)
+    assert s["state"] == "stopped" and "lost power" in s["message"] and "homes first" in s["message"], s["message"]
+    world = provider.hw.world
+    assert world.held  # the slab is still on the cup; the message names its pocket
+    src = int(s["message"].split("A slab from pocket ")[1].split()[0])
+    for slab in reversed(world.held):  # operator puts it back, face-down, on top of that pocket
+        world.stacks[src].append(slab)
+    world.held, world.gripping = [], False
+    assert c.post("/api/resume", json={"batch": bid}, headers=H).status_code == 200
+    s = _wait(c)
+    assert s["state"] == "finished", s["message"]
+    assert s["done"] == 3 and s["counts"] == {"ok": 3}

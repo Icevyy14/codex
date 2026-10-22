@@ -4,8 +4,9 @@ Wiring (see docs/WIRING.md): each load is switched by a logic-level MOSFET modul
 The vacuum sensor (XGZP6847A, -100..0 kPa, 0.5-4.5 V out at 5 V supply) feeds an ADS1115 ADC
 through a 10k/20k divider, so the ADC never sees more than ~3 V.
 
-Valve logic is fail-safe: both solenoid valves are normally closed. On power loss the cup
-stays sealed by the check valve + reservoir, so a held slab is not dropped instantly.
+Valve logic is fail-safe: both solenoid valves are normally closed. On power loss both close, so
+the cup line stays sealed (vacuum valve shut, vent shut) and a held slab is not dropped instantly.
+The check valve keeps the reservoir from leaking back through the stopped pump.
 """
 
 from __future__ import annotations

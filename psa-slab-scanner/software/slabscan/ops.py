@@ -7,7 +7,10 @@ Safety rules shared by every tool here (the run loop has its own, stricter ones)
     no rods yet (``rods=False``: marking the drill template, first calibration);
   * every downward Z jog is a bounded probe move (G38.3), so it stops as soon as the cup or
     awl touches something;
-  * a probe move is never started while the probe already reads triggered (FluidNC would alarm).
+  * a probe move is never started while the probe already reads triggered (FluidNC would alarm);
+  * no probe target or move goes below ``z_floor(cfg)`` = Z -7.5 (firmware soft limit -8);
+  * after an E-stop (the controller loses power and its USB port) the next jog command reconnects
+    and homes again before anything else moves.
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ import numpy as np
 
 from .config import Config, write_overrides
 from .decode import decode_frame, ocr_available
+from .motion import ControllerLost
 
 IN_POCKET_TOL = 5.0  # mm: (pocket 84 - head envelope 70) / 2 = 7 mm per side, minus 2 mm margin
 DIMPLE_DX = 40.0  # drill_template alignment dimples at cell centre +/- 40 mm on the row centre line (cad/model.py)
@@ -71,6 +75,11 @@ class ScriptedConsole(Console):
         return self.answers.pop(0)
 
 
+def z_floor(cfg: Config) -> float:
+    """Lowest machine Z any tool may command or probe toward: 0.5 mm inside the Z soft limit (-8)."""
+    return cfg.z_min + 0.5
+
+
 def machine_x(cfg: Config, x: float, y: float = 0.0) -> float:
     """Bed (layout) X -> machine X with the current calibration (same formula as Runner.xy)."""
     a = math.radians(cfg.rotation_deg)
@@ -85,15 +94,15 @@ def _scratch_runner(cfg: Config, hw, out_dir: Path):
     return Runner(cfg, hw.motion, hw.vacuum, hw.lights, hw.head_cam, hw.station_cam, writer, log=lambda *_: None)
 
 
-def walk_down(m, z_from: float, z_floor: float, window: float, feed: float, vac=None, seal_kpa: float | None = None) -> float | None:
-    """Probe downward in windows from z_from until contact or z_floor. An open cup that seals
-    on the way down (vacuum on) means the contact sensor missed a touch -> CalError."""
+def walk_down(m, z_from: float, floor: float, window: float, feed: float, vac=None, seal_kpa: float | None = None) -> float | None:
+    """Probe downward in windows from z_from until contact or ``floor`` (callers keep it >= z_floor(cfg)).
+    An open cup that seals on the way down (vacuum on) means the contact sensor missed a touch -> CalError."""
     z = z_from
     if vac is not None:
         vac.hold()
     try:
-        while z > z_floor + 1e-6:
-            target = max(z_floor, z - window)
+        while z > floor + 1e-6:
+            target = max(floor, z - window)
             hit = m.probe(target, feed)
             if hit is not None:
                 return hit
@@ -190,9 +199,9 @@ class Jogger:
     def move_z(self, z_to: float) -> float | None:
         """Up = plain move. Down = probe move. Returns the contact Z if it touched."""
         z_to = min(z_to, self.top())
-        if z_to < self.cfg.z_min + 0.5:
-            self.con.say(f"Z {z_to:.2f} is below the lowest Z the controller allows ({self.cfg.z_min:g}); stopping at {self.cfg.z_min + 0.5:g}")
-            z_to = self.cfg.z_min + 0.5
+        if z_to < z_floor(self.cfg):
+            self.con.say(f"Z {z_to:.2f} is below the lowest Z the controller allows ({self.cfg.z_min:g}); stopping at {z_floor(self.cfg):g}")
+            z_to = z_floor(self.cfg)
         if z_to >= self.z:
             self.m.move(self.cfg.feed_z, z=z_to)
             self.m.wait_idle()
@@ -237,6 +246,15 @@ class Jogger:
         try:
             if cmd in ("q", "quit", "exit"):
                 return "quit"
+            if getattr(self.m, "homed", True) is False and cmd not in ("h", "help", "?"):
+                # The controller was reset (E-stop): its position is unknown until it homes again. Homing is
+                # safe from anywhere: Z goes straight up first, then X runs to its left switch at the top.
+                self.con.say("The controller was reset (E-stop or USB). Homing again first: Z goes straight up, then X to the left end.")
+                self.m.home()
+                self.refresh()
+                self.con.say("Homed. Jog back to where you were (the last command was not run).")
+                self.con.say(self.status_line())
+                return None
             if cmd in ("ok", "done", "y"):
                 return "ok"
             if cmd in ("h", "help", "?"):
@@ -277,6 +295,9 @@ class Jogger:
                 return None
         except ValueError:
             self.con.say(f"? bad number in {line.strip()!r}")
+            return None
+        except ControllerLost as e:
+            self.con.say(f"STOP: {e}\nTwist the E-stop to release it. The next command reconnects and homes first.")
             return None
         except Exception as e:  # noqa: BLE001 - controller errors are shown, the session goes on
             self.con.say(f"error: {e}")
@@ -361,7 +382,7 @@ def calibrate_z(cfg: Config, hw, con: Console, cal_path: Path, yes: bool = False
     p0 = cfg.pocket(0)
     m.move(cfg.feed_xy, x=machine_x(cfg, p0.x, p0.y))
     m.wait_idle()
-    floor = max(z_top - cfg.c_max - extra_depth, cfg.z_min + 0.5)  # never ask for a target past the Z soft limit
+    floor = max(z_top - cfg.c_max - extra_depth, z_floor(cfg))  # never ask for a target past the Z soft limit
     con.say(f"probing down from Z {z_top:.1f} to at most Z {floor:.1f} at {cfg.feed_probe:.0f} mm/min (first time: keep a hand near the e-stop)")
     hit = walk_down(m, z_top, floor, cfg.probe_window, cfg.feed_probe, vac, cfg.vac_seal_kpa)
     if hit is None:
@@ -373,7 +394,7 @@ def calibrate_z(cfg: Config, hw, con: Console, cal_path: Path, yes: bool = False
     for _ in range(3):
         m.move(cfg.feed_z, z=hit + 5)
         m.wait_idle()
-        h = m.probe(hit - 3, cfg.feed_probe)
+        h = m.probe(max(hit - 3, z_floor(cfg)), cfg.feed_probe)  # a low pad must not push the target past the soft limit
         if h is None:
             raise CalError("Lost contact on a repeat probe - is the pad loose or the cup wobbling?")
         hits.append(h)
@@ -496,7 +517,7 @@ def mark(cfg: Config, hw, con: Console, start: int = 0, only: list[int] | None =
     jog = Jogger(cfg, m, con, rods=False)
     z_touch = None
     done: list[int] = []
-    lowest = cfg.z_min + 0.5
+    lowest = z_floor(cfg)
 
     def touch(what: str) -> float:
         floor = max(lowest, (z_touch - 4.0) if z_touch is not None else cfg.pad_trigger_c - 6.0)
@@ -629,7 +650,8 @@ def focus(cfg: Config, hw, con: Console, which: str, out_dir: Path, motion: bool
                 result.update(best_sharpness=best[0], best_decoded=best[2], image=str(p))
     finally:
         light(False)
-        if r is not None:
+        # after a lost controller (E-stop) nothing may move: the error that got us here is reported instead
+        if r is not None and getattr(hw.motion, "homed", True) and not getattr(hw.motion, "lost", False):
             if r.holding:
                 r.put_back()
             elif r.homed:
