@@ -19,6 +19,7 @@ PIN_VENT_VALVE = 22  # NC 2/2 valve from cup line to atmosphere
 PIN_LED_HEAD = 23
 PIN_LED_STATION = 24
 PIN_LID = 25  # lid interlock switch (closed = lid shut), input with pull-up
+PIN_GATE = 5  # overfill light-beam receiver: HIGH = beam received (nothing above the MAX line)
 
 ADS_ADDR = 0x48
 DIVIDER = 2.0 / 3.0  # 20k/(10k+20k)
@@ -89,3 +90,16 @@ class PiLid:
 
     def closed(self) -> bool:
         return self._sw.is_pressed
+
+
+class PiGate:
+    """Laser module at one end of the row, photodiode receiver module at the other, beam along the
+    row centre line 4 mm above the MAX line. Blocked beam = something is stacked too high."""
+
+    def __init__(self):
+        from gpiozero import DigitalInputDevice
+
+        self._rx = DigitalInputDevice(PIN_GATE, pull_up=False)
+
+    def clear(self) -> bool:
+        return bool(self._rx.value)

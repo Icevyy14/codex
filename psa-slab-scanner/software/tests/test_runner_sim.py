@@ -13,7 +13,7 @@ import pytest
 from slabscan.config import from_layout
 from slabscan.results import BatchWriter
 from slabscan.runner import Runner, Stop
-from slabscan.simworld import SimCamera, SimLights, SimMotion, SimVacuum, SimWorld, make_batch
+from slabscan.simworld import SimCamera, SimGate, SimLights, SimMotion, SimVacuum, SimWorld, make_batch
 
 
 def _cfg(**kw):
@@ -23,7 +23,7 @@ def _cfg(**kw):
 
 def _run(tmp_path, cfg, stacks, itf_payload="zero_pad"):
     w = SimWorld(cfg, stacks={k: list(v) for k, v in stacks.items()}, itf_payload=itf_payload)
-    r = Runner(cfg, SimMotion(w), SimVacuum(w), SimLights(), SimCamera(w, "head"), SimCamera(w, "station"), BatchWriter(tmp_path), log=lambda *_: None)
+    r = Runner(cfg, SimMotion(w), SimVacuum(w), SimLights(), SimCamera(w, "head"), SimCamera(w, "station"), BatchWriter(tmp_path), gate=SimGate(w), log=lambda *_: None)
     return w, r, r.run()
 
 
@@ -105,7 +105,15 @@ def test_seal_failure_stops_safely(tmp_path):
 def test_overfilled_pocket_refused(tmp_path):
     cfg = _cfg()
     stacks = make_batch(cfg, per_pocket=2, seed=6)
-    stacks[5] = stacks[5] + [stacks[5][0]] * 26  # way over the MAX line
+    stacks[5] = stacks[5] + [stacks[5][0]] * 34  # way over the MAX line
+    with pytest.raises(Stop, match="overfill light beam"):
+        _run(tmp_path, cfg, stacks)
+
+
+def test_slightly_overfilled_pocket_refused_by_survey(tmp_path):
+    cfg = _cfg()
+    stacks = make_batch(cfg, per_pocket=2, seed=6)
+    stacks[5] = [dataclasses.replace(stacks[5][0], thickness=6.9) for _ in range(31)]  # 213.9 mm: under the beam, over the line
     with pytest.raises(Stop, match="MAX line"):
         _run(tmp_path, cfg, stacks)
 

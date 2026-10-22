@@ -44,7 +44,7 @@ class State:
 
 
 class Runner:
-    def __init__(self, cfg: Config, motion, vacuum, lights, head_cam, station_cam, writer: BatchWriter, lid=None, log=print):
+    def __init__(self, cfg: Config, motion, vacuum, lights, head_cam, station_cam, writer: BatchWriter, lid=None, gate=None, log=print):
         self.cfg = cfg
         self.m = motion
         self.vac = vacuum
@@ -53,6 +53,7 @@ class Runner:
         self.station_cam = station_cam
         self.w = writer
         self.lid = lid
+        self.gate = gate  # overfill light beam; .clear() is True when nothing is above the MAX line
         self.log = log
         self.st = State()
         self.itf = ItfModel()
@@ -85,7 +86,10 @@ class Runner:
         if self.z is None or self.z < safe - 0.01:
             self._z(safe)
         mx, my = self.xy(x, y)
-        self.m.move(self.cfg.feed_xy, x=mx, y=my)
+        if "Y" in self.cfg.axes:
+            self.m.move(self.cfg.feed_xy, x=mx, y=my)
+        else:
+            self.m.move(self.cfg.feed_xy, x=mx)
         self.m.wait_idle()
         if self.holding:
             self._check_vacuum("in transit")
@@ -237,6 +241,8 @@ class Runner:
             self._z(cfg.c_safe_loaded)
         to_output = verdict.status == "ok" or (verdict.status == "needs_review" and cfg.needs_review_to == "output")
         target = cfg.pocket(dst) if to_output else pex
+        if target.index == pex.index and self.st.tops.get(pex.index, 0.0) + 2 * cfg.t_thick_max > cfg.max_line:
+            raise Stop(f"Exception pocket {pex.index} is full. Empty it (those slabs need a hand check), then resume. The slab in the cup will be read again.")
         self._go(target.x, target.y)
         s_dst = self.st.tops.get(target.index, 0.0)
         # start high enough that even a double pick (two slabs, ~13 mm) is caught by the probe, not a fast move
@@ -282,6 +288,8 @@ class Runner:
     def run(self) -> dict:
         if self.lid is not None and not self.lid.closed():
             raise Stop("Close the lid to start.")
+        if self.gate is not None and not self.gate.clear():
+            raise Stop("The overfill light beam is blocked: a stack is above the MAX line (or something is lying on the stacks). Fix it, then start again.")
         self.m.home()
         self.z = None
         self._z(self.cfg.c_safe_empty)
@@ -295,8 +303,8 @@ class Runner:
             self.st.done_sources.append(k)
             self._journal({"source_done": k})
         self._z(self.cfg.c_safe_empty)
-        x, y = self.cfg.station_xy
-        self._go(x, y + 120)  # park out of the way
+        p0 = self.cfg.pocket(0)
+        self._go(p0.x, p0.y)  # park over the (now full) first output stack, out of the operator's way
         extra = {
             "itf_mode": self.itf.mode,
             "itf_evidence": dict(self.itf.evidence),

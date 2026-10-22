@@ -55,6 +55,8 @@ class Config:
     custom_regex: str | None = None
     accepted_graders: tuple = ("PSA", "CGC")
     allow_ocr: bool = True
+    axes: str = "XZ"  # SlabRail has no Y axis; Y words are never sent
+    gate_z: float = 214.0  # overfill light beam height (MAX line + 4); only valid with the head up
     # paths
     out_dir: str = "batches"
     cam_head: dict = field(default_factory=lambda: {"type": "usb", "device": 0, "focus": None})
@@ -103,7 +105,7 @@ def from_layout() -> Config:
     return Config(
         pockets=[PocketCfg(p.index, p.x, p.y, p.role) for p in L.pockets()],
         station_xy=L.station_xy(),
-        station_read_c=L.STATION_READ_C,
+        station_read_c=round(L.STATION_READ_C, 2),
         c_safe_empty=L.C_SAFE_EMPTY,
         c_safe_loaded=L.C_SAFE_LOADED,
         c_max=L.C_MAX,
@@ -111,6 +113,7 @@ def from_layout() -> Config:
         stack_max=L.STACK_MAX,
         max_line=L.MAX_LINE,
         probe_window=L.PROBE_WINDOW,
+        gate_z=L.GATE_Z,
     )
 
 

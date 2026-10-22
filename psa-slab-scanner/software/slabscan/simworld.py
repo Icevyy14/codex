@@ -221,6 +221,16 @@ class SimVacuum:
         self.w.vacuum_on = False
 
 
+class SimGate:
+    def __init__(self, world: SimWorld):
+        self.w = world
+
+    def clear(self) -> bool:
+        w = self.w
+        tallest = max((w.stack_top(i) for i in w.stacks), default=0.0)
+        return tallest < w.cfg.gate_z
+
+
 class SimLights:
     def head(self, on):
         pass

@@ -20,21 +20,23 @@ import model as M
 
 OUT = Path(__file__).resolve().parent / "out"
 
+_P = L.pockets()
+_FULL = {p.index: L.STACK_MAX for p in _P if p.role == "source"}
 POSES = {
-    # name: (cup_x, cup_y, c, held_slab, fill)
-    "home": (M.CX_MID, 120.0, L.C_SAFE_EMPTY, False, None),
-    "pick_bottom": (L.pockets()[13].x, L.pockets()[13].y, 0.0, False, {13: 1, **{p.index: 25 for p in L.pockets() if p.role == "source" and p.index != 13}}),
-    "carry": ((L.pockets()[1].x + L.pockets()[0].x) / 2, L.pockets()[0].y, L.C_SAFE_LOADED, True, None),
-    "station": (L.station_xy()[0], L.station_xy()[1], L.STATION_READ_C, True, None),
+    # name: (cup_x, c, held_slab, fill)
+    "home": (_P[1].x, L.C_SAFE_EMPTY, False, None),
+    "pick_bottom": (_P[11].x, 6.6, False, {**_FULL, 11: 1}),
+    "carry": ((_P[1].x + _P[0].x) / 2, L.C_SAFE_LOADED, True, {**_FULL, 0: 12, 1: 17}),
+    "station": (L.station_xy()[0], L.STATION_READ_C, True, {**_FULL, 0: 30, 1: 30, 2: 30, 3: 12, 4: 0}),
 }
 
 VIEWS = {
-    # name: openscad --camera=eye_x,eye_y,eye_z,center_x,center_y,center_z
-    "iso": (1350, -1150, 1150, 226, 160, 150),
-    "front": (226, -1900, 260, 226, 160, 230),
-    "side": (2000, 160, 260, 226, 160, 230),
-    "top": (226, 160, 2100, 226, 161, 0),
-    "head_closeup": (560, -330, 470, 226, 120, 170),
+    # name: openscad --camera=eye_x,eye_y,eye_z,center_x,center_y,center_z  (None = follow the head)
+    "iso": (1650, -1650, 1250, 640, 40, 200),
+    "front": (640, -2600, 330, 640, 40, 260),
+    "side": (2600, 40, 330, 640, 40, 260),
+    "top": (640, 40, 2900, 640, 41, 0),
+    "head_closeup": None,
 }
 
 
@@ -53,8 +55,8 @@ def export_printed() -> list[dict]:
 
 
 def assembly(pose: str) -> list[M.Part]:
-    x, y, c, held, fill = POSES[pose]
-    return M.machine(x, y, c, held_slab=held, fill=fill)
+    x, c, held, fill = POSES[pose]
+    return M.machine(x, c, held_slab=held, fill=fill)
 
 
 def export_assembly(pose: str = "home") -> Path:
@@ -92,7 +94,11 @@ def render(pose: str, views=("iso",), size=(1600, 1100), hide: tuple[str, ...] =
     scad = _scene(pose, d, hide)
     outs = []
     for v in views:
-        cam = ",".join(str(n) for n in VIEWS[v])
+        cv = VIEWS[v]
+        if cv is None:  # close-up that follows the head
+            x, c = POSES[pose][0], POSES[pose][1]
+            cv = (x + 420, -520, c + 380, x, 0, c + 60)
+        cam = ",".join(str(n) for n in cv)
         png = d / f"{pose}_{v}.png"
         cmd = ["xvfb-run", "-a", "openscad", "-o", str(png), f"--imgsize={size[0]},{size[1]}", f"--camera={cam}", "--projection=p", "--colorscheme=Tomorrow", str(scad)]
         subprocess.run(cmd, check=True, cwd=scad.parent, capture_output=True, timeout=600)
