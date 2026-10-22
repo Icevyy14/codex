@@ -13,6 +13,7 @@ import re
 import time
 from dataclasses import dataclass, field
 
+_PRB_RE = re.compile(r"\[PRB:([-\d.]+),([-\d.]+),([-\d.]+)(?:,[-\d.]+)*:(\d)\]")
 _STATUS_RE = re.compile(r"<(\w+)(?::\d+)?\|MPos:([-\d.]+),([-\d.]+),([-\d.]+)(?:,([-\d.]+))?")
 
 
@@ -89,6 +90,31 @@ class GcodeMachine:
     def move(self, feed: float, **axes: float) -> None:
         words = " ".join(f"{k.upper()}{v:.3f}" for k, v in axes.items())
         self.send(f"G1 {words} F{feed:.0f}")
+
+    def probe(self, z_target: float, feed: float) -> float | None:
+        """Bounded probe: move down toward z_target, stop when the contact sensor trips.
+
+        G38.3 = probe toward workpiece, no alarm if nothing is touched. Returns the work-Z of the
+        trigger point, or None if z_target was reached without contact.
+        """
+        replies = self.send(f"G38.3 Z{z_target:.3f} F{feed:.0f}")
+        for r in replies:
+            m = _PRB_RE.search(r)
+            if m:
+                if m.group(4) != "1":
+                    return None
+                # PRB reports machine coordinates; convert with the active work offset
+                return float(m.group(3)) - self.work_offset_z
+        raise MotionError("probe finished without a [PRB:] report")
+
+    @property
+    def work_offset_z(self) -> float:
+        if not hasattr(self, "_wco_z"):
+            self._wco_z = 0.0
+            for r in self.send("$#"):
+                if r.startswith("[G54:"):
+                    self._wco_z = float(r[5:-1].split(",")[2])
+        return self._wco_z
 
     def output(self, pin: int, on: bool) -> None:
         """Immediate digital output (FluidNC user_outputs): M64 = on, M65 = off."""

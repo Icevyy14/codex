@@ -52,8 +52,12 @@ def test_other_graders_detected():
     assert parse_payload("https://www.beckett.com/grading/card-lookup?item_id=0012345678").grader == "BGS"
     assert parse_payload("148069831", "Code128").grader == "unknown"
     assert parse_payload("0148069831", "ITF").grader == "PSA"
-    v = consensus([_r("4123456001", "back_qr", grader="CGC")])
-    assert v.status == "other_grader" and v.grader == "CGC"
+    v = consensus([_r("4123456001", "front_qr", grader="CGC")])
+    assert v.status == "ok" and v.grader == "CGC" and v.cert == "4123456001"
+    v = consensus([_r("0012345678", "front_qr", grader="BGS")])
+    assert v.status == "other_grader" and v.grader == "BGS"
+    v = consensus([_r("0012345678", "front_qr", grader="BGS")], accepted=("PSA", "CGC", "BGS"))
+    assert v.status == "ok"
 
 
 def test_itf_model_learns_zero_pad_and_resolves_itf_only():

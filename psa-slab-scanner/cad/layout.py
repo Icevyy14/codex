@@ -44,7 +44,7 @@ STATION_READ_C = STATION_LENS_Z + CAM_TO_SLAB + SLAB_T  # cup height when the he
 # ---- Motion envelope -----------------------------------------------------------
 CLEAR = 10.0  # vertical clearance over post tops while moving
 C_SAFE_EMPTY = POST_H + CLEAR  # 192: cup face height for empty travel
-C_SAFE_LOADED = POST_H + CLEAR + SLAB_T_MAX  # 199: slab bottom 10 mm over posts
+C_SAFE_LOADED = POST_H + CLEAR + 2 * SLAB_T_MAX  # 206: even a double pick (2 slabs) clears the rods by 10 mm
 C_MAX = 210.0  # top of Z travel (cup face)
 HEAD_ENVELOPE = (70.0, 116.0)  # X, Y footprint of everything below C+POST_H; must fit in pocket
 PROBE_WINDOW = 12.0  # max probing travel past predicted contact (< buffer stroke 25)

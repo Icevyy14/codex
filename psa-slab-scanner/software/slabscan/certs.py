@@ -167,11 +167,15 @@ class ItfModel:
         return None
 
 
-def consensus(reads: list[CodeRead], itf: ItfModel | None = None, min_itf_reads: int = 2) -> Verdict:
+ACCEPTED_GRADERS = ("PSA", "CGC")  # read and stacked normally; others go to the exception pocket
+
+
+def consensus(reads: list[CodeRead], itf: ItfModel | None = None, min_itf_reads: int = 2, accepted: tuple[str, ...] = ACCEPTED_GRADERS) -> Verdict:
     """Combine all reads of one slab into a single verdict.
 
     * no reads                                   -> no_read
-    * any read says another grader (CGC/BGS/...) -> other_grader (goes to the exception pocket)
+    * a CGC QR (or another accepted grader)      -> ok, grader recorded
+    * any read says a non-accepted grader        -> other_grader (goes to the exception pocket)
     * machine reads disagree                     -> conflict (never guess between two codes)
     * QR present: QR wins; ITF reads must match one of their two interpretations
     * ITF only: needs the learned ITF mode (or OCR agreement) and >= min_itf_reads reads
@@ -182,7 +186,13 @@ def consensus(reads: list[CodeRead], itf: ItfModel | None = None, min_itf_reads:
         return Verdict("no_read", None, (), "nothing decoded")
     others = [r for r in reads if r.grader not in ("PSA", "unknown")]
     if others:
+        graders = {r.grader for r in others}
+        certs = {r.cert for r in others}
         r = others[0]
+        if len(graders) > 1 or len(certs) > 1:
+            return Verdict("conflict", None, (r.source,), f"codes disagree: {sorted(graders)} {sorted(certs)}", grader=r.grader, raw=r.raw)
+        if r.grader in accepted:
+            return Verdict("ok", r.cert, tuple(sorted({o.source for o in others})), "", grader=r.grader, raw=r.raw)
         return Verdict("other_grader", r.cert, (r.source,), f"{r.grader} slab", grader=r.grader, raw=r.raw)
     machine = [r for r in reads if r.source != "ocr"]
     ocr = [r for r in reads if r.source == "ocr"]

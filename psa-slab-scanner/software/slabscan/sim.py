@@ -9,6 +9,7 @@ the camera. ``tools/calibrate.py`` checks the same pipeline against real slabs.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 
 import cv2
 import numpy as np
@@ -20,10 +21,21 @@ SLAB_W_MM, SLAB_H_MM = 80.3, 135.5
 LABEL_TOP_MM = 5.0  # label offset from slab top edge (guess - calibrate on real slabs)
 
 
+def itf_text(cert: str, mode: str = "zero_pad") -> str:
+    """How a (simulated) PSA prints a cert as ITF: zero-padded, or cert + mod-10 check digit."""
+    if mode == "check_digit":
+        body = cert
+        s = sum(int(d) * (3 if i % 2 == 0 else 1) for i, d in enumerate(reversed(body)))
+        text = body + str((10 - s % 10) % 10)
+    else:
+        text = cert
+    return "0" + text if len(text) % 2 else text
+
+
 def _symbol(text: str, fmt: str, module_mm: float, height_mm: float | None = None) -> np.ndarray:
     """Render a symbol with a given module size in mm at PX_PER_MM_RENDER."""
     if fmt == "ITF" and len(text) % 2:
-        text = "0" + text  # ITF needs an even digit count; PSA reportedly zero-pads
+        text = "0" + text  # ITF needs an even digit count
     bc = zxingcpp.create_barcode(text, getattr(zxingcpp.BarcodeFormat, fmt))
     img = np.array(zxingcpp.write_barcode_to_image(bc, scale=1, add_quiet_zones=True))
     if img.ndim == 3:
@@ -51,8 +63,11 @@ def _text(canvas: np.ndarray, s: str, x_mm: float, y_mm: float, size_mm: float) 
     cv2.putText(canvas, s, (int(x_mm * PX_PER_MM_RENDER), int(y_mm * PX_PER_MM_RENDER)), cv2.FONT_HERSHEY_SIMPLEX, scale, 0, max(1, int(scale * 2)), cv2.LINE_AA)
 
 
-def render_label(cert: str, side: str = "front", symbology: str = "ITF", module_mm: float = 0.25) -> np.ndarray:
-    """Grayscale label at PX_PER_MM_RENDER. side='front' -> 1D code, side='back' -> QR + 1D."""
+@lru_cache(maxsize=256)
+def render_label(cert: str, side: str = "front", symbology: str = "ITF", module_mm: float = 0.25, itf_payload: str = "zero_pad") -> np.ndarray:
+    """Grayscale label at PX_PER_MM_RENDER. side='front' -> 1D code, 'back' -> QR + 1D,
+    'back_itf_only' -> 2015-2017 style back label (1D only). Cached: treat the result as read-only."""
+    code_text = itf_text(cert, itf_payload) if symbology == "ITF" else cert
     canvas = np.full((int(LABEL_H_MM * PX_PER_MM_RENDER), int(LABEL_W_MM * PX_PER_MM_RENDER)), 245, np.uint8)
     cv2.rectangle(canvas, (0, 0), (canvas.shape[1] - 1, canvas.shape[0] - 1), 120, 6)
     if side == "front":
@@ -60,14 +75,15 @@ def render_label(cert: str, side: str = "front", symbology: str = "ITF", module_
         _text(canvas, "#199 CHARIZARD EX", 3, 9, 2.4)
         _text(canvas, "SPECIAL ILLUS. RARE", 3, 13, 2.4)
         _text(canvas, "GEM MT 10", 50, 6, 2.6)
-        bar = _symbol(cert, symbology, module_mm, height_mm=4.5)
+        bar = _symbol(code_text, symbology, module_mm, height_mm=4.5)
         _paste(canvas, bar, LABEL_W_MM - 3 - bar.shape[1] / PX_PER_MM_RENDER, 8.5)
         _text(canvas, cert, 52, 18, 2.4)
     else:
-        qr = _symbol(f"https://www.psacard.com/cert/{cert}", "QRCode", 0.42)
-        _paste(canvas, qr, 2, (LABEL_H_MM - qr.shape[0] / PX_PER_MM_RENDER) / 2)
+        if side != "back_itf_only":
+            qr = _symbol(f"https://www.psacard.com/cert/{cert}", "QRCode", 0.42)
+            _paste(canvas, qr, 2, (LABEL_H_MM - qr.shape[0] / PX_PER_MM_RENDER) / 2)
         _text(canvas, "PSA", 30, 9, 4)
-        bar = _symbol(cert, symbology, module_mm, height_mm=3.5)
+        bar = _symbol(code_text, symbology, module_mm, height_mm=3.5)
         _paste(canvas, bar, LABEL_W_MM - 2 - bar.shape[1] / PX_PER_MM_RENDER, 12)
         _text(canvas, cert, 52, 10, 2.2)
     return canvas
@@ -86,10 +102,10 @@ class Degrade:
     haze: float = 0.12  # slab plastic lowers contrast
 
 
-def slab_view(cert: str, side: str, deg: Degrade, symbology: str = "ITF", module_mm: float = 0.25, seed: int = 0) -> np.ndarray:
+def slab_view(cert: str, side: str, deg: Degrade, symbology: str = "ITF", module_mm: float = 0.25, seed: int = 0, itf_payload: str = "zero_pad") -> np.ndarray:
     """Camera view of the top ~45 mm of a slab (label + border), degraded."""
     rng = np.random.default_rng(seed)
-    label = render_label(cert, side, symbology, module_mm)
+    label = render_label(cert, side, symbology, module_mm, itf_payload)
     view_w_mm, view_h_mm = SLAB_W_MM + 10, 45.0
     canvas = np.full((int(view_h_mm * PX_PER_MM_RENDER), int(view_w_mm * PX_PER_MM_RENDER)), 40, np.uint8)
     sx, sy = 5.0, 2.0  # slab corner within view
