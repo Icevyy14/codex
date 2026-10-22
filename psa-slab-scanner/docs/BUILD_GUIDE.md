@@ -13,13 +13,15 @@ filled. Every time estimate is **[Guessing]**.
 ## Read this first
 
 - **Phase 0 is two gates, and both come before any motion parts.** [Likely, BOM.md order plan]
-  - **0A, camera test: ≈ $449**, or ≈ $285 if you borrow a school Pi 4 or Pi 5 (a Pi 5 4 GB costs
+  - **0A, camera test: ≈ $457**, or ≈ $293 if you borrow a school Pi 4 or Pi 5 (a Pi 5 4 GB costs
     about $110 by itself in October 2026). Buy your own Pi only after 0A says GO.
-  - **0B, cup test: ≈ $145.** A hand vacuum pump on the bench: no mains wiring, no electronics.
-- **The full machine costs about $1,903.** [Likely ±15%] That is with a 15% allowance; it is about
-  $1,634 if the school supplies its usual shop stock and about $1,547 with the lean swaps. A
-  realistic worst case buying everything is about $2,170, inside the $2,500–3,000 you said is
-  fine. Use the school's shop stock anyway: it is the cheapest headroom.
+  - **0B, cup test: ≈ $198**, with a spare SMC cup and buffer. A hand vacuum pump on the bench: no
+    mains wiring, no electronics.
+- **The full machine costs about $1,973.** [Likely ±15%] That is with a 15% allowance; it is about
+  $1,703 if the school supplies its usual shop stock and about $1,616 with the lean swaps. A
+  realistic worst case buying everything is about $2,235, inside the $2,500–3,000 you said is
+  fine. Use the school's shop stock anyway: it is the cheapest headroom. Upgrades are in the BOM as
+  qty-0 lines: buy one only when its test fails.
 - **Nothing here has moved a real slab yet.** [Certain] The CAD passes its clearance checks and the
   software passes its tests against a simulator. Real labels, the real cup and real wiring are
   untested. That is why Phase 0 comes first and section 13 has the tests to pass before you trust
@@ -31,12 +33,13 @@ filled. Every time estimate is **[Guessing]**.
 
 | Gap | Where it is handled |
 |---|---|
-| The probe flag (the tab that moves into the optical sensor) is not in the CAD. BOM.csv has only the strip to make it from. | §7.6 |
 | The CAD has no brackets, and the bed covers the base-rail tops where the upright brackets would go. | §4.3 |
-| The non-rotating SMC buffer code ("K") in the BOM is built from SMC's code pattern and not confirmed orderable. With a rotating ("J") buffer you must add an anti-rotation guide for the flag yourself. | §2, §7.6 |
+| The SMC cup code `ZPT25UUK20-B5-A10` comes from SMC's catalog (25 mm pads come only in 10/20/30/40/50 mm stroke [Certain]), but no listing of this exact code was found [Likely orderable]. Get it confirmed. `head_foot` now has a flag guide, so the rotating "J" buffer works too. | §2, §7.6 |
+| The flag, guide and sensor post are built on bought-part numbers you must check on arrival: the buffer's catalog heights [Certain, SMC catalog], the M-5ALU-4 elbow's height (9.3 mm) [Likely], and the endstop board's header position and component heights (unknown). Measure them before you cut the flag; the board slots give ±4 mm. | §3.3, §7.6 |
 | The head camera's board-to-lens-front length (20 mm) and its 32 mm hole pattern are guesses in the CAD. | §1.5, §3.3 |
 | The Z lead screw must be cut to 340 mm below the motor face. | §7.3 |
-| Nothing mounts the occluder (cup, buffer, foot) in the Phase 0A jig. | §1.5 step 7 |
+| Two screw lengths in the CAD have no margin: the jig's M5×10 through 1.8–2.0 mm walls may bottom in the slot, and the probe board's M3×12 leave no thread. Washers and M3×16 fix them. [Likely] | §1.5, §7.6 |
+| The head foot hides the card window that the learned face-down check needs [Certain, CAD ray cast: 0 of 75 points visible]. Until a CAD change clears it, that check stays off and every slab without a PSA back QR stops for you. | §1.7, §13.8 |
 
 ## Contents
 
@@ -99,10 +102,10 @@ drill template), so §5 is split: 5A now, 5B after the machine moves (§12).
 
 | # | Step | Section | Hands-on | Printer / waiting | Instructor needed |
 |---|---|---|---|---|---|
-| 1 | Phase 0A: camera test | §1 | 5–6 h | about 14 h print | no |
+| 1 | Phase 0A: camera test (and the probe flag, if the SMC cup has arrived) | §1 | 6–7 h | about 15 h print | no |
 | 2 | Phase 0B: cup bench test (hand pump) | §1.10 | 3–4 h | 24 h test | no |
 | 3 | Order the machine parts | §2 | 1 h | 1–4 weeks delivery | no |
-| 4 | Print the machine parts | §3 | 3 h | about 26 h | no |
+| 4 | Print the machine parts | §3 | 3 h | about 25 h | no |
 | 5 | Frame | §4 | 4–6 h | | **yes: squaring** |
 | 6 | Bed, part A (cut, notch, bolt down, cut pads) | §5A | 3–4 h | | for power-tool rules |
 | 7 | X axis | §6 | 4–5 h | | helpful for the dial indicator |
@@ -124,14 +127,15 @@ they are search-extract prices dated 2023 to August 2026]
 
 | | Cost |
 |---|---:|
-| Order 1a: Phase 0A (Pi, cameras, rings, USB extension, jig parts) | ≈ $449 (≈ $285 with a borrowed Pi) |
-| Order 1b: Phase 0B (cup and buffer, pads, tube, fittings, hand vacuum pump) | ≈ $145 |
-| Order 2: the machine (frame, motion, bed, vacuum system, electronics, mains box, cables) | ≈ $1,309 |
-| **Full list** | **≈ $1,903** |
-| With school shop stock (filament, wire, glue, fuses, screws) | ≈ $1,634 |
-| Lean (also generic valves and Home Depot plywood) | ≈ $1,547 |
+| Order 1a: Phase 0A (Pi, cameras, rings, USB extension, jig parts, flag sheet) | ≈ $457 (≈ $293 with a borrowed Pi) |
+| Order 1b: Phase 0B (two cups and buffers, pads, elbows, tube, fittings, hand vacuum pump) | ≈ $198 |
+| Order 2: the machine (frame, motion, bed, vacuum system, electronics, mains box, cables) | ≈ $1,317 |
+| **Full list** | **≈ $1,973** |
+| With school shop stock (filament, wire, glue, fuses, screws) | ≈ $1,703 |
+| Lean (also generic valves and Home Depot plywood) | ≈ $1,616 |
 | Optional light roof, only if Phase 0 shows glare (conditional BOM lines) | + ≈ $39 |
-| Worst case buying everything (tools, HT1 cups, roof, [Guessing] prices 20% high) | ≈ $2,170: under $2,500 |
+| Worst case buying everything (tools, HT1 cups, roof, [Guessing] prices 20% high) | ≈ $2,235: under $2,500 |
+| Upgrades, each only if its test fails (HIWIN rail, Z motor, counterweight, flex USB, VXB pump, branded E-stop) | + $20–380 each, about $815 if all of them |
 | Junk slabs for §13, if they don't come from your stock | + $150–400 |
 
 **Keep a tally** of what you actually paid after each order (BOM.md).
@@ -157,19 +161,26 @@ Rows marked "PHASE 0A" in BOM.csv. [Certain for the list; prices as in the BOM]
 | 3 m USB 2.0 extension (the BOM line has two; Phase 0A needs one) | BOM | $22 |
 | LED rings: 40 mm for the head, 60 mm for the station (12 V COB) | BOM | $24 |
 | 12 V DC wall adapter, 1 A or more | BOM | $10 |
-| Two 2020 × 312 mm extrusion posts, cut square to ± 0.5 mm | BOM | $12 |
-| M2 screw kit and M2 standoff kit; 4 × M5×10 screws + 4 × M5 slot-6 T-nuts | BOM / school stock | $17 |
+| Two 2020 × 312 mm extrusion posts, cut square to ± 0.5 mm, and one 2020 × 66 mm arm stub | BOM | $16 |
+| M2 screw kit and M2 standoff kit; 6 × M5×10 + 12 M5 washers + 6 M5 slot-6 T-nuts; 1 × M5×30 + nylock; 2 × M3×16 + 4 washers + 2 nuts | BOM / school stock | $17 |
 | Optical endstop board (for `head_foot`'s sensor post) | BOM | $9 |
+| 1 mm soft aluminium sheet, at least 25 × 56 mm (the probe flag) | BOM / school stock | $3 (or $0) |
 | Hookup wire, heat shrink, filament | BOM / school stock | $60 (or $0) |
-| Printed: `phase0_base`, `phase0_tray`, `phase0_top`, and `head_foot` (the machine's own part) | §3 | |
-| **Total** | | **≈ $390 + 15% ≈ $449**, ≈ $285 with a borrowed Pi, ≈ $216 if the school also supplies the wire and filament |
+| Printed: `phase0_base`, `phase0_tray`, `phase0_top`, `phase0_occluder_mount`, and `head_foot` (the machine's own part) | §3 | |
+| **Total** | | **≈ $398 + 15% ≈ $457**, ≈ $293 with a borrowed Pi, ≈ $220 if the school also supplies the wire, filament and sheet |
 
 - **Why the 12 V adapter:** it powers the LED rings without any mains wiring, because the
   `phase0` tool leaves the lights on and never switches them. [Certain, `tools/phase0.py`] The
   rings and the cameras are the only powered parts in Phase 0A.
 - **Why the USB extension and `head_foot` already:** in the machine the head camera reaches the
-  Pi through about 4 m of USB, and the foot, buffer, sensor and cup sit between the lens and the
-  slab, inside the ring light. The jig reproduces both, so a GO means the machine's conditions.
+  Pi through about 4 m of USB, and the foot, buffer, flag, elbow, sensor and cup sit between the
+  lens and the slab, inside the ring light. The jig reproduces both, so a GO means the machine's
+  conditions. [Certain, `checks.txt`: the jig's occluder sits 0.0 mm from the machine's, relative
+  to the lens, and blocks the same share of the camera's view of the slab]
+- **The SMC cup is the real occluder.** It is in order 1b, but its lead time can be 2–8 weeks
+  [Likely]. Order it with 0A if you accept $42 at risk. Otherwise use an M10 bolt with a 25 mm
+  washer as a dummy and leave the flag off; the label view does not depend on it [Certain,
+  `checks.txt`: nothing on the head blocks the label].
 - **With a Pi 4:** use the 15-pin camera cable that ships with the Camera Module 3, not the Pi 5
   cable. [Likely]
 
@@ -187,12 +198,18 @@ the oldest holders.
 - **Also measure one CGC, one BGS and one TAG holder** if you deal them. [Guessing: no width for
   them has been measured; BGS may be wider than PSA] Anything wider than 82.6 mm is "do not load"
   (OPERATING.md §2). CGC matters most, because the machine reads CGC normally.
+- **On two PSA slabs, measure from the slab's label-end edge to the card's top edge** (through the
+  plastic). The learned face-down check looks at a window on the card back that starts about 35 mm
+  from the slab's label-end edge (`face_down_window_mm`, y −33 … −17 mm from the cup axis). It
+  assumes the card starts about 32 mm from that edge. [Guessing] If your number is above 34 mm,
+  the window reaches the label: note it for §1.7.
 
-### 1.3 Print the jig (about 14 h printer time)
+### 1.3 Print the jig (about 15 h printer time)
 
-Print `phase0_base`, `phase0_tray` and `phase0_top` in black PLA or PETG, and `head_foot` in PETG
-(settings in §3; it goes on the machine later). Black matters around the cameras, because it cuts
-stray light. Before printing `head_foot`, check the optical endstop board's hole spacing (§3.3).
+Print `phase0_base`, `phase0_tray`, `phase0_top` and `phase0_occluder_mount` in black PLA or PETG,
+and `head_foot` in PETG (settings in §3; it goes on the machine later). Black matters around the
+cameras, because it cuts stray light. Before printing `head_foot`, check the optical endstop
+board (§3.3).
 
 ### 1.4 Set up the Pi (1–1.5 h)
 
@@ -209,6 +226,12 @@ the same software as the machine.
 2. Put the 60 mm LED ring in the base's ring seat around the lens.
 3. Push the two 2020 posts into the base sockets, down to the socket floors. Fix each with an
    M5×10 screw through the socket's cross hole into a T-nut in the post's slot.
+   - **Test the first screw:** it must pull the part tight before it bottoms in the slot. The
+     printed walls here are only about 2 mm, so a bare M5×10 can reach the profile's core first.
+     Two M5 washers under the head fix that. [Likely; I could not get a 2020 slot drawing] Do the
+     same for every M5×10 in the jig.
+   - **Slide `phase0_occluder_mount`'s clamp onto the RIGHT post now**, with a T-nut in the post's
+     outer slot, before the bridge goes on. Leave its screw loose.
 4. **Face both tray ledges with a strip of the pad microfiber** (spray adhesive): the slab's
    front label rests on them. Slide the tray onto the posts. Set the **top of the cloth on the
    ledges 140 mm above the station lens front** (± 2 mm; if you measure to the bare ledge, set it
@@ -228,15 +251,25 @@ the same software as the machine.
    **head lens front to the slab's top face (its back): 140 ± 2 mm**. If it is off, change the
    standoff height (washers on the standoffs, or a shorter or longer standoff). Don't pack the
    post tops unless you have to.
-7. **Put the machine's occluders under the lens** (the CAD has no mount for this in the jig):
-   - Fit the SMC buffer and cup through `head_foot` with its two M10 nuts, as in §7.5. If the SMC
-     part hasn't arrived, use an M10 bolt with a 25 mm washer as a dummy.
-   - Push a 2020 offcut about 70 mm long into the foot's arm socket and fix it with the cross
-     bolt. Screw the optical endstop board onto the sensor post.
-   - Stand the assembly on the slab's back: the cup on the back centre, **on the lens axis
-     (± 2 mm)**, the arm stub toward the back (away from the label end), exactly as in the machine.
-     Tape or clamp the stub to a post so it can't tip. [Guessing on the improvised mount]
-   - Lift the assembly off (and back on) each time you change the slab.
+7. **Put the machine's occluders under the lens** on `phase0_occluder_mount`. The jig then holds
+   them exactly where the machine does, relative to the lens. [Certain, `checks.txt`: 0.0 mm
+   offset; the same share of the slab view blocked]
+   1. **Arm stub:** push the 66 mm 2020 stub into `head_foot`'s arm socket until it bottoms. Clamp
+      it square and match-drill the 5.5 mm cross hole through the printed hole and the stub
+      together (19 mm from the stub's end). Fix it with an M5×30 and a nylock nut.
+   2. **Occluder parts:** fit the buffer and cup, the flag, the elbow and the endstop board as in
+      §7.5–7.6. With the M10-bolt dummy, leave the flag off.
+   3. **Into the mount:** push the stub up into the mount's socket, the arm stub toward the back
+      (away from the label end) and the sensor post on the right, exactly as in the machine. Fix
+      it with an M5×10 and a T-nut in the stub's +X slot.
+   4. **Height:** put a slab in the tray. Slide the mount down the post until the cup rests on the
+      slab's back and the **foot's underside is 62.0 ± 0.5 mm above the slab's back**. The buffer
+      is then pushed in by its 2 mm trip travel, as in the machine. Tighten the clamp screw.
+   5. The cup lands on the lens axis by construction. [Likely ± 1 mm, print tolerance] Check it by
+      eye from above.
+   6. **To change slabs,** push the cup up by hand, only as far as the change needs.
+   7. **For the face-up pass (§1.7),** slide the whole mount 3 mm up the post. Never slide the stub
+      in the mount instead: the sensor post meets the mount's beam after 2.5 mm. [Certain, CAD]
 8. Plug the ELP camera into a black USB 2.0 port **through the 3 m USB extension**, as in the
    machine. Power both rings from the 12 V adapter (ring + to adapter +).
 
@@ -261,6 +294,7 @@ python -m slabscan focus station --no-motion --save    # sweeps LensPosition, sa
 
 ```bash
 python -m slabscan phase0 --out phase0_results --lens-position 7.1   # use the value focus station printed
+python -m slabscan phase0 --out phase0_results --lens-position 7.1 --face-up 15 --save   # with the face-up pass (below)
 ```
 
 For each slab the tool asks you to type the printed cert number, then saves both images and what
@@ -278,6 +312,37 @@ order the machine learns it.
 - scratched or scuffed labels and holders;
 - one slab with a visible ceiling-light reflection, to check the light-roof question.
 
+Type `q` when you are done. **The read-rate report (`phase0_report.txt`) is written at that point,**
+so stopping later loses nothing. [Certain, `tools/phase0.py`]
+
+**The face-up pass (optional; for the learned face-down check).** The machine can learn what a card
+*back* looks like through the slab and pick slabs without a back QR when their card window matches
+(OPERATING.md §8.4). Phase 0 measures whether that can work: how well the backs match each other,
+and how well face-up slabs match the backs.
+- **With today's head, expect HOLD.** The foot hides the card window from the head camera, in the
+  jig as on the machine [Certain, CAD ray cast; in the simulator the face-up slabs then score like
+  the backs]. The pass then tells you nothing new. Run it anyway if you want the numbers on record;
+  skip it if you are short of time.
+- Start the tool with `--face-up 15`. After `q` it asks for 15 slabs **face-up**.
+  1. First slide the occluder mount 3 mm up the post (§1.5 step 7). The free cup then hangs 1.0 mm
+     above the slab's front, so nothing touches it. [Certain, `checks.txt`] Use junk or low-value
+     slabs anyway [Guessing: print tolerance could close a 1 mm gap].
+  2. Change slabs with the cup pushed up no more than about 12 mm. [Certain, `checks.txt`: 3.2 mm
+     clear at 12 mm; only 0.2 mm left at the full 20 mm with the mount lifted]
+  3. Use 15 different cards, face-up, label end toward you, **including at least one plain card
+     (one colour, little print) and one full-art card**: they are the hardest to tell from a back.
+  4. `s` (or Ctrl-C) ends the pass early; the slabs so far still count. Slide the mount back down
+     to 62.0 mm afterwards.
+- **Open `phase0_results/window_check.jpg`.** The red boxes are the card window
+  (`face_down_window_mm`). They must lie on the card back, clear of the label and of the cup and
+  foot. With today's head they lie on the foot. If the label shows at the *bottom* of the image
+  instead of the top, the camera is turned: put
+  `face_down_window_mm = [[-28, 17, 28, 33]]` in `config/calibration.toml` and run Phase 0 again.
+  [Guessing which way up the real camera is]
+- `--save` writes `face_down_threshold` and `face_down_threshold_sig` to
+  `config/calibration.toml` and the backs to `config/card_backs.npz`, **only on a GO**. Without
+  `--save` it writes nothing to `config/`. [Certain, `tools/phase0.py`]
+
 ### 1.8 Record what the labels actually encode
 
 Open `phase0_results/phase0.csv` and `phase0_report.txt`. Fill this in and keep it with the
@@ -294,6 +359,12 @@ machine: it settles the open questions in RESEARCH.md.
 | Time per side (`back_ms`, `front_ms`) | CSV | replaces the [Guessing] frame times in `cli.py` |
 | Cert lengths seen (8, 9 digits …) | `typed` column | set `psa_cert_digits = [8, 9]` in `calibration.toml` (§11.5) |
 | Widths of your CGC / BGS / TAG holders | your calipers (§1.2) | wider than 82.6 mm: do not load |
+| Label-end edge to the card's top edge | your calipers (§1.2) | the CAD assumes about 32 mm |
+| Card window on the card back? | `window_check.jpg` | boxes on the card / on the label / on the foot |
+| Learned check: how well backs match each other | report line `lowest back-to-back similarity:` | |
+| Learned check: how well face-up slabs match a back | `highest face-up similarity:` | |
+| Backs unlike the others (Japanese cards, other games, CGC) | lines `slab N matches none of the other backs` | |
+| Learned check verdict | `GO for face_down_check = "learned"` with a threshold, or `HOLD for the learned check` and why | expect HOLD with today's head |
 
 ### 1.9 The gate
 
@@ -304,6 +375,8 @@ machine: it settles the open questions in RESEARCH.md.
 | ok below 95 % but no wrong certs | **Hold.** Look at the failing images. Typical fixes: refocus, move the ring, block room light. Then run again. |
 | Back camera fails on most post-2017 labels | **Hold.** Every one of those would need the station detour (+3–5 s each). Fix the head image first. [Likely] |
 | Glare spots over the label in the head images | Plan to build the optional light roof (CONTRACT). |
+| Learned face-down check: **HOLD**, or no face-up pass | **Does not block the build.** The machine then stops at every slab without a PSA back QR for you to check, as before. Expect HOLD with today's head. [Certain, CAD] |
+| Learned face-down check: **GO** (with `--save`) | The threshold, its sig and the seed backs are saved. GO means: on your slabs, the backs matched each other at least 0.10 better than any face-up slab matched a back; the threshold is the midpoint, never below 0.55. It is not a promise. [Guessing] that 15 face-up slabs show the worst case. On the machine the check still needs 5 references and a clear view of the window on 5 proven slabs before it accepts anything, and you check the back photo of every learned acceptance in the first batches (§14). |
 
 ### 1.10 Phase 0B: cup bench test (after 0A passes)
 
@@ -315,8 +388,9 @@ order 2 and are tested in §8.3 and §13.
 
 1. **Bench set-up** (30 min):
    - Clamp the buffer body in a bench vise by its M10 nuts (not by the rod), cup pointing down.
-   - Push an M5 push fitting into the buffer's top port. Run about 1 m of 4 mm PU tube to the hand
-     pump's hose (a stretch fit, or a fitting from the kit).
+   - Screw the `M-5ALU-4` barb elbow into the buffer's top port, with thread sealant on its
+     thread (§7.6 step 6; the flag is not needed here). Push about 1 m of 4 mm PU tube onto the
+     barb and run it to the hand pump's hose (a stretch fit, or a fitting from the kit).
    - Wipe the cup lip with IPA.
 2. **Seal** (on each slab): lay a junk slab face-down on a soft cloth on a block under the cup and
    raise the block until the buffer is pushed in about 2 mm, the machine's trip point. Pump to
@@ -334,7 +408,7 @@ order 2 and are tested in §8.3 and §13.
       each re-pump, and the reading next morning.
    4. After 24 h, open the pump's release valve, then photograph the same spot the same way.
    - **This is a screen, not the final test.** If most of your readings are above −40 kPa
-     (overnight they will drift), most of the 24 h tested only the buffer spring's 1.4 N, not the
+     (overnight they will drift), most of the 24 h tested only the buffer spring's ~1.2 N, not the
      ~19 N vacuum clamp. The binding test is §13.2 on the machine, where the pump re-holds the
      line every few seconds for 24 h and logs it.
 6. **Gate:**

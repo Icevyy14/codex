@@ -129,7 +129,7 @@ class Config:
 
 _TUPLE_FIELDS = ("station_xy", "accepted_graders", "x_travel", "psa_cert_digits")
 FACE_DOWN_MODES = ("learned", "stop", "off")
-FACE_DOWN_THRESHOLD_FLOOR = 0.5  # facedown.THRESHOLD_FLOOR: no measured threshold below it is used [Guessing: sim face-up scores reach 0.38-0.51]
+FACE_DOWN_THRESHOLD_FLOOR = 0.55  # facedown.THRESHOLD_FLOOR: no threshold below it is used [Guessing: sim face-up scores reach 0.37 with a clear view, 0.52 with a head edge 1 mm inside the window]
 
 
 def check_face_down(raw: dict) -> None:

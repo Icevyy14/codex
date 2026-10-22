@@ -469,13 +469,13 @@ def test_config_checks_the_face_down_keys(tmp_path):
     cfg = load(m)
     assert cfg.face_down_check == "learned" and cfg.face_down_window_mm == from_layout().face_down_window_mm
     cal = tmp_path / "calibration.toml"
-    for bad, msg in (('face_down_check = "learnt"', "face_down_check must be"), ("face_down_threshold = 1.5", "from 0.5 to below 1"),
-                     ("face_down_threshold = 0.3", "from 0.5 to below 1"), ("face_down_threshold_sig = 12", "face_down_threshold_sig must be"),
+    for bad, msg in (('face_down_check = "learnt"', "face_down_check must be"), ("face_down_threshold = 1.5", "from 0.55 to below 1"),
+                     ("face_down_threshold = 0.5", "from 0.55 to below 1"), ("face_down_threshold_sig = 12", "face_down_threshold_sig must be"),
                      ("face_down_window_mm = [[10, 0, 5, 4]]", "x0 < x1")):
         cal.write_text(bad + "\n")
         with pytest.raises(ValueError, match=msg):
             load(m, cal)
-    with pytest.raises(ValueError, match="from 0.5"):
+    with pytest.raises(ValueError, match="from 0.55"):
         check_face_down({"face_down_threshold": 0.01})
     cal.write_text('face_down_threshold = 0.71\nface_down_threshold_sig = "abc"\n')
     assert load(m, cal).face_down_threshold == 0.71 and load(m, cal).face_down_threshold_sig == "abc"

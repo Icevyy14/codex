@@ -71,10 +71,11 @@ All commands are `python -m slabscan <command>`. Add `--sim` to use the simulato
 | `focus head\|station [--save] [--no-motion]` | Live sharpness score (Laplacian variance of the sharpest tiles) plus what decodes. With `--no-motion` you hold the slab in view, for example in the Phase 0 jig. |
 | `mark [--only 0,12] [--dry-run]` | Drill-template walk (above). `--dry-run` prints the order and positions. |
 | `run [--name NAME] [--front-photo always\|fallback] [--all-face-down] [--yes]` | One batch. It refuses to start before `calibrate z` and `calibrate x` have been run. `--yes` skips the start question. `--all-face-down` turns the face-down check off for this batch (below). |
-| `resume BATCH_DIR [--accept-heights] [--face-down-ok]` | Continues a stopped batch (below). `--face-down-ok`: you checked the slab the face-down check stopped on. |
+| `resume BATCH_DIR [--accept-heights] [--face-down-ok]` | Continues a stopped batch (below). `--face-down-ok`: you checked the slab the face-down check stopped on. It is refused unless the last stop was that face-down stop, and it confirms that one slab only. |
 | `sim [--slabs N] [--face-down-check] [--sim-head cad\|open]` | Full simulated batch. Prints the summary and a time estimate. `--face-down-check` keeps the check on and counts the slabs it would stop at. |
 | `web [--port 8080]` | Phone page (below). |
-| `phase0 [--sim N] [--out DIR] [--face-up 5] [--save]` | The Phase 0 camera test (same as `python -m tools.phase0`): reads 30-50 of your slabs in the Phase 0 jig before you buy any motion parts. The face-up pass measures whether the learned face-down check can work; `--save` writes its threshold on a GO. |
+| `phase0 [--sim N] [--out DIR] [--face-up 15] [--save]` | The Phase 0 camera test (same as `python -m tools.phase0`): reads 30-50 of your slabs in the Phase 0 jig before you buy any motion parts. The read-rate report is written as soon as you type `q`. The face-up pass is off unless you ask for it; a GO for the learned face-down check needs 15 face-up slabs. `--save` writes its threshold on a GO. |
+| `refs [--drop CERT \| --drop-operator]` | Lists the learned face-down check's card-back references, with the batch, position and cert each came from. `--drop` deletes one slab's reference, for example after a wrong confirmation. |
 
 **Jog safety rules** (enforced in software):
 - Nothing moves before homing.
@@ -101,11 +102,21 @@ confirm it with `resume --face-down-ok`.
 - `"stop"`: only a PSA back-label QR proves it. Older labels and CGC stop every time.
 - `"learned"` (the default): a back QR, or a card window that matches the card backs of earlier
   QR- or operator-confirmed slabs (`slabscan/facedown.py`). The references live in
-  `config/card_backs.npz` (not in git; delete it to start over). It only becomes active once
-  Phase 0 has written `face_down_threshold` and 5 references exist. Until then it acts like
-  `"stop"`. **With today's CAD head it never becomes active** [Certain, in the CAD and the
-  simulator]: the head foot hides the card window from the head camera, and the check detects
-  that and refuses.
+  `config/card_backs.npz` (not in git; `refs` lists them, `refs --drop CERT` deletes one, and
+  deleting the file starts over). It only becomes active when all of these hold:
+  - Phase 0 wrote `face_down_threshold` and `face_down_threshold_sig` (`phase0 --face-up 15 --save`
+    on a GO). A threshold measured for another card window, or typed in without its sig, is not used.
+    No threshold below 0.55 is accepted.
+  - 5 references exist, and 5 slabs proven face-down on this machine showed the card window clear:
+    at most 10% of it may look the same on every slab as over an empty pocket.
+  - Until then it acts like `"stop"`.
+  - **With today's CAD head it never becomes active** [Certain, in the CAD and the simulator]: the
+    head foot hides the card window from the head camera, and the check detects that and refuses.
+    It also refuses a head that hides only part of the window [Certain, sim: a foot edge 3 mm or more
+    inside it; an edge 1 mm inside is not seen, and it lifts face-up scores from 0.37 to 0.52].
+  - A back design known only from your confirmations (no back-QR slab) is used once three of
+    your confirmations agree. A confirmed slab is learned from only after it was placed, and not at
+    all if the read station saw a PSA back-label QR from below (it was face-up after all).
 - `"off"` (or `run --all-face-down`): no check. A face-up slab gets the cup on its front.
 
 The machine:
