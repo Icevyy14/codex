@@ -72,7 +72,7 @@ The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
 ## Verification done so far (no hardware)
 
 - **[Certain] 36/36 geometric checks pass** (`cad/checks.py`).
-  - Picking the last slab of every pocket with full neighbours clears the head by ≥ 14 mm.
+  - Picking the last slab of every pocket with full neighbours clears the head by ≥ 10 mm.
   - Carried slabs clear the dowels by ≥ 18 mm.
   - The cameras have an unobstructed view of the label.
   - All travel limits stay on the rails.
