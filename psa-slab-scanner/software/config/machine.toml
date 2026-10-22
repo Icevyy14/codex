@@ -2,9 +2,9 @@
 # Any key below can be overridden in calibration.toml (the calibrate commands write there).
 
 station_xy = [686.0, 0.0]
-station_read_c = 169.6
-c_safe_empty = 228.0
-c_safe_loaded = 246.0
+station_read_c = 171.6
+c_safe_empty = 236.5
+c_safe_loaded = 248.0
 c_max = 250.0
 post_h = 218.0
 stack_max = 30

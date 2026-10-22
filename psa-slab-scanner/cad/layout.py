@@ -34,6 +34,8 @@ POST_H = 218.0  # guide rod height above pad top (30 x 6.9 = 207 + margin)
 MAX_LINE = 210.0  # fill line (printed fill gauge + software height check)
 GATE_Z = MAX_LINE + 4.0  # overfill light beam along the row centre line, below the rod tops
 ROD_D = 8.0
+ROD_DOME_R = 2.0  # rod tops are domed to a 2-3 mm radius (BUILD_GUIDE 5.4): the lead-in for an off-centre slab
+XY_CAL_RESIDUAL = 0.5  # cup-to-pocket-centre error left after calibrate x
 ROD_INSET = 12.0  # rod centre from each cell corner: corners stay free, and the front/back gap (52 mm) fits fingertips for loading
 ROD_EMBED = 15.0
 PAD_T = 3.0  # EVA + microfiber pad thickness (pad top = Z0)
@@ -42,13 +44,14 @@ BED_T = 18.0  # plywood bed
 # ---- Read station (upward camera, in a middle cell of the row) ----------------------
 CAM_TO_SLAB = 140.0  # both cameras: lens to label distance
 STATION_LENS_Z = 23.0  # station camera lens front above pad top
-STATION_READ_C = STATION_LENS_Z + CAM_TO_SLAB + SLAB_T  # cup height when the held slab's front is 140 mm above the lens
+CUP_HANG = 2.0  # the free cup hangs this far below its trip-calibrated height c (buffer compression at the probe trip, = software buffer_trip_mm)
+STATION_READ_C = STATION_LENS_Z + CAM_TO_SLAB + SLAB_T + CUP_HANG  # cup height when the held slab's front is 140 mm above the lens
 
 # ---- Motion envelope -----------------------------------------------------------
 CLEAR = 10.0  # vertical clearance over rod tops while moving
 CARRY_CLEAR = 5.0  # the simulator's rule: the lowest held slab face stays >= POST_H + 5 on XY moves
-C_SAFE_EMPTY = POST_H + CLEAR  # 228: cup face height for empty travel
-C_SAFE_LOADED = POST_H + 2 * SLAB_T_THICK_MAX + CARRY_CLEAR  # 246: a double pick of two thick holders (2 x 11.5) still clears the rods by 5 mm
+C_SAFE_EMPTY = POST_H + SLAB_T_THICK_MAX + CARRY_CLEAR + CUP_HANG  # 236.5: empty travel; even a thick holder that clings after the vent clears the rods by 5 mm
+C_SAFE_LOADED = POST_H + 2 * SLAB_T_THICK_MAX + CARRY_CLEAR + CUP_HANG  # 248: a double pick of two thick holders (2 x 11.5) still clears the rods by 5 mm
 C_MAX = 250.0  # top of Z travel the software uses (cup face)
 C_MIN = -12.0  # lowest cup height the design allows (firmware soft limit -8; probing the bare pad trips near -2)
 C_HARD_BOTTOM = C_MIN - 2.0  # -14: Z carriage skirts land on the z_end_cap lips (hard stop; the buffer would bottom on the bare pad only at about -25)
@@ -187,8 +190,17 @@ def check() -> list[str]:
         problems.append("probe window must be shorter than buffer stroke")
     if C_MAX < C_SAFE_LOADED:
         problems.append("Z travel cannot lift a slab clear of the rods")
-    if C_SAFE_LOADED - 2 * SLAB_T_THICK_MAX < POST_H + CARRY_CLEAR:
+    if C_SAFE_LOADED - CUP_HANG - 2 * SLAB_T_THICK_MAX < POST_H + CARRY_CLEAR:
         problems.append("a double pick of two thick holders does not clear the rods by CARRY_CLEAR at C_SAFE_LOADED")
+    if C_SAFE_EMPTY - CUP_HANG - SLAB_T_THICK_MAX < POST_H + CARRY_CLEAR:
+        problems.append("a thick holder clinging to the 'empty' cup does not clear the rods by CARRY_CLEAR at C_SAFE_EMPTY")
+    # A slab rides on the cup at the offset it had in its source pocket (up to the full play), and the cup misses
+    # both pocket centres by up to XY_CAL_RESIDUAL, so it can meet a destination rod by 2 x XY_CAL_RESIDUAL.
+    # The rod's dome must turn that into a lead-in (the held descent through the rod band is slow and guarded).
+    if 2 * XY_CAL_RESIDUAL > ROD_DOME_R - 0.5:
+        problems.append("an off-centre held slab overlaps a rod by more than the domed rod top can lead in")
+    if C_SAFE_EMPTY - CUP_HANG < POST_H + CLEAR:
+        problems.append("the empty cup does not clear the rods by CLEAR at C_SAFE_EMPTY")
     if STATION_READ_C > C_SAFE_LOADED:
         problems.append("station read height above loaded travel height")
     if not 0 < STATION_CELL < N_CELLS - 1:

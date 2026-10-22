@@ -7,7 +7,7 @@
   calibrate x [--no-rods]         centre the awl on pocket 0 and pocket 12 -> offset_x + scale check
   focus head|station [--save]     sharpness + decode score (station: LensPosition sweep)
   mark [--start N | --only N,M]   walk the awl over every pocket for the drill template
-  run [--name NAME] [--front-photo always|fallback] [--yes]
+  run [--name NAME] [--front-photo always|fallback] [--all-face-down] [--yes]
   resume BATCH_DIR [--accept-heights] [--face-down-ok] [--yes]
   sim [--slabs N]                 full simulated batch, no hardware
   web [--port 8080]               phone page: start/stop/resume, progress, downloads
@@ -324,17 +324,23 @@ def cmd_run(args, con):
     cfg, cal = load_config(args)
     if args.front_photo:
         cfg = dataclasses.replace(cfg, front_photo=args.front_photo)
+    if args.all_face_down:
+        cfg = dataclasses.replace(cfg, face_down_check="off")
     if not args.sim and not is_calibrated(cal) and not args.uncalibrated:
         con.say(f"{cal} has no pad_trigger_c / offset_x yet. Run `calibrate z` and `calibrate x` first (or --uncalibrated if you really mean it).")
         return 1
     if not args.yes and not args.sim:
         con.say("Before starting: slabs FACE-DOWN, label end toward you, in pockets 1-11, none above the MAX line.\n"
                 "Pocket 0 and pocket 12 empty. Cup wiped. Hands out (light roof on, if fitted).")
+        if args.all_face_down:
+            con.say("--all-face-down: slabs without a back QR (older PSA labels, CGC) are picked without stopping. A slab loaded\n"
+                    "face-up would get the cup on its front, so check every stack before you walk away.")
         if not con.confirm("Start the run?"):
             return 1
     hw = _hw(args, cfg, ("motion", "vacuum", "lights", "head_cam", "station_cam", "gate", "lid"))
     writer = BatchWriter(Path(cfg.out_dir), new_batch_id(args.name, "sim-" if args.sim else ""))
-    (writer.dir / "run.json").write_text(json.dumps({"name": args.name, "front_photo": cfg.front_photo, "started": time.strftime("%Y-%m-%dT%H:%M:%S"), "sim": bool(args.sim)}, indent=2))
+    (writer.dir / "run.json").write_text(json.dumps({"name": args.name, "front_photo": cfg.front_photo, "face_down_check": cfg.face_down_check,
+                                                     "started": time.strftime("%Y-%m-%dT%H:%M:%S"), "sim": bool(args.sim)}, indent=2))
     con.say(f"batch {writer.batch_id} -> {writer.dir}   (Ctrl-C = stop after the current slab)")
     return _execute_and_hand_off(cfg, hw, writer, con, cal_path=None if (args.sim or args.uncalibrated) else cal)
 
@@ -381,6 +387,8 @@ def cmd_resume(args, con):
     opts = run_options(bdir)
     if opts.get("front_photo"):
         cfg = dataclasses.replace(cfg, front_photo=opts["front_photo"])
+    if opts.get("face_down_check") in ("stop", "off"):
+        cfg = dataclasses.replace(cfg, face_down_check=opts["face_down_check"])  # a batch keeps the choice it was started with
     if (bdir / "stop.json").exists():
         con.say("last stop: " + json.loads((bdir / "stop.json").read_text()).get("message", ""))
     if not is_calibrated(cal):
@@ -459,7 +467,8 @@ def cmd_sim(args, con):
         # until you confirm it (resume --face-down-ok): here that is reported instead, so the timing is for a full run.
         cfg = dataclasses.replace(cfg, face_down_check="off")
         con.say(f"(sim: face-down check off. On the machine {unconfirmable} of these {sum(len(v) for v in stacks.values())} slabs have no PSA "
-                "back-label QR, and each would stop the run until you confirm it is face-down: resume --face-down-ok)")
+                "back-label QR, and each would stop the run until you confirm it is face-down (resume --face-down-ok), unless the run is "
+                "started with run --all-face-down)")
     hw = sim_hardware(cfg, stacks=stacks)
     hw.head_cam, hw.station_cam = _Count(hw.head_cam), _Count(hw.station_cam)
     hw.lights, hw.vacuum = _CountLights(hw.lights), _CountVac(hw.vacuum)
@@ -589,6 +598,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("run", help="run a batch")
     p.add_argument("--name", help="added to the batch folder name")
     p.add_argument("--front-photo", choices=["always", "fallback"], help="always = photograph every front (+~3 s/slab)")
+    p.add_argument("--all-face-down", action="store_true",
+                   help="you loaded every slab face-down: don't stop at slabs without a back QR (older PSA labels, CGC)")
     p.add_argument("--yes", action="store_true", help="no start question (unattended start)")
     p.add_argument("--uncalibrated", action="store_true", help=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_run)

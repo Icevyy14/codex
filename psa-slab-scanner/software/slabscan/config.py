@@ -24,8 +24,8 @@ class Config:
     station_xy: tuple[float, float]
     station_read_c: float
     # defaults = cad/layout.py (machine.toml always sets them; a stale default must never be unsafe)
-    c_safe_empty: float = 228.0
-    c_safe_loaded: float = 243.0
+    c_safe_empty: float = 236.5
+    c_safe_loaded: float = 248.0
     c_max: float = 250.0
     post_h: float = 218.0
     stack_max: int = 30
@@ -129,6 +129,9 @@ def check_custom_regex(rx: str | None) -> None:
         raise ValueError(f"custom_regex {rx!r} must have exactly one capture group (the cert digits), it has {n}")
 
 
+DESIGN_CUP_HANG = 2.0  # = cad/layout.py CUP_HANG
+
+
 def load(path: Path, calibration: Path | None = None) -> Config:
     """machine.toml, then calibration.toml on top (any key may be overridden there)."""
     raw = tomllib.loads(Path(path).read_text())
@@ -145,7 +148,17 @@ def load(path: Path, calibration: Path | None = None) -> Config:
     check_custom_regex(raw.get("custom_regex"))
     if raw.get("face_down_check", "stop") not in ("stop", "off"):
         raise ValueError(f"face_down_check must be \"stop\" or \"off\", not {raw['face_down_check']!r}")
-    return Config(pockets=pockets, **raw)
+    cfg = Config(pockets=pockets, **raw)
+    # The travel heights assume the free cup hangs DESIGN_CUP_HANG below its trip height (cad/layout.py CUP_HANG).
+    # A buffer measured to trip later hangs lower, so both travel heights go up by the difference.
+    excess = cfg.buffer_trip_mm - DESIGN_CUP_HANG
+    if excess > 0:
+        cfg.c_safe_empty = round(cfg.c_safe_empty + excess, 3)
+        cfg.c_safe_loaded = round(cfg.c_safe_loaded + excess, 3)
+        if cfg.c_safe_loaded > cfg.c_max:
+            raise ValueError(f"buffer_trip_mm = {cfg.buffer_trip_mm} puts loaded travel at {cfg.c_safe_loaded} mm, above c_max {cfg.c_max}: "
+                             "set the probe flag to trip after 1.5-2.5 mm of buffer travel (BUILD_GUIDE 7.6) and measure again")
+    return cfg
 
 
 def from_layout() -> Config:

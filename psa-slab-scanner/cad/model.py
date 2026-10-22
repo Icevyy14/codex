@@ -732,7 +732,9 @@ def stacks(fill: dict[int, int] | None = None) -> list[Part]:
 # --------------------------------------------------------------------------- assembly
 
 
-def machine(cup_x: float, c: float, held_slab: bool = False, fill: dict[int, int] | None = None, with_slabs: bool = True, roof: bool = False, fasteners: bool = True) -> list[Part]:
+def machine(cup_x: float, c: float, held_slab: bool = False, fill: dict[int, int] | None = None, with_slabs: bool = True, roof: bool = False, fasteners: bool = True,
+            seated: bool = False) -> list[Part]:
+    """``seated``: the held slab rests on something (probe tripped, buffer compressed); otherwise the free cup hangs CUP_HANG below c."""
     parts = frame_parts() + bed_parts() + carriage_parts(cup_x) + head_parts(cup_x, c)
     if not roof:
         parts = [p for p in parts if p.name != "light_roof"]
@@ -741,8 +743,9 @@ def machine(cup_x: float, c: float, held_slab: bool = False, fill: dict[int, int
     if with_slabs:
         parts += stacks(fill)
     if held_slab:
-        parts.append(Part("held_slab", slab(cup_x, L.Y_ROW, c - SLAB_T), SLAB, "slab", "head"))
-        parts.append(Part("held_label", slab_label(cup_x, L.Y_ROW, c - SLAB_T), LABEL, "slab", "head"))
+        z0 = c - (0.0 if seated else L.CUP_HANG) - SLAB_T
+        parts.append(Part("held_slab", slab(cup_x, L.Y_ROW, z0), SLAB, "slab", "head"))
+        parts.append(Part("held_label", slab_label(cup_x, L.Y_ROW, z0), LABEL, "slab", "head"))
     return parts
 
 

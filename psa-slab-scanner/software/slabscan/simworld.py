@@ -95,7 +95,7 @@ class SimWorld:
 
     # ---- safety rules for XY moves
     def check_xy_path(self, x1, y1):
-        lp = self.lowest_point()
+        lp = self.lowest_point() - self.trigger_compression  # in free travel the cup hangs below its trip-calibrated height
         if lp < self.cfg.post_h + 5:
             # only an empty head may shift a few mm inside one pocket (jog / calibration); a held slab has 1.85 mm of play
             p = self.pocket_at(self.x, self.y, tol=HEAD_SIDE_CLEAR)

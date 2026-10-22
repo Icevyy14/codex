@@ -163,3 +163,14 @@ def test_web_refuses_an_uncalibrated_machine_and_reloads_the_config(tmp_path):
     write_overrides(cal, {"pad_trigger_c": 0.0, "offset_x": 0.0})
     assert c.post("/api/start", json={}, headers=H).status_code == 200
     assert _wait(c)["state"] == "finished" and loads == [1]
+
+
+def test_start_all_face_down_runs_through_slabs_without_a_back_qr(tmp_path):
+    cfg = _layout()  # face-down check on, and the simulated mix has older labels without a back QR
+    assert cfg.face_down_check == "stop"
+    app = create_app(cfg, SimProvider(cfg, slabs=12), out_dir=tmp_path)
+    c = app.test_client()
+    bid = c.post("/api/start", json={"all_face_down": True}, headers=H).get_json()["batch_id"]
+    s = _wait(c)
+    assert s["state"] == "finished", s["message"]
+    assert (tmp_path / bid / "run.json").read_text().count('"face_down_check": "off"') == 1

@@ -65,8 +65,29 @@ def contact_sheet(names: list[str], dest: Path) -> None:
     sheet.save(dest)
 
 
+def phase0_jig(dest: Path) -> None:
+    """The Phase 0 camera jig on its own (model.phase0_parts)."""
+    import subprocess
+
+    import cadquery as cq
+    import model as M
+
+    d = build.OUT / "renders" / "stl_phase0"
+    d.mkdir(parents=True, exist_ok=True)
+    lines = []
+    for p in M.phase0_parts():
+        cq.exporters.export(p.shape, str(d / f"{p.name}.stl"), tolerance=0.1, angularTolerance=0.2)
+        r, g, b, a = p.color
+        lines.append(f'color([{r},{g},{b},{a}]) import("{p.name}.stl");')
+    (d / "scene.scad").write_text("\n".join(lines) + "\n")
+    subprocess.run(["xvfb-run", "-a", "openscad", "-o", str(dest), "--imgsize=1100,1300", "--camera=640,-820,620,0,0,165", "--projection=p",
+                    "--colorscheme=Tomorrow", "scene.scad"], check=True, cwd=d, capture_output=True, timeout=600)
+
+
 def main():
     DOCS.mkdir(parents=True, exist_ok=True)
+    phase0_jig(DOCS / "phase0_jig.png")
+    print(DOCS / "phase0_jig.png")
     for name, (x, c, held, fill, cam) in SHOTS.items():
         build.POSES[name] = (x, c, held, fill)
         build.VIEWS[name] = cam

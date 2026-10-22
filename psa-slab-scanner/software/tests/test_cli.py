@@ -332,3 +332,12 @@ def test_resume_needs_calibration_and_a_hands_clear_answer(tmp_path):
     cal.write_text("pad_trigger_c = 0.5\noffset_x = 0.25\n")
     code, out = _run(["--config", str(m), "--calibration", str(cal), "resume", str(bdir)], ["n"])
     assert code == 1 and "Resume the run?" in out and "slabs already done" not in out  # refused before the machine was opened
+
+
+def test_run_all_face_down_is_kept_for_the_batch(tmp_path):
+    code, out = _run(["--sim", "--sim-slabs", "2", "run", "--all-face-down", "--out", str(tmp_path)])
+    assert code == 0, out
+    batch = next(tmp_path.iterdir())
+    import json
+
+    assert json.loads((batch / "run.json").read_text())["face_down_check"] == "off"  # resume reads it back

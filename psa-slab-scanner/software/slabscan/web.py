@@ -144,7 +144,7 @@ class RunManager:
                 self.provider.invalidate()
             return where
 
-    def start(self, name: str | None = None, front_photo: str | None = None) -> str:
+    def start(self, name: str | None = None, front_photo: str | None = None, all_face_down: bool = False) -> str:
         import dataclasses
 
         from .cli import new_batch_id
@@ -154,8 +154,11 @@ class RunManager:
                 raise RuntimeError("a run is already going")
             base = self._fresh_cfg()
             cfg = dataclasses.replace(base, front_photo=front_photo) if front_photo in ("always", "fallback") else base
+            if all_face_down:
+                cfg = dataclasses.replace(cfg, face_down_check="off")
             writer = BatchWriter(self.out_dir, new_batch_id(name, "sim-" if self.provider.sim else ""))
-            (writer.dir / "run.json").write_text(json.dumps({"name": name, "front_photo": cfg.front_photo, "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            (writer.dir / "run.json").write_text(json.dumps({"name": name, "front_photo": cfg.front_photo, "face_down_check": cfg.face_down_check,
+                                                             "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
                                                              "sim": self.provider.sim, "via": "web"}, indent=2))
             self._launch(cfg, writer, resume=False, fresh=True)
             return writer.batch_id
@@ -173,6 +176,8 @@ class RunManager:
                 raise RuntimeError("a run is already going")
             base = self._fresh_cfg()
             cfg = dataclasses.replace(base, front_photo=opts["front_photo"]) if opts.get("front_photo") in ("always", "fallback") else base
+            if opts.get("face_down_check") in ("stop", "off"):
+                cfg = dataclasses.replace(cfg, face_down_check=opts["face_down_check"])  # a batch keeps the choice it was started with
             writer = BatchWriter.reopen(self.out_dir / batch_id)
             self._launch(cfg, writer, resume=True, fresh=False, accept_heights=accept_heights, face_down_ok=face_down_ok)
             return batch_id
@@ -311,7 +316,8 @@ def create_app(cfg: Config, provider, out_dir: Path | None = None, reload=None, 
         guard()
         b = body()
         try:
-            bid = mgr.start((b.get("name") or "").strip() or None, b.get("front_photo") or None)
+            bid = mgr.start((b.get("name") or "").strip() or None, b.get("front_photo") or None,
+                            str(b.get("all_face_down", "")).lower() in ("1", "true", "on", "yes"))
         except RuntimeError as e:
             return jsonify(error=str(e)), 409
         return jsonify(ok=True, batch_id=bid)
@@ -406,6 +412,7 @@ a{color:var(--accent)}pre{white-space:pre-wrap;font-size:12px;color:var(--mute);
 <div class="card" id="controls">
   <div class="row"><input id="name" placeholder="batch name (optional)" maxlength="40">
   <select id="fp"><option value="fallback">front photo: only when needed</option><option value="always">front photo: every slab (+3 s)</option></select></div>
+  <label class="mute"><input type="checkbox" id="allfd" style="min-height:0"> I loaded every slab face-down: don't stop at slabs without a back QR (older PSA, CGC)</label>
   <div class="row"><button class="go" id="start">Start run</button><button class="stop" id="stop">Stop after this slab</button></div>
   <div class="row"><select id="resumeSel"></select><button id="resume">Resume</button></div>
   <label class="mute"><input type="checkbox" id="accept" style="min-height:0"> accept changed stack heights on resume</label>
@@ -449,7 +456,7 @@ async function batches(){
     for(const f of x.files){const a=el('a',f+' ');a.href=`/batches/${x.id}/${f}`;d.append(a)}box.append(d)}
   if(!sel.options.length)sel.append(el('option','nothing to resume'));else if(keep)sel.value=keep;
 }
-$('start').onclick=()=>{if(confirm('Slabs face-down, label toward you, pockets 0 and 12 empty, hands clear?'))post('/api/start',{name:$('name').value,front_photo:$('fp').value})};
+$('start').onclick=()=>{if(confirm('Slabs face-down, label toward you, pockets 0 and 12 empty, hands clear?'))post('/api/start',{name:$('name').value,front_photo:$('fp').value,all_face_down:$('allfd').checked})};
 $('stop').onclick=()=>post('/api/stop');
 $('resume').onclick=()=>{const v=$('resumeSel').value;if(v&&confirm('Resume '+v+'? Hands clear?'))post('/api/resume',{batch:v,accept_heights:$('accept').checked,face_down_ok:$('facedown').checked})};
 $('vent').onclick=()=>{if(confirm('Are you holding the slab? It lets go when the cup vents.'))post('/api/vent')};

@@ -724,3 +724,22 @@ def test_the_head_camera_is_never_ocr_d(tmp_path, monkeypatch):
     world.stacks[1][-1].era = "old"
     _runner(cfg, world, tmp_path).run()
     assert seen and set(seen) == {"front"}
+
+
+def test_free_cup_hang_is_in_travel_heights_and_follows_measured_buffer_trip(tmp_path):
+    # the free cup hangs buffer_trip_mm below c: a double pick of two thick holders must still clear the rods by 5 mm
+    cfg = from_layout()
+    hang = cfg.buffer_trip_mm
+    assert cfg.c_safe_loaded - hang - 2 * cfg.t_thick_max >= cfg.post_h + 5
+    assert cfg.c_safe_empty - hang - cfg.t_thick_max >= cfg.post_h + 5
+    from slabscan.config import dumps, load
+
+    machine = tmp_path / "machine.toml"
+    machine.write_text(dumps(cfg))
+    cal = tmp_path / "calibration.toml"
+    cal.write_text("buffer_trip_mm = 2.6\n")
+    late = load(machine, cal)
+    assert late.c_safe_loaded == pytest.approx(cfg.c_safe_loaded + 0.6) and late.c_safe_empty == pytest.approx(cfg.c_safe_empty + 0.6)
+    cal.write_text("buffer_trip_mm = 4.5\n")
+    with pytest.raises(ValueError, match="c_max"):
+        load(machine, cal)

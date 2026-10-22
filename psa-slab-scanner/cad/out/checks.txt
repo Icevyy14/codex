@@ -13,11 +13,11 @@ PASS  pick last slab, pocket 10: head/carriage clearance                        
 PASS  pick last slab, pocket 11: head/carriage clearance                                                    24.4  (limit 3.0)  drop_arm <-> gate_beam
 PASS  pick last slab, pocket 12: head/carriage clearance                                                    24.4  (limit 3.0)  drop_arm <-> gate_beam
 PASS  place first slab in pocket 0: slab-to-rod play (centred)                                              1.75  (limit 1.0)  held_slab <-> rod_02
-PASS  empty travel 1->2: head/carriage clearance over rods/stacks                                           13.4  (limit 9.0)  cup <-> gate_beam
+PASS  empty travel 1->2: head/carriage clearance over rods/stacks                                           21.9  (limit 9.0)  cup <-> gate_beam
 PASS  loaded travel 1->2: head/carriage/slab clearance                                                      21.4  (limit 9.0)  held_slab <-> rod_12
-PASS  empty travel 6->7: head/carriage clearance over rods/stacks                                           13.4  (limit 9.0)  cup <-> gate_beam
+PASS  empty travel 6->7: head/carriage clearance over rods/stacks                                           21.9  (limit 9.0)  cup <-> gate_beam
 PASS  loaded travel 6->7: head/carriage/slab clearance                                                     21.48  (limit 9.0)  held_slab <-> rod_42
-PASS  empty travel 10->11: head/carriage clearance over rods/stacks                                         13.4  (limit 9.0)  cup <-> gate_beam
+PASS  empty travel 10->11: head/carriage clearance over rods/stacks                                         21.9  (limit 9.0)  cup <-> gate_beam
 PASS  loaded travel 10->11: head/carriage/slab clearance                                                    21.4  (limit 9.0)  held_slab <-> rod_68
 PASS  loaded travel: double pick of 2 x 11.5 mm holders over the rods                                       5.33  (limit 4.99)  double_pick <-> rod_42
 PASS  Z machinery over rods with cup at c=-14.0                                                             48.3  (limit 5.0)  z_plate <-> rod_35
@@ -76,5 +76,6 @@ PASS  interference, Phase 0 jig: worst overlap (mm3)                            
 PASS  Phase 0: station camera line-of-sight to the front label: blocked volume (mm3)                         0.0  (limit 1.0)  
 PASS  Phase 0: head camera line-of-sight to the back label: blocked volume (mm3)                             0.0  (limit 1.0)  
 PASS  Phase 0: head board standoff for an 8 mm board-to-lens-front camera (mm, >= 0 = the posts work)        0.6  (limit 0.0)  
+
 77/77 checks passed
 exit=0

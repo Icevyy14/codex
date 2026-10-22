@@ -182,7 +182,7 @@ def check_pockets() -> None:
         d, pair = min_dist(mov, sta)
         record(f"pick last slab, pocket {p.index:2d}: head/carriage clearance", d, 3.0, pair)
     p0 = P[0]
-    parts = M.machine(p0.x, SLAB_T, held_slab=True, fill=FULL)
+    parts = M.machine(p0.x, SLAB_T, held_slab=True, fill=FULL, seated=True)
     held = [p for p in parts if p.name == "held_slab"]
     rods = [p for p in parts if p.name.startswith("rod_")]
     d, pair = min_dist(held, rods)
@@ -203,7 +203,7 @@ def check_travel() -> None:
     # double pick of two thick holders hanging under the cup at the loaded travel height
     mx = (P[6].x + P[7].x) / 2
     parts = M.machine(mx, L.C_SAFE_LOADED, fill=FULL)
-    dbl = M.Part("double_pick", M.cbox(mx, L.Y_ROW, L.C_SAFE_LOADED - L.SLAB_T_THICK_MAX, SLAB_W, SLAB_H, 2 * L.SLAB_T_THICK_MAX), M.SLAB, "slab", "head")
+    dbl = M.Part("double_pick", M.cbox(mx, L.Y_ROW, L.C_SAFE_LOADED - L.CUP_HANG - L.SLAB_T_THICK_MAX, SLAB_W, SLAB_H, 2 * L.SLAB_T_THICK_MAX), M.SLAB, "slab", "head")
     sta = [q for q in parts if q.group == "static" and q.name.startswith(("rod_", "stack_", "gate_"))]
     d, pair = min_dist([dbl], sta)
     record(f"loaded travel: double pick of 2 x {L.SLAB_T_THICK_MAX} mm holders over the rods", d, L.CARRY_CLEAR - 0.01, pair)
@@ -276,10 +276,10 @@ def check_station() -> None:
     sta = [p for p in parts if p.group == "static" and not p.name.startswith(("pad_", "bed_"))]
     d, pair = min_dist(held, sta, margin=300)
     record("station read: held slab clearance to everything static", d, 1.0, pair)
-    dist = (c - SLAB_T) - L.STATION_LENS_Z
+    dist = (c - L.CUP_HANG - SLAB_T) - L.STATION_LENS_Z  # the slab hangs free over the lens
     record("station read: lens-to-slab-front distance error (mm)", abs(dist - L.CAM_TO_SLAB), 3.0, f"{dist:.1f} vs {L.CAM_TO_SLAB}", larger_is_better=False)
     label_y = sy - SLAB_H / 2 + 5 + 10
-    fr = frustum((sx, sy, L.STATION_LENS_Z), (sx - 37, label_y - 12, c - SLAB_T - 0.5), (sx + 37, label_y + 12, c - SLAB_T - 0.5))
+    fr = frustum((sx, sy, L.STATION_LENS_Z), (sx - 37, label_y - 12, c - L.CUP_HANG - SLAB_T - 0.5), (sx + 37, label_y + 12, c - L.CUP_HANG - SLAB_T - 0.5))
     vol, who = blocked(fr, [p for p in parts if p.name.startswith(("station", "rod_"))])
     record("station camera line-of-sight to front label: blocked volume (mm3)", vol, 1.0, who, larger_is_better=False)
 
