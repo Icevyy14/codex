@@ -9,7 +9,7 @@
   mark [--start N | --only N,M]   walk the awl over every pocket for the drill template
   run [--name NAME] [--front-photo always|fallback] [--all-face-down] [--yes]
   resume BATCH_DIR [--accept-heights] [--face-down-ok] [--yes]
-  sim [--slabs N]                 full simulated batch, no hardware
+  sim [--slabs N] [--face-down-check]   full simulated batch, no hardware
   web [--port 8080]               phone page: start/stop/resume, progress, downloads
   phase0 [--sim N] [--out DIR]    Phase 0 camera read-rate test (tools/phase0.py; its own options)
 
@@ -30,6 +30,8 @@ import tomllib
 from pathlib import Path
 
 from .config import Config, from_layout, load
+from .facedown import FILE_NAME as CARD_BACKS_FILE
+from .facedown import CardBackRefs
 from .motion import ControllerLost, MotionError
 from .ops import CalError, Console, calibrate_x, calibrate_z, focus, mark, mark_order, selftest
 from .results import BatchWriter
@@ -42,6 +44,10 @@ DEFAULT_CONFIG = SOFTWARE_DIR / "config" / "machine.toml"
 T_HEAD_FRAME = 0.25  # [Guessing] USB UVC 8 MP MJPEG frame incl. dropped stale buffers
 T_STATION_FRAME = 0.35  # [Guessing] Camera Module 3 full-resolution still from a running stream
 T_SEAL = 0.15  # [Guessing] cup reaching the seal threshold
+# Learned face-down threshold the simulator uses when none is measured, picked on the simulator's own synthetic card
+# backs with the "open" head: `phase0 --sim 30 --face-up 5 --sim-head open` gave lowest back 0.88, highest face-up 0.24
+# (midpoint 0.56); 15 face-up slabs reached 0.38. Japanese backs against English references: up to 0.49. Never for a machine.
+SIM_FACE_DOWN_THRESHOLD = 0.6
 
 
 # ---------------------------------------------------------------------- config / batches
@@ -90,9 +96,24 @@ def run_options(batch_dir: Path) -> dict:
     return json.loads(p.read_text()) if p.exists() else {}
 
 
+def face_down_line(fd: dict) -> str:
+    """How the batch's slabs were proven face-down (summary.json face_down)."""
+    c = fd.get("counts") or {}
+    parts = [f"{c[k]} {label}" for k, label in (("qr", "by back QR"), ("learned", "by the learned card-back match"),
+                                                  ("operator", "confirmed by you"), ("off", "not checked (check off)")) if c.get(k)]
+    line = "face-down: " + (", ".join(parts) if parts else "no slabs")
+    learned = fd.get("learned") or []
+    if learned:
+        low = min(learned, key=lambda a: a["face_down"])
+        line += f"; lowest learned score {low['face_down']} at #{low['position']} - check the back photos of the learned ones in report.html"
+    return line
+
+
 def summary_lines(summary: dict, batch_dir: Path) -> list[str]:
     counts = ", ".join(f"{k} {v}" for k, v in sorted(summary.get("status_counts", {}).items()))
     out = [f"batch {summary['batch_id']}: {summary['slabs_visited']} slabs  ({counts or 'none'})"]
+    if summary.get("face_down"):
+        out.append(face_down_line(summary["face_down"]))
     dups = summary.get("duplicates") or {}
     out.append("duplicates: " + (", ".join(f"{c} at #{'/#'.join(map(str, p))}" for c, p in dups.items()) if dups else "none"))
     cc = summary.get("count_check") or {}
@@ -114,19 +135,28 @@ CALIBRATION_MISSING = ("{cal} has no pad_trigger_c / offset_x yet. Run `calibrat
                        "larger than the 1.85 mm pocket play lowers held slabs onto the rods.")
 
 
+def card_backs_path(cal_path: Path | None) -> Path | None:
+    """The learned face-down check's references live next to calibration.toml (config/card_backs.npz)."""
+    return None if cal_path is None else Path(cal_path).parent / CARD_BACKS_FILE
+
+
 def execute_batch(cfg: Config, hw, writer: BatchWriter, con: Console, resume: bool = False, accept_heights: bool = False,
                   stop_flag: threading.Event | None = None, on_runner=None, cal_path: Path | None = None,
-                  face_down_ok: bool = False) -> tuple[int, dict | None, str]:
+                  face_down_ok: bool = False, refs_path: Path | None = None, sim_operator=None) -> tuple[int, dict | None, str]:
     """Run or resume one batch. Returns (exit code, summary or None, message). Writes stop.json on a halt.
     ``on_runner(runner)`` is called before the run starts (the web page reads live progress from it).
     ``cal_path``: refuse to move unless that calibration.toml has calibrate z and x in it (every real
-    entry point passes it: CLI run/resume and the web page)."""
+    entry point passes it: CLI run/resume and the web page). ``refs_path``: the card-back references of the
+    learned face-down check (config/card_backs.npz on the machine; None = kept in memory, as in the simulator).
+    ``sim_operator``: simulator only, see Runner."""
     if cal_path is not None and not is_calibrated(cal_path):
         msg = CALIBRATION_MISSING.format(cal=cal_path)
         write_stop(writer.dir, msg, "error")
         return 1, None, msg
     stop_flag = stop_flag or threading.Event()
-    runner = Runner(cfg, hw.motion, hw.vacuum, hw.lights, hw.head_cam, hw.station_cam, writer, lid=hw.lid, gate=hw.gate, log=con.say, should_stop=stop_flag.is_set)
+    refs = CardBackRefs(refs_path, cfg.face_down_window_mm)
+    runner = Runner(cfg, hw.motion, hw.vacuum, hw.lights, hw.head_cam, hw.station_cam, writer, lid=hw.lid, gate=hw.gate, log=con.say, should_stop=stop_flag.is_set,
+                    refs=refs, sim_operator=sim_operator)
     if on_runner is not None:
         on_runner(runner)
     try:
@@ -155,7 +185,7 @@ def _hw(args, cfg: Config, parts, stacks=None):
     from .factory import open_hardware, sim_hardware
 
     if args.sim:
-        hw = sim_hardware(cfg, slabs=args.sim_slabs, stacks=stacks)
+        hw = sim_hardware(cfg, slabs=args.sim_slabs, stacks=stacks, head=getattr(args, "sim_head", None) or "cad")
         if args.sim_x_offset is not None:
             hw.motion.x_offset = args.sim_x_offset
         if args.sim_z_offset is not None:
@@ -333,8 +363,8 @@ def cmd_run(args, con):
         con.say("Before starting: slabs FACE-DOWN, label end toward you, in pockets 1-11, none above the MAX line.\n"
                 "Pocket 0 and pocket 12 empty. Cup wiped. Hands out (light roof on, if fitted).")
         if args.all_face_down:
-            con.say("--all-face-down: slabs without a back QR (older PSA labels, CGC) are picked without stopping. A slab loaded\n"
-                    "face-up would get the cup on its front, so check every stack before you walk away.")
+            con.say("--all-face-down: slabs the face-down check cannot confirm (no back QR, no match with a known card back) are picked\n"
+                    "without stopping. A slab loaded face-up would get the cup on its front, so check every stack before you walk away.")
         if not con.confirm("Start the run?"):
             return 1
     hw = _hw(args, cfg, ("motion", "vacuum", "lights", "head_cam", "station_cam", "gate", "lid"))
@@ -342,7 +372,8 @@ def cmd_run(args, con):
     (writer.dir / "run.json").write_text(json.dumps({"name": args.name, "front_photo": cfg.front_photo, "face_down_check": cfg.face_down_check,
                                                      "started": time.strftime("%Y-%m-%dT%H:%M:%S"), "sim": bool(args.sim)}, indent=2))
     con.say(f"batch {writer.batch_id} -> {writer.dir}   (Ctrl-C = stop after the current slab)")
-    return _execute_and_hand_off(cfg, hw, writer, con, cal_path=None if (args.sim or args.uncalibrated) else cal)
+    return _execute_and_hand_off(cfg, hw, writer, con, cal_path=None if (args.sim or args.uncalibrated) else cal,
+                                 refs_path=None if args.sim else card_backs_path(cal))
 
 
 def _execute_and_hand_off(cfg, hw, writer, con, **kw) -> int:
@@ -387,7 +418,7 @@ def cmd_resume(args, con):
     opts = run_options(bdir)
     if opts.get("front_photo"):
         cfg = dataclasses.replace(cfg, front_photo=opts["front_photo"])
-    if opts.get("face_down_check") in ("stop", "off"):
+    if opts.get("face_down_check") in ("learned", "stop", "off"):
         cfg = dataclasses.replace(cfg, face_down_check=opts["face_down_check"])  # a batch keeps the choice it was started with
     if (bdir / "stop.json").exists():
         con.say("last stop: " + json.loads((bdir / "stop.json").read_text()).get("message", ""))
@@ -396,13 +427,15 @@ def cmd_resume(args, con):
         return 1
     if not args.yes:
         con.say("Before resuming: hands out of the machine (light roof on, if fitted). Any slab you took off the cup is back face-down on top of\n"
-                "the pocket it came from." + ("\n--face-down-ok: you checked that the top slab the face-down check stopped on IS face-down." if args.face_down_ok else ""))
+                "the pocket it came from." + ("\n--face-down-ok: you checked that the top slab the face-down check stopped on IS face-down (its card back\n"
+                                               "becomes a reference for the learned check)." if args.face_down_ok else ""))
         if not con.confirm("Resume the run?"):
             return 1
     hw = _hw(args, cfg, ("motion", "vacuum", "lights", "head_cam", "station_cam", "gate", "lid"))
     writer = BatchWriter.reopen(bdir)
     con.say(f"resuming {writer.batch_id}: {len(writer.rows)} slabs already done")
-    return _execute_and_hand_off(cfg, hw, writer, con, resume=True, accept_heights=args.accept_heights, cal_path=cal, face_down_ok=args.face_down_ok)
+    return _execute_and_hand_off(cfg, hw, writer, con, resume=True, accept_heights=args.accept_heights, cal_path=cal, face_down_ok=args.face_down_ok,
+                                 refs_path=card_backs_path(cal))
 
 
 class _Count:
@@ -469,16 +502,27 @@ def cmd_sim(args, con):
     if args.front_photo:
         cfg = dataclasses.replace(cfg, front_photo=args.front_photo)
     eras = tuple(float(x) for x in args.eras.split(","))
-    stacks = sim_stacks(cfg, args.slabs, seed=args.seed, eras=eras, clingy_rate=args.clingy_rate, thick_rate=args.thick_rate)
+    stacks = sim_stacks(cfg, args.slabs, seed=args.seed, eras=eras, clingy_rate=args.clingy_rate, thick_rate=args.thick_rate, jp_rate=args.jp_rate)
     unconfirmable = sum(1 for v in stacks.values() for sl in v if sl.era != "2017+" or sl.grader != "PSA")
+    n_slabs = sum(len(v) for v in stacks.values())
     if cfg.face_down_check != "off" and not args.face_down_check:
-        # Every simulated slab is face-down. On the machine, each slab without a PSA back-label QR stops the run
-        # until you confirm it (resume --face-down-ok): here that is reported instead, so the timing is for a full run.
+        # Every simulated slab is face-down. On the machine, each slab the check cannot confirm stops the run until you
+        # confirm it (resume --face-down-ok): here that is reported instead, so the timing is for a full run.
         cfg = dataclasses.replace(cfg, face_down_check="off")
-        con.say(f"(sim: face-down check off. On the machine {unconfirmable} of these {sum(len(v) for v in stacks.values())} slabs have no PSA "
-                "back-label QR, and each would stop the run until you confirm it is face-down (resume --face-down-ok), unless the run is "
-                "started with run --all-face-down)")
-    hw = sim_hardware(cfg, stacks=stacks)
+        con.say(f"(sim: face-down check off. On the machine {unconfirmable} of these {n_slabs} slabs have no PSA back-label QR. With "
+                "face_down_check = \"stop\" each one stops the run until you confirm it is face-down (resume --face-down-ok). With \"learned\" "
+                "(the default) they are first compared with the card backs of QR-confirmed slabs: `sim --face-down-check` shows how many "
+                "would still stop.)")
+    if args.face_down_check and cfg.face_down_check == "learned" and cfg.face_down_threshold is None:
+        cfg = dataclasses.replace(cfg, face_down_threshold=SIM_FACE_DOWN_THRESHOLD)
+        con.say(f"(sim: face_down_threshold {SIM_FACE_DOWN_THRESHOLD}, picked on the simulator's synthetic card backs; on the machine Phase 0 "
+                "measures it on yours. Head parts in view: " + ("today's CAD head" if args.sim_head == "cad" else f"'{args.sim_head}' (hypothetical)") + ")")
+    hw = sim_hardware(cfg, stacks=stacks, head=args.sim_head)
+    sim_operator = None
+    if args.face_down_check and cfg.face_down_check != "off":
+        def sim_operator(src: int) -> bool:  # looks at the slab the check stopped on; the simulated slabs are all face-down
+            top = hw.world.stacks[src][-1]
+            return top.face_down
     hw.head_cam, hw.station_cam = _Count(hw.head_cam), _Count(hw.station_cam)
     hw.lights, hw.vacuum = _CountLights(hw.lights), _CountVac(hw.vacuum)
     writer = BatchWriter(Path(cfg.out_dir), new_batch_id(args.name, "sim-"))
@@ -486,6 +530,7 @@ def cmd_sim(args, con):
     survey = {}
 
     def watch(r):  # note the motion time spent before the first slab moves (homing + survey)
+        survey["runner"] = r
         inner = r.transfer
 
         def transfer(src, dst):
@@ -495,7 +540,7 @@ def cmd_sim(args, con):
         r.transfer = transfer
 
     t0 = time.monotonic()
-    code, summary, msg = execute_batch(cfg, hw, writer, quiet, on_runner=watch)
+    code, summary, msg = execute_batch(cfg, hw, writer, quiet, on_runner=watch, sim_operator=sim_operator)
     wall = time.monotonic() - t0
     if code != 0:
         con.say(f"SIM STOPPED: {msg}")
@@ -517,6 +562,11 @@ def cmd_sim(args, con):
             + ("" if n >= cfg.capacity * 0.8 else " (extrapolated: short stacks cost more per slab than full ones; `sim --slabs 330` gives the real number)"))
     con.say(f"        frames: head {hw.head_cam.n}, station {hw.station_cam.n}; per-frame times {T_HEAD_FRAME}/{T_STATION_FRAME} s and decode time on the Pi are guesses - Phase 0 measures them")
     con.say(f"        this simulation took {wall:.1f} s of wall time on this computer")
+    if sim_operator is not None:
+        stops = survey["runner"].face_down_stops
+        con.say(f"face-down check ({cfg.face_down_check}): {stops} of {n_slabs} slabs stopped for you (the simulated operator confirmed each; "
+                f"checking only the back QR, {unconfirmable} would have). On the machine every stop waits for you, and resume homes and "
+                f"re-surveys first (~{survey_s + survey_vents * cfg.vent_s:.0f} s), so the time above is for an unbroken run.")
     return 0
 
 
@@ -556,6 +606,9 @@ def build_parser() -> argparse.ArgumentParser:
         parser.add_argument("--out", default=d(None), help="batches folder (default from config: batches)")
         parser.add_argument("--sim", action="store_true", default=d(False), help="use the simulator instead of hardware")
         parser.add_argument("--sim-slabs", type=int, default=d(22), help="slabs in the simulated machine (--sim)")
+        parser.add_argument("--sim-head", choices=["cad", "open", "none"], default=d("cad"),
+                            help="head parts in the simulated head camera's view: cad = today's CAD head (its foot hides the card window), "
+                                 "open = a hypothetical head that leaves face_down_window_mm clear")
         parser.add_argument("--sim-x-offset", type=float, default=d(None), help=argparse.SUPPRESS)
         parser.add_argument("--sim-z-offset", type=float, default=d(None), help=argparse.SUPPRESS)
 
@@ -608,7 +661,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--name", help="added to the batch folder name")
     p.add_argument("--front-photo", choices=["always", "fallback"], help="always = photograph every front (+~3 s/slab)")
     p.add_argument("--all-face-down", action="store_true",
-                   help="you loaded every slab face-down: don't stop at slabs without a back QR (older PSA labels, CGC)")
+                   help="you loaded every slab face-down: don't stop at slabs the face-down check cannot confirm "
+                        "(no back QR, and no match with a known card back)")
     p.add_argument("--yes", action="store_true", help="no start question (unattended start)")
     p.add_argument("--uncalibrated", action="store_true", help=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_run)
@@ -616,7 +670,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("resume", help="continue a stopped batch")
     p.add_argument("batch_dir")
     p.add_argument("--accept-heights", action="store_true", help="take the re-surveyed stack heights even if they changed")
-    p.add_argument("--face-down-ok", action="store_true", help="you checked the top slab the face-down check stopped on: it IS face-down")
+    p.add_argument("--face-down-ok", action="store_true",
+                   help="you checked the top slab the face-down check stopped on: it IS face-down (its card back becomes a reference)")
     p.add_argument("--yes", action="store_true", help="no 'hands clear?' question")
     p.set_defaults(fn=cmd_resume)
 
@@ -629,7 +684,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--front-photo", choices=["always", "fallback"])
     p.add_argument("--name")
     p.add_argument("--quiet", action="store_true", help="no per-slab lines")
-    p.add_argument("--face-down-check", action="store_true", help="keep the face-down check on (it stops at every slab without a PSA back QR)")
+    p.add_argument("--jp-rate", type=float, default=0.0, help="share of cards with the Japanese card back")
+    p.add_argument("--face-down-check", action="store_true",
+                   help="keep the face-down check on and count the slabs it would stop at (a simulated operator confirms each; "
+                        "learned mode uses a simulator threshold unless one is set)")
     p.set_defaults(fn=cmd_sim)
 
     sub.add_parser("phase0", help="Phase 0 camera read-rate test, see `phase0 --help` (same as python -m tools.phase0)").set_defaults(fn=cmd_phase0)

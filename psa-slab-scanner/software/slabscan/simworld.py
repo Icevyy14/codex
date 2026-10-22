@@ -1,7 +1,9 @@
 """Physics-lite simulator of the whole machine, used to prove the run logic without hardware.
 
 It models stacks of slabs in pockets, the cup + spring-buffer contact sensor, vacuum, a
-held slab, and the two cameras (synthetic label images from sim.py). It also acts as a
+held slab, and the two cameras (synthetic label images from sim.py; the head camera also sees the
+top of the card window, a card back or the card's front, behind the head's own cup, buffer and foot).
+It also acts as a
 SAFETY MONITOR: any move that would crash the head or a held slab into rods/stacks,
 drop a slab, drive the cup past its buffer stroke, seal the cup on a slab's FRONT, or tear
 a gripped slab off its stack faster than the slow peel raises ``Crash``.
@@ -21,7 +23,7 @@ import numpy as np
 
 from .config import Config
 from .motion import SafetyViolation
-from .sim import Degrade, slab_view
+from .sim import HEAD_VIEW_MM, Degrade, empty_head_view, head_view, slab_view
 
 BUFFER_STROKE = 25.0
 TRIGGER_COMPRESSION = 2.0  # buffer compression at which the optical sensor trips
@@ -40,6 +42,7 @@ class SimSlab:
     era: str = "2017+"  # 2017+ (back QR+ITF) | 2015 (back ITF only) | old (front only)
     grader: str = "PSA"
     face_down: bool = True
+    back: str = "pokemon_en"  # card back seen through the slab when face-down: pokemon_en | pokemon_jp (sim.card_back)
     clingy: bool = False  # sticks to the slab above it when that one is lifted (double pick)
     seal_fails: bool = False  # cup cannot seal on this slab
 
@@ -63,6 +66,9 @@ class SimWorld:
     # onto its own stack during the peel dwell; "transit" = drops off at the end of the first sideways move.
     cling_drop: str | None = None
     peels: list[tuple[float, float]] = field(default_factory=list)  # (feed, slow mm after separation) of every pick
+    # the head parts between the head camera and the slab (sim.HEADS): "cad" = the CAD head of today, whose foot hides
+    # the card window; "open" = a hypothetical head that leaves face_down_window_mm clear
+    head: str = "cad"
 
     # ---- geometry helpers
     def pocket_at(self, x, y, tol=3.0):
@@ -363,13 +369,26 @@ class SimCamera:
         self.n = 0
 
     def view_half_mm(self, distance_mm: float) -> tuple[float, float]:
-        """Half the field of view (image x, image y) in mm on the label plane. The synthetic view is a fixed
-        90 x 45 mm patch around the slab under the cup, whatever the distance."""
+        """Half the field of view (image x, image y) in mm on the label plane. The synthetic view is a fixed patch
+        around the slab under the cup, whatever the distance: 90 x 45 mm of the label end for the station, and
+        sim.HEAD_VIEW_MM (label end and the top of the card window) for the head."""
+        x0, y0, x1, y1 = self.view_rect_mm(distance_mm)
+        return (x1 - x0) / 2, (y1 - y0) / 2
+
+    def view_rect_mm(self, distance_mm: float) -> tuple[float, float, float, float]:
+        """The view's extent on the slab plane in mm from the camera axis (image axes; facedown.frame_view_mm)."""
         from .sim import SLAB_W_MM
 
-        return (SLAB_W_MM + 10) / 2, 22.5
+        if self.role == "head":
+            return HEAD_VIEW_MM
+        return -(SLAB_W_MM + 10) / 2, -22.5, (SLAB_W_MM + 10) / 2, 22.5
 
     def _blank(self):
+        if self.role == "head":  # over an empty pocket: the dark pad far below, and the head's own parts
+            key = ("empty", self.w.head, repr(self.deg))
+            if key not in _VIEW_CACHE:
+                _VIEW_CACHE[key] = empty_head_view(self.deg, self.w.head)
+            return _VIEW_CACHE[key]
         return np.full((400, 900), 30, np.uint8)
 
     def capture(self):
@@ -389,7 +408,7 @@ class SimCamera:
                 return self._blank()
             s = w.held[0]
             side = "front" if s.face_down else "back"
-        base = _cached_view(s.cert, s.era, s.grader, side, self.role, w.itf_payload, self.deg)
+        base = _cached_view(s.cert, s.era, s.grader, side, self.role, w.itf_payload, self.deg, back=s.back, head=w.head)
         noise = np.random.default_rng(self.n).normal(0, 2.0, base.shape)
         return np.clip(base.astype(np.float32) + noise, 0, 255).astype(np.uint8)
 
@@ -397,10 +416,13 @@ class SimCamera:
 _VIEW_CACHE: dict = {}
 
 
-def _cached_view(cert, era, grader, side, role, itf_payload, deg):
-    key = (cert, era, grader, side, role, itf_payload)
+def _cached_view(cert, era, grader, side, role, itf_payload, deg, back="pokemon_en", head="cad"):
+    key = (cert, era, grader, side, role, itf_payload, back, head, repr(deg))
     if key not in _VIEW_CACHE:
-        _VIEW_CACHE[key] = render_slab_side(SimSlab(cert, era=era, grader=grader), side, deg, seed=hash(key) & 0xFFFF, itf_payload=itf_payload)
+        if role == "head":
+            _VIEW_CACHE[key] = head_view(cert, side, deg, era=era, grader=grader, back=back, head=head, itf_payload=itf_payload)
+        else:
+            _VIEW_CACHE[key] = render_slab_side(SimSlab(cert, era=era, grader=grader), side, deg, seed=hash(key) & 0xFFFF, itf_payload=itf_payload)
     return _VIEW_CACHE[key]
 
 
@@ -429,8 +451,10 @@ def other_grader_view(cert: str, grader: str, deg: Degrade, seed: int):
     return cv2.GaussianBlur(img, (0, 0), max(0.3, deg.blur_px))
 
 
-def make_batch(cfg: Config, per_pocket: int | None = None, seed: int = 7, eras=(0.85, 0.1, 0.05), clingy_rate=0.0, thick_rate=0.0) -> dict[int, list[SimSlab]]:
+def make_batch(cfg: Config, per_pocket: int | None = None, seed: int = 7, eras=(0.85, 0.1, 0.05), clingy_rate=0.0, thick_rate=0.0,
+               jp_rate: float = 0.0) -> dict[int, list[SimSlab]]:
     rng = random.Random(seed)
+    rng_back = random.Random(seed * 7919 + 1)  # its own stream: the rest of the batch is the same with or without JP backs
     stacks: dict[int, list[SimSlab]] = {}
     n = 0
     for p in cfg.sources:
@@ -442,6 +466,7 @@ def make_batch(cfg: Config, per_pocket: int | None = None, seed: int = 7, eras=(
             r = rng.random()
             era = "2017+" if r < eras[0] else ("2015" if r < eras[0] + eras[1] else "old")
             t = 10.25 if rng.random() < thick_rate else rng.uniform(6.25, 6.9)
-            stack.append(SimSlab(cert, t, era, clingy=rng.random() < clingy_rate))
+            back = "pokemon_jp" if jp_rate > 0 and rng_back.random() < jp_rate else "pokemon_en"
+            stack.append(SimSlab(cert, t, era, clingy=rng.random() < clingy_rate, back=back))
         stacks[p.index] = stack
     return stacks

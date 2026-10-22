@@ -624,6 +624,11 @@ class WideHeadCamera(SimCamera):
     def view_half_mm(self, distance_mm):
         return self.HALF_ROW_MM, 22.5
 
+    def view_rect_mm(self, distance_mm):  # the top 900 rows of each pasted head view: the label end
+        from slabscan.sim import HEAD_VIEW_MM
+
+        return -self.HALF_ROW_MM, HEAD_VIEW_MM[1], self.HALF_ROW_MM, HEAD_VIEW_MM[1] + 900 * self.MM_PER_PX
+
     def capture(self):
         w = self.w
         self.n += 1

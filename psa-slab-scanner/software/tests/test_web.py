@@ -166,8 +166,8 @@ def test_web_refuses_an_uncalibrated_machine_and_reloads_the_config(tmp_path):
 
 
 def test_start_all_face_down_runs_through_slabs_without_a_back_qr(tmp_path):
-    cfg = _layout()  # face-down check on, and the simulated mix has older labels without a back QR
-    assert cfg.face_down_check == "stop"
+    cfg = _layout()  # face-down check on (learned, no threshold measured: it stops like "stop"); the mix has older labels without a back QR
+    assert cfg.face_down_check == "learned" and cfg.face_down_threshold is None
     app = create_app(cfg, SimProvider(cfg, slabs=12), out_dir=tmp_path)
     c = app.test_client()
     bid = c.post("/api/start", json={"all_face_down": True}, headers=H).get_json()["batch_id"]

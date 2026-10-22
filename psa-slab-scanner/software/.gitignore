@@ -6,3 +6,4 @@ config/calibration.toml
 config/*.tmp
 __pycache__/
 phase0_results/
+config/card_backs.npz

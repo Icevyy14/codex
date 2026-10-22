@@ -15,7 +15,8 @@ from pathlib import Path
 
 from .certs import Verdict
 
-COLUMNS = ["batch_id", "position", "source_pocket", "source_index", "out_pocket", "out_index", "cert", "grader", "status", "sources", "raw_payload", "note", "image_front", "image_back", "scanned_at"]
+COLUMNS = ["batch_id", "position", "source_pocket", "source_index", "out_pocket", "out_index", "cert", "grader", "status", "sources", "raw_payload", "note", "image_front", "image_back", "scanned_at",
+           "face_down"]  # how the slab was proven face-down before the cup touched it: qr | operator | learned(score) | off
 
 
 @dataclass
@@ -29,6 +30,7 @@ class SlabResult:
     image_front: str = ""
     image_back: str = ""
     scanned_at: float = field(default_factory=time.time)
+    face_down: str = ""  # qr | operator | learned(0.93) | off ("" = not known, e.g. an unread slab under a double pick)
 
 
 def _row_values(batch_id: str, r: SlabResult) -> list:
@@ -36,7 +38,7 @@ def _row_values(batch_id: str, r: SlabResult) -> list:
     return [
         batch_id, r.position, r.source_pocket, r.source_index, r.out_pocket, r.out_index,
         v.cert or "", v.grader, v.status, "+".join(v.sources), v.raw, v.note, r.image_front, r.image_back,
-        time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(r.scanned_at)),
+        time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(r.scanned_at)), r.face_down,
     ]
 
 
@@ -54,7 +56,7 @@ def read_rows(csv_path: Path) -> list[SlabResult]:
                 except (TypeError, ValueError):
                     at = time.time()
                 out.append(SlabResult(pos, int(row["source_pocket"]), int(row["source_index"]), int(row["out_pocket"]), int(row["out_index"]), verdict,
-                                      row.get("image_front") or "", row.get("image_back") or "", at))
+                                      row.get("image_front") or "", row.get("image_back") or "", at, row.get("face_down") or ""))
             except (KeyError, TypeError, ValueError):
                 continue
     return out
@@ -140,11 +142,15 @@ class BatchWriter:
             v = r.verdict
             cls = "ok" if v.status == "ok" else "bad"
             imgs = "".join(f'<img loading="lazy" src="{h.escape(p)}">' for p in (r.image_back, r.image_front) if p)
+            fd = h.escape(r.face_down)
+            fd = f"<b>{fd}</b> - check the photo" if r.face_down.startswith("learned") else fd
             rows.append(f"<tr><td>{r.position}</td><td>P{r.out_pocket} #{r.out_index}</td><td>{h.escape(v.cert or '')}</td><td>{h.escape(v.grader)}</td>"
-                        f"<td class={cls}>{h.escape(v.status)}</td><td>{h.escape(v.note)}</td><td>{imgs}</td></tr>")
+                        f"<td class={cls}>{h.escape(v.status)}</td><td>{h.escape(v.note)}</td><td>{fd}</td><td>{imgs}</td></tr>")
         counts = ", ".join(f"{k}: {n}" for k, n in summary.get("status_counts", {}).items())
         return (f"<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>Batch {h.escape(self.batch_id)}</title>"
                 f"<style>{css}</style><h1>Batch {h.escape(self.batch_id)}</h1><p>{summary.get('slabs_visited', 0)} slabs. {h.escape(counts)}</p>"
-                "<p>Output position: P = pocket, # = position counted from the bottom of that stack.</p>"
-                "<table><tr><th>#</th><th>Where</th><th>Cert</th><th>Grader</th><th>Status</th><th>Note</th><th>Label</th></tr>"
+                "<p>Output position: P = pocket, # = position counted from the bottom of that stack. Face-down: how the slab was proven "
+                "face-down before the cup touched it (qr = back-label QR, operator = you confirmed it, learned = its card window matched "
+                "the card backs of proven slabs, with the score; off = no check).</p>"
+                "<table><tr><th>#</th><th>Where</th><th>Cert</th><th>Grader</th><th>Status</th><th>Note</th><th>Face-down</th><th>Label</th></tr>"
                 + "".join(rows) + "</table>")

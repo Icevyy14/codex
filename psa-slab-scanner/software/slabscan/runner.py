@@ -41,6 +41,7 @@ from .certs import CodeRead, ItfModel, Verdict, consensus
 from .config import Config
 from .decode import _to_gray as to_gray
 from .decode import decode_frame, ocr_digits
+from .facedown import BASELINE_MAX, MIN_TEXTURE, CardBackRefs, describe, draw_window, frame_view_mm, image_rects, learned_match, learned_ready
 from .hw import SensorFault
 from .motion import ControllerLost, SafetyViolation
 from .results import BatchWriter, SlabResult
@@ -143,7 +144,8 @@ def rebuild_state(events: list[dict], rows: list[SlabResult], cfg: Config) -> tu
 
 class Runner:
     def __init__(self, cfg: Config, motion, vacuum, lights, head_cam, station_cam, writer: BatchWriter, lid=None, gate=None, log=print,
-                 should_stop: Callable[[], bool] | None = None, sleep: Callable[[float], None] | None = None):
+                 should_stop: Callable[[], bool] | None = None, sleep: Callable[[float], None] | None = None,
+                 refs: CardBackRefs | None = None, sim_operator: Callable[[int], bool] | None = None):
         self.cfg = cfg
         self.m = motion
         self.vac = vacuum
@@ -168,6 +170,15 @@ class Runner:
         self.freeze: str | None = None
         self.baseline: float | None = None  # sensor kPa at atmosphere, measured this run before the first grip
         self.face_down_ok_once = False  # the operator confirmed the next top slab is face-down (resume --face-down-ok)
+        # learned face-down check: card-back references (a file under config/ on the machine; in memory by default)
+        self.refs = refs if refs is not None else CardBackRefs(None, cfg.face_down_window_mm)
+        self._refs_dirty = 0
+        self._baseline_taken = False
+        self._window_saved = False
+        self.face_down_stops = 0  # stops (or simulated confirmations) at the face-down check, this run
+        # SIMULATOR ONLY (sim command): a simulated operator who looks at a slab the check stopped on and confirms
+        # it if it really is face-down. Never set on the machine: there the run stops and waits for you.
+        self.sim_operator = sim_operator
         self.phase = "idle"  # idle | survey | transfer | done | stopped (for the web page)
         self.current: tuple[int, int] | None = None  # (source, destination) being worked on
         self.timings: list[float] = []
@@ -467,25 +478,104 @@ class Runner:
                             "or a misread - check this slab by hand", v.grader, v.raw)
         return v
 
-    def _check_face_down(self, src: int, hover_reads: list[CodeRead]) -> None:
+    def _hover_mm(self) -> float:
+        return float((self.cfg.cam_head or {}).get("lens_to_label_mm", 140.0)) + self.cfg.approach_gap + 2
+
+    def _fd_describe(self, frame):
+        """Card-window descriptor of a frame from the hover height (facedown.describe). The first frame of a run is
+        also saved with the window drawn on it (images/face_down_window.jpg), so you can check where it lies."""
+        if frame is None:
+            return None
+        spec = self.cfg.cam_head or {}
+        view = frame_view_mm(frame.shape, self._hover_mm(), spec, self.head_cam)
+        rects = image_rects(self.cfg.face_down_window_mm, str(spec.get("row_axis", "x")))
+        if not self._window_saved:
+            self._window_saved = True
+            try:
+                self._save(draw_window(frame, rects, view), "face_down_window.jpg")
+            except Exception:  # noqa: BLE001 - a picture for the operator, never a reason to stop
+                pass
+        return describe(frame, rects, view)
+
+    def _learn(self, desc, source: str, src: int) -> str:
+        """A proven face-down slab (back QR, or the operator) becomes a card-back reference. Never a learned one."""
+        cfg = self.cfg
+        proto, why = self.refs.add(desc, source, {"batch": self.w.batch_id, "pocket": src, "pos": self.st.position + 1},
+                                   cluster=cfg.face_down_threshold)
+        if proto is None:
+            return f"not used as a reference: {why}"
+        self._refs_dirty += 1
+        if source != "qr" or self.refs.protos().get(proto, 0) == 1:
+            self._save_refs(force=True)  # an operator confirmation or a new back design: on disk at once
+        else:
+            self._save_refs()
+        return f"reference {self.refs.n_refs} (prototype {proto})"
+
+    def _save_refs(self, force: bool = False) -> None:
+        if self._refs_dirty and (force or self._refs_dirty >= 10):
+            try:
+                self.refs.save()
+                self._refs_dirty = 0
+            except OSError as e:
+                self.log(f"could not save the card-back references ({e}); they are kept for this run only")
+
+    def face_down_status(self) -> str:
+        """One line for the log: what the face-down check will do."""
+        cfg = self.cfg
+        if cfg.face_down_check == "off":
+            return "face-down check: OFF - a slab loaded face-up gets the cup on its front"
+        if cfg.face_down_check == "stop":
+            return "face-down check: back QR only - every slab without a PSA back QR stops for you"
+        why = learned_ready(self.refs, cfg.face_down_threshold, cfg.face_down_min_refs, cfg.face_down_window_mm)
+        if not why:
+            return (f"face-down check: learned (threshold {cfg.face_down_threshold:.2f}, {self.refs.summary()}): a slab without a back QR "
+                    "is picked only if its card window matches a known card back")
+        return f"face-down check: {why}. Until then every slab without a PSA back QR stops for you, as in 'stop' mode"
+
+    def _check_face_down(self, src: int, hover_reads: list[CodeRead], frame=None) -> str:
         """Before the cup touches a slab: the frame from above must show a PSA back-label QR (PSA front labels
-        carry no QR). Anything else - an older label without a back QR, a face-up slab, another grader's
-        code (they sit on the front label) - stops the run untouched until the operator confirms."""
-        if self.cfg.face_down_check == "off":
-            return
+        carry no QR), or - in "learned" mode - a card window that matches the card backs of earlier proven slabs.
+        Anything else - an older label without a back QR that matches nothing, a face-up slab, another grader's
+        code (they sit on the front label) - stops the run untouched until the operator confirms. Returns how the
+        slab was proven face-down: qr | operator | learned(score) | off."""
+        cfg = self.cfg
+        if cfg.face_down_check == "off":
+            return "off"
+        learned = cfg.face_down_check == "learned"
+        desc = self._fd_describe(frame) if learned else None
         if self.face_down_ok_once:
             self.face_down_ok_once = False
-            self._journal({"face_down_confirmed": src, "by": "operator", "t": round(time.time(), 1)})
-            return
+            note = self._learn(desc, "operator", src) if learned else ""
+            self._journal({"face_down_confirmed": src, "by": "operator", **({"reference": note} if note else {}), "t": round(time.time(), 1)})
+            return "operator"
         psa_back = any(r.source == "back_qr" and r.grader == "PSA" for r in hover_reads)
         fronts = sorted({r.grader for r in hover_reads if r.grader not in ("PSA", "unknown")})
         if psa_back and not fronts:
-            return
+            if learned:
+                self._learn(desc, "qr", src)
+            return "qr"
+        why_learned = ""
+        if learned and not fronts:
+            ok, why_learned, m = learned_match(self.refs, desc, cfg.face_down_threshold, cfg.face_down_min_refs, cfg.face_down_window_mm)
+            if ok:
+                self.refs.touch(m.proto)
+                self._journal({"face_down_learned": src, "score": round(m.score, 3), "ncc": round(m.ncc, 3), "hist": round(m.hist, 3),
+                               "prototype": m.proto, "threshold": cfg.face_down_threshold, "refs": self.refs.n_refs,
+                               "baseline": round(self.refs.baseline_score(desc), 3), "pos": self.st.position + 1, "t": round(time.time(), 1)})
+                return f"learned({m.score:.2f})"
         why = (f"a {'/'.join(fronts)} code is visible from above, and those sit on the FRONT label" if fronts
-               else "no PSA back-label QR was seen from above")
+               else "no PSA back-label QR was seen from above" + (f"; {why_learned}" if why_learned else ""))
+        self.face_down_stops += 1
+        if self.sim_operator is not None and self.sim_operator(src):
+            note = self._learn(desc, "operator", src) if learned else ""
+            self._journal({"face_down_confirmed": src, "by": "simulated operator", "why": why, **({"reference": note} if note else {}),
+                           "t": round(time.time(), 1)})
+            return "operator"
+        teach = learned and not fronts and desc is not None and desc.texture >= MIN_TEXTURE and self.refs.baseline_score(desc) < BASELINE_MAX
         raise Stop(f"Pocket {src}: the top slab could not be confirmed FACE-DOWN before touching it ({why}). The cup must never touch a "
                    f"slab's front, so nothing touched it. Look at the top slab of pocket {src}: if it is face-up, turn it face-down. If it is "
-                   "face-down (older labels have no back QR), resume with --face-down-ok (web page: tick 'the top slab is face-down').")
+                   "face-down (older labels have no back QR), resume with --face-down-ok (web page: tick 'the top slab is face-down')"
+                   + (": its card back then becomes a reference for the learned check." if teach else "."))
 
     def _save(self, frame, name: str) -> str:
         if frame is None:
@@ -571,6 +661,8 @@ class Runner:
                 raise Stop(f"Pocket {p.index} ({p.role}) must start empty but is {top:.1f} mm tall.")
             measured[p.index] = max(0.0, top)
             self.log(f"survey pocket {p.index:2d} ({p.role}): top {top:6.1f} mm ~ {round(max(0, top) / NOMINAL_T)} slabs")
+            if top < cfg.t_min / 2:
+                self._take_baseline(p.index)
         if expect is not None:
             self._check_resurvey(measured, expect, accept)
         for k, v in measured.items():
@@ -578,6 +670,19 @@ class Runner:
             if expect is None:
                 self.st.survey_tops[k] = v
         return dict(self.st.tops)
+
+    def _take_baseline(self, pocket: int) -> None:
+        """Learned mode, once per run: the head camera's view over an empty pocket (head at the empty travel height,
+        straight above it). A card window that looks like this view does not show the slab: the head hides it."""
+        if self.cfg.face_down_check != "learned" or self._baseline_taken:
+            return
+        self._baseline_taken = True
+        frame = self._frames(self.head_cam, "head", 1)[0]
+        d = self._fd_describe(frame)
+        if d is not None:
+            self.refs.set_baseline(d, {"batch": self.w.batch_id, "pocket": pocket, "t": round(time.time(), 1)})
+            self._refs_dirty += 1
+            self._journal({"face_down_baseline": pocket})
 
     def _check_resurvey(self, measured: dict[int, float], expect: dict[int, float], accept: bool) -> None:
         cfg = self.cfg
@@ -632,12 +737,13 @@ class Runner:
         lens = float((cfg.cam_head or {}).get("lens_to_label_mm", 140.0))
         hover_reads: list[CodeRead] = []
         unparsed: list[str] = []
+        face_down = "off"
         if cfg.hover_check or cfg.face_down_check != "off":
             # look before touching anything: the face-down check, and a first read of the back label
             self._z(self.c(s_pred) + cfg.approach_gap + 2)
             hover = self._frames(self.head_cam, "head", 1)
             hover_reads, unparsed = self._read(hover, "back", lens + cfg.approach_gap + 2)
-            self._check_face_down(src, hover_reads)
+            face_down = self._check_face_down(src, hover_reads, hover[0])
             if not cfg.hover_check:
                 hover_reads = []
         # bounded probe for the real top
@@ -755,11 +861,12 @@ class Runner:
             # silently missing from the list. It sits directly under the read slab in the output pocket.
             unread = Verdict("no_read", None, (), f"UNREAD: lifted together with #{pos}; it is directly under that slab in pocket {target.index} - scan it by hand")
             self.w.add(SlabResult(pos, src, self.st.picked_from[src], target.index, self.st.out_count[target.index] - 1, unread))
-        self.w.add(SlabResult(pos, src, self.st.picked_from[src] - (1 if double else 0), target.index, self.st.out_count[target.index], verdict, img_f, img_b))
+        self.w.add(SlabResult(pos, src, self.st.picked_from[src] - (1 if double else 0), target.index, self.st.out_count[target.index], verdict, img_f, img_b,
+                              face_down=face_down))
         self._journal({"pos": pos, "src": src, "dst": target.index, "cert": verdict.cert, "status": verdict.status, "step": round(step, 2),
                        "s_src": round(self.st.tops[src], 2), "s_dst": round(self.st.tops[target.index], 2),
                        "src_index": self.st.picked_from[src], "out_index": self.st.out_count[target.index],
-                       "itf": dict(self.itf.evidence), "unparsed": unparsed[:5]})
+                       "itf": dict(self.itf.evidence), "unparsed": unparsed[:5], "face_down": face_down})
         self.timings.append(time.monotonic() - t0)
         self.log(f"#{pos:3d} P{src}->P{target.index} {verdict.status:12} {verdict.cert or '-':>10} step {step:4.1f} {verdict.note}")
         return True
@@ -914,6 +1021,16 @@ class Runner:
                     f"the web page has a Vent button) and put it face-down on top of pocket {src}.")
         return msg + " Check the head before touching the bed."
 
+    def _face_down_summary(self) -> dict:
+        """How every slab of the batch (all runs of it) was proven face-down, from certs.csv, plus the learned ones
+        for the audit (check their back photos)."""
+        rows = [r for r in getattr(self.w, "rows", []) if r.face_down]
+        counts = Counter(r.face_down.split("(")[0] for r in rows)
+        learned = [{"position": r.position, "out_pocket": r.out_pocket, "out_index": r.out_index, "face_down": r.face_down, "image_back": r.image_back}
+                   for r in rows if r.face_down.startswith("learned")]
+        return {"mode": self.cfg.face_down_check, "counts": dict(counts), "learned": learned, "references": self.refs.summary(),
+                "stops_this_run": self.face_down_stops}
+
     def count_check(self) -> dict:
         """Slabs counted per source vs the source's surveyed height / mean measured thickness.
         A mismatch of more than one slab means something was not seen (e.g. an undetected double)."""
@@ -1002,6 +1119,15 @@ class Runner:
 
     def _guarded(self, body: Callable[[], dict]) -> dict:
         try:
+            return self._guarded_inner(body)
+        finally:
+            try:
+                self._save_refs(force=True)
+            except Exception:  # noqa: BLE001 - never mask the stop that got us here
+                pass
+
+    def _guarded_inner(self, body: Callable[[], dict]) -> dict:
+        try:
             return body()
         except ControllerLost as e:
             note = self.lost_note()
@@ -1038,6 +1164,7 @@ class Runner:
             self.phase = "survey"
             self.survey()
             self._journal({"survey": {str(k): round(v, 2) for k, v in self.st.survey_tops.items()}})
+            self._log_face_down()
             return self._work()
 
         return self._guarded(body)
@@ -1065,9 +1192,16 @@ class Runner:
             expect = dict(self.st.tops)
             self.survey(expect=expect, accept=accept_heights)
             self._journal({"resume": round(time.time(), 1), "resurvey": {str(k): round(v, 2) for k, v in self.st.tops.items()}})
+            self._log_face_down()
             return self._work()
 
         return self._guarded(body)
+
+    def _log_face_down(self) -> None:
+        if self.refs.note:
+            self.log(f"card-back references: {self.refs.note}")
+            self.refs.note = ""
+        self.log(self.face_down_status())
 
     def _work(self) -> dict:
         srcs = [p.index for p in self.cfg.sources]
@@ -1092,6 +1226,7 @@ class Runner:
             "itf_evidence": dict(self.itf.evidence),
             "mean_cycle_s": round(sum(self.timings) / len(self.timings), 2) if self.timings else None,
             "final_tops_mm": {k: round(v, 1) for k, v in self.st.tops.items()},
+            "face_down": self._face_down_summary(),
         }
         self._journal({"finished": True})
         self.phase = "done"

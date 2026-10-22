@@ -7,7 +7,15 @@ machine learns in the same order.
 Every capture is saved, and a CSV records exactly what each camera decoded (symbology + raw
 payload), which settles the open questions about PSA's barcode format.
 
-Run on the Pi:   python -m tools.phase0 --out phase0_results
+Learned face-down check: every back image also gives a card-window descriptor (slabscan/facedown.py).
+After the last slab, a short face-up pass (--face-up 5) scans five slabs FACE-UP (junk slabs, or hold
+the occluder assembly just above the slab so the cup never touches a front). The report compares the
+lowest back-to-back similarity with the highest face-up similarity: GO for face_down_check = "learned"
+only if they are apart by FACE_DOWN_MARGIN or more. The backs are written as the seed reference file
+(OUT/card_backs.npz); --save also merges them into config/card_backs.npz and writes the recommended
+face_down_threshold to config/calibration.toml (only on GO).
+
+Run on the Pi:   python -m tools.phase0 --out phase0_results --face-up 5 --save
 Without cameras (demo with synthetic labels):   python -m tools.phase0 --sim 10
 """
 
@@ -21,25 +29,40 @@ from collections import Counter
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 from slabscan.certs import ItfModel, consensus
 from slabscan.decode import decode_frame
+from slabscan.facedown import FILE_NAME, CardBackRefs, compare, describe, draw_window, frame_view_mm, image_rects, window_area
+
+SOFTWARE_DIR = Path(__file__).resolve().parents[1]
+FACE_DOWN_MARGIN = 0.10  # lowest back minus highest face-up similarity needed for GO [Guessing: a margin, not a measured rule]
+FACE_DOWN_MIN_BACKS = 10  # usable back images needed before the separation means anything
 
 
 def open_cameras(args):
     if args.sim:
         import random
 
-        from slabscan.sim import Degrade, slab_view
+        from slabscan.sim import Degrade, head_view, slab_view
 
         rng = random.Random(1)
 
         class _Sim:
             def __init__(self, side):
-                self.side, self.cert = side, ""
+                self.side, self.cert, self.face_up = side, "", False
 
             def capture(self):
-                return slab_view(self.cert, self.side, Degrade(mm_per_px=0.05 if self.side == "back" else 0.04), seed=rng.randint(0, 999))
+                if self.side == "back":  # the head camera: label end and card window, past the head's own parts
+                    img = head_view(self.cert, "front" if self.face_up else "back", Degrade(mm_per_px=0.05, blur_px=1.0, glare=0.3), head=args.sim_head)
+                    noise = np.random.default_rng(rng.randint(0, 10**6)).normal(0, 2.0, img.shape)
+                    return np.clip(img.astype(np.float32) + noise, 0, 255).astype(np.uint8)
+                return slab_view(self.cert, self.side, Degrade(mm_per_px=0.04), seed=rng.randint(0, 999))
+
+            def view_rect_mm(self, distance_mm):
+                from slabscan.sim import HEAD_VIEW_MM
+
+                return HEAD_VIEW_MM
 
         head, station = _Sim("back"), _Sim("front")
         return head, station
@@ -50,9 +73,43 @@ def open_cameras(args):
     return head, station
 
 
+def load_machine_config(path: str | None):
+    """The machine config (card window, head camera geometry); the CAD defaults when there is no machine.toml yet."""
+    from slabscan.config import from_layout, load
+
+    p = Path(path) if path else SOFTWARE_DIR / "config" / "machine.toml"
+    return load(p, p.parent / "calibration.toml") if p.exists() else from_layout()
+
+
+class FaceDown:
+    """Card-window descriptors of the Phase 0 head images (the jig: slab back 140 mm from the head lens)."""
+
+    def __init__(self, cfg, cam):
+        self.cfg, self.cam = cfg, cam
+        spec = cfg.cam_head or {}
+        self.distance = float(spec.get("lens_to_label_mm", 140.0))
+        self.rects = image_rects(cfg.face_down_window_mm, str(spec.get("row_axis", "x")))
+        self.backs: list[tuple[int, object]] = []  # (slab n, descriptor or None)
+        self.face_up: list[tuple[int, object]] = []
+
+    def describe(self, img):
+        return describe(img, self.rects, frame_view_mm(img.shape, self.distance, self.cfg.cam_head, self.cam))
+
+    def window_picture(self, img, path: Path) -> None:
+        """The frame with face_down_window_mm drawn on it: check that the boxes lie on the card, not on the label or the head."""
+        view = frame_view_mm(img.shape, self.distance, self.cfg.cam_head, self.cam)
+        cv2.imwrite(str(path), draw_window(img, self.rects, view), [cv2.IMWRITE_JPEG_QUALITY, 90])
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", default="phase0_results")
+    ap.add_argument("--config", default=None, help="machine.toml for the card window and the head camera geometry (default config/machine.toml)")
+    ap.add_argument("--face-up", type=int, default=5, help="slabs to scan FACE-UP after the others, for the learned face-down check (0 = skip)")
+    ap.add_argument("--save", action="store_true",
+                    help="on a learned-check GO: merge the backs into config/card_backs.npz and write face_down_threshold to config/calibration.toml "
+                         "(with --sim: into OUT/config/ instead)")
+    ap.add_argument("--sim-head", choices=["cad", "open", "none"], default="cad", help="(--sim) head parts in the head camera's view (sim.HEADS)")
     ap.add_argument("--head-device", type=lambda v: int(v) if v.isdigit() else v, default="auto",
                     help="USB head camera: auto (first /dev/v4l/by-id/usb-*; on a Pi 5 /dev/video0 is the CSI pipeline), a number, or a path")
     ap.add_argument("--lens-position", type=float, default=7.1, help="Camera Module 3 dioptres; 1/0.14 m = 7.1")
@@ -61,7 +118,9 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     out = Path(a.out)
     (out / "images").mkdir(parents=True, exist_ok=True)
+    cfg = load_machine_config(a.config)
     head, station = open_cameras(a)
+    fd = FaceDown(cfg, head)
     itf = ItfModel()
     rows = []
     f = (out / "phase0.csv").open("w", newline="")
@@ -87,6 +146,10 @@ def main(argv=None) -> int:
             for k in range(a.frames):
                 img = cam.capture()
                 cv2.imwrite(str(out / "images" / f"{n:03d}_{name}_{k}.jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, 90])
+                if name == "back" and k == 0:
+                    fd.backs.append((n, fd.describe(img)))
+                    if n == 1:
+                        fd.window_picture(img, out / "window_check.jpg")
                 r, u = decode_frame(img, side)
                 reads += r
                 unparsed += u
@@ -104,10 +167,116 @@ def main(argv=None) -> int:
     total = len(rows)
     if not total:
         return 0
+    face_up_pass(a, head, fd, out)
     report = phase0_report(rows, itf)
+    fd_lines, threshold = face_down_report(fd, cfg)
+    report += fd_lines
+    seed = save_seed(fd, cfg, out / FILE_NAME)
+    report.append(f"seed reference file: {out / FILE_NAME} ({seed.summary()})" + ("" if threshold is not None else "; HOLD: do not copy it to config/"))
+    if a.save:
+        report += save_face_down(a, fd, cfg, out, threshold)
     (out / "phase0_report.txt").write_text("\n".join(report) + "\n")
     print("\n" + "\n".join(report))
     return 0
+
+
+def face_up_pass(a, head, fd: FaceDown, out: Path) -> None:
+    """Scan a few slabs FACE-UP with the head camera only: what the learned check must never accept."""
+    if a.face_up <= 0:
+        return
+    if not a.sim:
+        print(f"\nFace-up pass: {a.face_up} slabs FACE-UP in the jig (label end toward you), for the learned face-down check. Use junk slabs, "
+              "or hold the cup/foot assembly just above the slab: the cup must not touch a card's front.")
+    for k in range(1, a.face_up + 1):
+        if a.sim:
+            head.cert, head.face_up = str(190000001 + 7907 * k), True
+        else:
+            ans = input(f"Face-up slab {k}/{a.face_up}: place it face-UP, then Enter ('s' = skip the rest): ").strip().lower()
+            if ans == "s":
+                break
+        img = head.capture()
+        cv2.imwrite(str(out / "images" / f"faceup_{k:02d}.jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, 90])
+        fd.face_up.append((k, fd.describe(img)))
+    if a.sim:
+        head.face_up = False
+
+
+def separation(fd: FaceDown) -> dict:
+    """Each usable back against all other backs (the machine's references are other slabs' backs), and each face-up slab
+    against all backs. A usable descriptor shows enough texture in the window."""
+    from slabscan.facedown import MIN_TEXTURE
+
+    backs = [(n, d) for n, d in fd.backs if d is not None and d.texture >= MIN_TEXTURE]
+    ups = [(k, d) for k, d in fd.face_up if d is not None]
+    back_scores = []
+    for i, (n, d) in enumerate(backs):
+        others = [e for j, (_, e) in enumerate(backs) if j != i]
+        back_scores.append((max((compare(d, e).score for e in others), default=0.0), n))
+    up_scores = [(max((compare(d, e).score for _, e in backs), default=0.0), k) for k, d in ups]
+    return {"backs": backs, "back_scores": back_scores, "up_scores": up_scores, "n_backs": len(fd.backs), "n_up": len(fd.face_up)}
+
+
+def face_down_report(fd: FaceDown, cfg) -> tuple[list[str], float | None]:
+    """The learned face-down check's GO / HOLD lines and the recommended threshold (None on HOLD)."""
+    sep = separation(fd)
+    area = window_area(cfg.face_down_window_mm)
+    out = [f"learned face-down check: card window face_down_window_mm {[list(r) for r in cfg.face_down_window_mm]} = {area:.0f} mm2 "
+           "(see window_check.jpg: the red boxes must lie on the card back, clear of the label and of the cup/foot)"]
+    nb, nu = len(sep["backs"]), len(sep["up_scores"])
+    out.append(f"  usable back images: {nb} of {sep['n_backs']}" + ("" if nb == sep["n_backs"] else "  (the rest show nothing in the window: blank, dark or outside the frame)"))
+    hold = []
+    lo = hi = None
+    if sep["back_scores"]:
+        lo, lo_n = min(sep["back_scores"])
+        out.append(f"  lowest back-to-back similarity: {lo:.2f} (slab {lo_n})")
+    if sep["up_scores"]:
+        hi, hi_k = max(sep["up_scores"])
+        out.append(f"  highest face-up similarity: {hi:.2f} (face-up slab {hi_k} of {nu})")
+    if area <= 0:
+        hold.append("face_down_window_mm is empty")
+    if nb < FACE_DOWN_MIN_BACKS:
+        hold.append(f"only {nb} usable back images (needs {FACE_DOWN_MIN_BACKS})")
+    if nu < 3:
+        hold.append(f"only {nu} face-up slabs (run with --face-up 5)")
+    if lo is not None and hi is not None and lo - hi < FACE_DOWN_MARGIN:
+        why = f"backs and face-up slabs do not separate: {lo:.2f} - {hi:.2f} = {lo - hi:.2f} < {FACE_DOWN_MARGIN:.2f}"
+        if hi > 0.8:
+            why += " (face-up slabs match the backs: the window probably shows the head - cup, buffer, foot - not the card)"
+        hold.append(why)
+    if hold:
+        out.append('  HOLD for the learned check: ' + "; ".join(hold) + '. Keep face_down_check = "stop" (set it in calibration.toml): '
+                   "every slab without a back QR then stops for you to check.")
+        return out, None
+    threshold = round((lo + hi) / 2, 2)
+    out.append(f'  GO for face_down_check = "learned": recommended face_down_threshold = {threshold:.2f} (midpoint; margin {lo - hi:.2f} >= '
+               f"{FACE_DOWN_MARGIN:.2f}). Only {nu} face-up slabs were seen: the true highest face-up similarity can be higher, which the "
+               "midpoint leaves room for. Check the back photo of every learned acceptance in the first batches (report.html).")
+    return out, threshold
+
+
+def save_seed(fd: FaceDown, cfg, path: Path) -> CardBackRefs:
+    refs = CardBackRefs(None, cfg.face_down_window_mm)
+    refs.path = path
+    for n, d in fd.backs:
+        refs.add(d, "phase0", {"phase0_slab": n})
+    refs.save()
+    return refs
+
+
+def save_face_down(a, fd: FaceDown, cfg, out: Path, threshold: float | None) -> list[str]:
+    """--save: merge the backs into the machine's reference file and write the threshold, only on GO."""
+    from slabscan.config import write_overrides
+
+    if threshold is None:
+        return ["--save: nothing written (the learned check is HOLD)"]
+    cdir = out / "config" if a.sim else SOFTWARE_DIR / "config"
+    refs = CardBackRefs(cdir / FILE_NAME, cfg.face_down_window_mm)
+    for n, d in fd.backs:
+        refs.add(d, "phase0", {"phase0_slab": n}, cluster=threshold)
+    refs.save()
+    cal = cdir / "calibration.toml"
+    write_overrides(cal, {"face_down_threshold": threshold}, f"phase0 {time.strftime('%Y-%m-%d %H:%M')}: learned face-down threshold")
+    return [f"--save: wrote face_down_threshold = {threshold:.2f} to {cal} and {refs.summary()} to {cdir / FILE_NAME}"]
 
 
 def phase0_report(rows: list, itf: ItfModel) -> list[str]:

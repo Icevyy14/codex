@@ -176,7 +176,7 @@ class RunManager:
                 raise RuntimeError("a run is already going")
             base = self._fresh_cfg()
             cfg = dataclasses.replace(base, front_photo=opts["front_photo"]) if opts.get("front_photo") in ("always", "fallback") else base
-            if opts.get("face_down_check") in ("stop", "off"):
+            if opts.get("face_down_check") in ("learned", "stop", "off"):
                 cfg = dataclasses.replace(cfg, face_down_check=opts["face_down_check"])  # a batch keeps the choice it was started with
             writer = BatchWriter.reopen(self.out_dir / batch_id)
             self._launch(cfg, writer, resume=True, fresh=False, accept_heights=accept_heights, face_down_ok=face_down_ok)
@@ -210,7 +210,8 @@ class RunManager:
             return
         try:
             code, summary, msg = cli.execute_batch(cfg, hw, writer, con, resume=resume, accept_heights=accept_heights, stop_flag=self.stop_flag,
-                                                   on_runner=lambda r: setattr(self, "runner", r), cal_path=self.cal_path, face_down_ok=face_down_ok)
+                                                   on_runner=lambda r: setattr(self, "runner", r), cal_path=self.cal_path, face_down_ok=face_down_ok,
+                                                   refs_path=None if self.provider.sim else cli.card_backs_path(self.cal_path))
         except Exception as e:  # noqa: BLE001 - never let the worker thread die silently
             code, summary, msg = 1, None, f"{type(e).__name__}: {e}"
         self.ended = time.time()
@@ -412,11 +413,11 @@ a{color:var(--accent)}pre{white-space:pre-wrap;font-size:12px;color:var(--mute);
 <div class="card" id="controls">
   <div class="row"><input id="name" placeholder="batch name (optional)" maxlength="40">
   <select id="fp"><option value="fallback">front photo: only when needed</option><option value="always">front photo: every slab (+3 s)</option></select></div>
-  <label class="mute"><input type="checkbox" id="allfd" style="min-height:0"> I loaded every slab face-down: don't stop at slabs without a back QR (older PSA, CGC)</label>
+  <label class="mute"><input type="checkbox" id="allfd" style="min-height:0"> I loaded every slab face-down: don't stop at slabs the face-down check can't confirm (no back QR, no match with a known card back)</label>
   <div class="row"><button class="go" id="start">Start run</button><button class="stop" id="stop">Stop after this slab</button></div>
   <div class="row"><select id="resumeSel"></select><button id="resume">Resume</button></div>
   <label class="mute"><input type="checkbox" id="accept" style="min-height:0"> accept changed stack heights on resume</label>
-  <label class="mute"><input type="checkbox" id="facedown" style="min-height:0"> the top slab it stopped on is face-down (I checked)</label>
+  <label class="mute"><input type="checkbox" id="facedown" style="min-height:0"> the top slab it stopped on is face-down (I checked; its card back becomes a reference)</label>
 </div>
 <div class="card" id="imgcard" hidden><div class="mute">last label</div><img class="label" id="img" alt="last label photo"></div>
 <div class="card"><div class="mute">last 10 slabs</div><div class="tablewrap"><table><thead><tr><th>#</th><th>cert</th><th>status</th><th>now in</th></tr></thead><tbody id="rows"></tbody></table></div></div>

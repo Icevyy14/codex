@@ -199,14 +199,15 @@ class SimLensCamera:
         pass
 
 
-def sim_stacks(cfg: Config, slabs: int, seed: int = 7, eras=(0.85, 0.1, 0.05), clingy_rate: float = 0.0, thick_rate: float = 0.0):
+def sim_stacks(cfg: Config, slabs: int, seed: int = 7, eras=(0.85, 0.1, 0.05), clingy_rate: float = 0.0, thick_rate: float = 0.0,
+               jp_rate: float = 0.0):
     """``slabs`` simulated slabs spread as evenly as possible over the source pockets."""
     from .simworld import make_batch
 
     n_src = len(cfg.sources)
     if slabs > cfg.capacity:
         raise ValueError(f"{slabs} slabs > capacity {cfg.capacity}")
-    full = make_batch(cfg, per_pocket=cfg.stack_max, seed=seed, eras=eras, clingy_rate=clingy_rate, thick_rate=thick_rate)
+    full = make_batch(cfg, per_pocket=cfg.stack_max, seed=seed, eras=eras, clingy_rate=clingy_rate, thick_rate=thick_rate, jp_rate=jp_rate)
     stacks = {}
     for i, p in enumerate(cfg.sources):
         k = slabs // n_src + (1 if i < slabs % n_src else 0)
@@ -214,15 +215,16 @@ def sim_stacks(cfg: Config, slabs: int, seed: int = 7, eras=(0.85, 0.1, 0.05), c
     return stacks
 
 
-def sim_hardware(cfg: Config, slabs: int = 22, seed: int = 7, world=None, stacks=None, **batch_kw) -> Hardware:
+def sim_hardware(cfg: Config, slabs: int = 22, seed: int = 7, world=None, stacks=None, head: str = "cad", **batch_kw) -> Hardware:
     """Simulated machine. Calibration offsets in cfg become the simulator's built-in offsets, so a
-    calibrated config drives the simulated machine exactly as it would drive the real one."""
+    calibrated config drives the simulated machine exactly as it would drive the real one. ``head``: the head
+    parts the head camera looks past (sim.HEADS; "cad" = today's CAD head)."""
     from .simworld import SimCamera, SimGate, SimLights, SimMotion, SimVacuum, SimWorld
 
     if world is None:
         if stacks is None:
             stacks = sim_stacks(cfg, slabs, seed, **batch_kw)
-        world = SimWorld(cfg, stacks={k: list(v) for k, v in stacks.items()})
+        world = SimWorld(cfg, stacks={k: list(v) for k, v in stacks.items()}, head=head)
     return Hardware(
         cfg=cfg,
         motion=SimMotion(world, x_offset=cfg.offset_x, z_offset=cfg.pad_trigger_c),

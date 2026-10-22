@@ -65,10 +65,21 @@ class Config:
     front_photo: str = "fallback"  # fallback | always  (always = full front photo of every slab, +~3 s/slab)
     needs_review_to: str = "output"  # output | exceptions
     hover_check: bool = True  # use the frame taken from above the top slab as an extra read of its back label
-    # "stop": before the cup touches a slab, the frame from above must show a PSA back-label QR (proof the
-    # slab is face-down); otherwise the run stops untouched and the operator confirms (resume --face-down-ok).
+    # Before the cup touches a slab, the frame from above must prove it is face-down:
+    # "stop": only a PSA back-label QR proves it; otherwise the run stops untouched and the operator confirms
+    #         (resume --face-down-ok).
+    # "learned": a PSA back QR, or a card window that matches the card backs of earlier QR- or operator-confirmed
+    #         slabs (slabscan/facedown.py). Active only once face_down_threshold is measured (Phase 0) and
+    #         face_down_min_refs references exist; until then it behaves like "stop".
     # "off": no check - only the operator's face-down loading protects the fronts.
-    face_down_check: str = "stop"
+    face_down_check: str = "learned"
+    face_down_threshold: float | None = None  # similarity a card window needs; Phase 0 measures it (phase0 --save writes it)
+    face_down_min_refs: int = 5  # references (QR- or operator-confirmed card backs) needed before a learned match counts
+    # Card-window rectangles [along the row, along the slab, ...] in mm on the slab plane from the head-camera axis,
+    # label end negative. They must lie on the card (not the label) and be clear of the head's own cup, buffer and
+    # foot in the frame from above. [Guessing] card position in the slab; the CAD head foot of today hides this
+    # area (its shadow covers |x| < 34, y > -34 at the hover height), so the learned check refuses to use it.
+    face_down_window_mm: tuple = ((-28.0, -33.0, 28.0, -17.0),)
     psa_cert_digits: tuple = ()  # PSA cert lengths seen in Phase 0, e.g. [8, 9]; an 'ok' of another length -> needs_review
     frames_per_read: int = 2
     custom_regex: str | None = None
@@ -115,6 +126,22 @@ class Config:
 
 
 _TUPLE_FIELDS = ("station_xy", "accepted_graders", "x_travel", "psa_cert_digits")
+FACE_DOWN_MODES = ("learned", "stop", "off")
+
+
+def check_face_down(raw: dict) -> None:
+    mode = raw.get("face_down_check", "learned")
+    if mode not in FACE_DOWN_MODES:
+        raise ValueError(f"face_down_check must be one of {', '.join(repr(m) for m in FACE_DOWN_MODES)}, not {mode!r}")
+    t = raw.get("face_down_threshold")
+    if t is not None and not (isinstance(t, (int, float)) and 0.0 < float(t) < 1.0):
+        raise ValueError(f"face_down_threshold must be a number between 0 and 1 (Phase 0 measures it), not {t!r}")
+    n = raw.get("face_down_min_refs", 1)
+    if not isinstance(n, int) or n < 1:
+        raise ValueError(f"face_down_min_refs must be a whole number >= 1, not {n!r}")
+    for r in raw.get("face_down_window_mm", ()):
+        if len(r) != 4 or not (r[0] < r[2] and r[1] < r[3]):
+            raise ValueError(f"face_down_window_mm: each rectangle is [x0, y0, x1, y1] with x0 < x1 and y0 < y1, not {list(r)!r}")
 
 
 def check_custom_regex(rx: str | None) -> None:
@@ -146,8 +173,9 @@ def load(path: Path, calibration: Path | None = None) -> Config:
         if k in raw:
             raw[k] = tuple(raw[k])
     check_custom_regex(raw.get("custom_regex"))
-    if raw.get("face_down_check", "stop") not in ("stop", "off"):
-        raise ValueError(f"face_down_check must be \"stop\" or \"off\", not {raw['face_down_check']!r}")
+    if "face_down_window_mm" in raw:
+        raw["face_down_window_mm"] = tuple(tuple(float(v) for v in r) for r in raw["face_down_window_mm"])
+    check_face_down(raw)
     cfg = Config(pockets=pockets, **raw)
     # The travel heights assume the free cup hangs DESIGN_CUP_HANG below its trip height (cad/layout.py CUP_HANG).
     # A buffer measured to trip later hangs lower, so both travel heights go up by the difference.
@@ -184,6 +212,7 @@ def from_layout() -> Config:
         max_line=L.MAX_LINE,
         probe_window=L.PROBE_WINDOW,
         gate_z=L.GATE_Z,
+        **({"face_down_window_mm": tuple(tuple(float(v) for v in r) for r in L.FACE_DOWN_WINDOW_MM)} if hasattr(L, "FACE_DOWN_WINDOW_MM") else {}),
     )
 
 
