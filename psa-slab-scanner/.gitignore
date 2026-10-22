@@ -1,0 +1,3 @@
+cad/out/renders/stl_*/
+__pycache__/
+*.pyc

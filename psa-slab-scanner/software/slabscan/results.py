@@ -15,15 +15,16 @@ from pathlib import Path
 
 from .certs import Verdict
 
-COLUMNS = ["batch_id", "position", "rack", "row", "slot", "cert", "status", "sources", "note", "image_front", "image_back", "scanned_at"]
+COLUMNS = ["batch_id", "position", "source_pocket", "source_index", "out_pocket", "out_index", "cert", "grader", "status", "sources", "raw_payload", "note", "image_front", "image_back", "scanned_at"]
 
 
 @dataclass
 class SlabResult:
     position: int  # 1-based order the machine visited
-    rack: int
-    row: int
-    slot: int
+    source_pocket: int  # pocket the slab was picked from
+    source_index: int  # 1 = top of the source stack at pick time
+    out_pocket: int  # pocket it was placed in (exception pocket for rejects)
+    out_index: int  # 1 = bottom of the output stack
     verdict: Verdict
     image_front: str = ""
     image_back: str = ""
@@ -48,8 +49,8 @@ class BatchWriter:
         v = r.verdict
         with self.csv_path.open("a", newline="") as f:
             csv.writer(f).writerow([
-                self.batch_id, r.position, r.rack, r.row, r.slot, v.cert or "", v.status,
-                "+".join(v.sources), v.note, r.image_front, r.image_back,
+                self.batch_id, r.position, r.source_pocket, r.source_index, r.out_pocket, r.out_index,
+                v.cert or "", v.grader, v.status, "+".join(v.sources), v.raw, v.note, r.image_front, r.image_back,
                 time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(r.scanned_at)),
             ])
 
@@ -68,7 +69,7 @@ class BatchWriter:
             "status_counts": dict(counts),
             "duplicates": self.duplicates(),
             "needs_attention": [
-                {"position": r.position, "rack": r.rack, "row": r.row, "slot": r.slot, **asdict(r.verdict)}
+                {"position": r.position, "out_pocket": r.out_pocket, "out_index": r.out_index, **asdict(r.verdict)}
                 for r in self._rows
                 if r.verdict.status != "ok"
             ],

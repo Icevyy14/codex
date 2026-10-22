@@ -17,7 +17,7 @@ import cv2
 import numpy as np
 import zxingcpp
 
-from .certs import CodeRead, parse_cert
+from .certs import CodeRead, parse_payload
 
 _QR_FORMATS = {"QRCode", "MicroQRCode", "RMQRCode", "DataMatrix", "Aztec"}
 
@@ -43,9 +43,9 @@ def _zxing_pass(gray: np.ndarray, camera: str, custom_regex: str | None) -> tupl
     unparsed: list[str] = []
     for b in zxingcpp.read_barcodes(gray):
         sym = b.format.name if hasattr(b.format, "name") else str(b.format)
-        cert = parse_cert(b.text, custom_regex)
-        if cert:
-            reads.append(CodeRead(cert=cert, source=_source_for(sym, camera), symbology=sym, raw=b.text, camera=camera))
+        p = parse_payload(b.text, sym, custom_regex)
+        if p:
+            reads.append(CodeRead(cert=p.cert, source=_source_for(sym, camera), symbology=sym, raw=b.text, camera=camera, grader=p.grader, alt_cert=p.alt_cert))
         else:
             unparsed.append(f"{sym}:{b.text}")
     return reads, unparsed
@@ -63,18 +63,38 @@ def decode_frame(img: np.ndarray, camera: str = "", custom_regex: str | None = N
     gray = _to_gray(img)
     all_unparsed: list[str] = []
     passes = (
-        lambda g: g,
-        lambda g: _clahe.apply(g),
-        lambda g: cv2.resize(g, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC),
+        lambda g: [g],
+        lambda g: [_clahe.apply(g)],
+        lambda g: [cv2.resize(g, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)],
+        _padded_tiles,
     )
     for prep in passes:
-        reads, unparsed = _zxing_pass(prep(gray), camera, custom_regex)
-        all_unparsed.extend(u for u in unparsed if u not in all_unparsed)
+        reads: list[CodeRead] = []
+        for img in prep(gray):
+            r, unparsed = _zxing_pass(img, camera, custom_regex)
+            reads.extend(r)
+            all_unparsed.extend(u for u in unparsed if u not in all_unparsed)
         if reads:
             return reads, all_unparsed
     if allow_ocr:
         return ocr_digits(gray, camera), all_unparsed
     return [], all_unparsed
+
+
+def _padded_tiles(gray: np.ndarray) -> list[np.ndarray]:
+    """Overlapping horizontal bands, upscaled and given a white quiet zone.
+
+    A thin ITF code sits among label text with almost no quiet zone. Full-frame decoding of
+    real PSA labels has been reported to fail where padded crops succeed.
+    """
+    h, w = gray.shape
+    out = []
+    band = max(24, h // 4)
+    for y0 in range(0, max(1, h - band // 2), band // 2):
+        crop = gray[y0:y0 + band, :]
+        crop = cv2.resize(_clahe.apply(crop), None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+        out.append(cv2.copyMakeBorder(crop, 40, 40, 60, 60, cv2.BORDER_CONSTANT, value=255))
+    return out
 
 
 _OCR_TOKEN_RE = re.compile(r"\d{8,10}")
@@ -103,4 +123,9 @@ def ocr_digits(gray: np.ndarray, camera: str = "") -> list[CodeRead]:
     _, bw = cv2.threshold(_clahe.apply(gray), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     text = pytesseract.image_to_string(bw, config="--psm 11 -c tessedit_char_whitelist=0123456789")
     tokens = sorted(set(_OCR_TOKEN_RE.findall(text)), key=len, reverse=True)
-    return [CodeRead(cert=t, source="ocr", symbology="OCR", raw=t, camera=camera) for t in tokens[:1]]
+    out = []
+    for t in tokens[:1]:
+        p = parse_payload(t, "OCR")
+        if p:
+            out.append(CodeRead(cert=p.cert, source="ocr", symbology="OCR", raw=t, camera=camera))
+    return out
