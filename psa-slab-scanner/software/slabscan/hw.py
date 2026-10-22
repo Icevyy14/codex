@@ -69,17 +69,31 @@ class PiVacuum:
 
 
 class PiLights:
-    def __init__(self):
+    """LED rings. ``settle_s``: after a ring switches ON, wait so camera auto exposure adapts
+    before the first frame (otherwise the first frame is exposed for the dark scene)."""
+
+    def __init__(self, settle_s: float = 0.3):
         from gpiozero import OutputDevice
 
         self._head = OutputDevice(PIN_LED_HEAD, initial_value=False)
         self._station = OutputDevice(PIN_LED_STATION, initial_value=False)
+        self.settle_s = settle_s
+
+    def _set(self, dev, on: bool) -> None:
+        was = bool(dev.value)
+        dev.value = on
+        if on and not was and self.settle_s > 0:
+            time.sleep(self.settle_s)
 
     def head(self, on: bool) -> None:
-        self._head.value = on
+        self._set(self._head, on)
 
     def station(self, on: bool) -> None:
-        self._station.value = on
+        self._set(self._station, on)
+
+    def close(self) -> None:
+        self._head.off()
+        self._station.off()
 
 
 class PiLid:

@@ -31,28 +31,74 @@ class SlabResult:
     scanned_at: float = field(default_factory=time.time)
 
 
-class BatchWriter:
-    """Appends rows as the machine runs, so a crash or power cut loses nothing."""
+def _row_values(batch_id: str, r: SlabResult) -> list:
+    v = r.verdict
+    return [
+        batch_id, r.position, r.source_pocket, r.source_index, r.out_pocket, r.out_index,
+        v.cert or "", v.grader, v.status, "+".join(v.sources), v.raw, v.note, r.image_front, r.image_back,
+        time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(r.scanned_at)),
+    ]
 
-    def __init__(self, out_dir: Path, batch_id: str | None = None):
+
+def read_rows(csv_path: Path) -> list[SlabResult]:
+    """Parse a certs.csv back into SlabResults. A torn last row (power cut mid-write) is dropped."""
+    out: list[SlabResult] = []
+    with Path(csv_path).open(newline="") as f:
+        for row in csv.DictReader(f):
+            try:
+                pos = int(row["position"])
+                sources = tuple(s for s in (row.get("sources") or "").split("+") if s)
+                verdict = Verdict(row["status"], row["cert"] or None, sources, row.get("note") or "", row.get("grader") or "PSA", row.get("raw_payload") or "")
+                try:
+                    at = time.mktime(time.strptime(row["scanned_at"], "%Y-%m-%dT%H:%M:%S"))
+                except (TypeError, ValueError):
+                    at = time.time()
+                out.append(SlabResult(pos, int(row["source_pocket"]), int(row["source_index"]), int(row["out_pocket"]), int(row["out_index"]), verdict,
+                                      row.get("image_front") or "", row.get("image_back") or "", at))
+            except (KeyError, TypeError, ValueError):
+                continue
+    return out
+
+
+class BatchWriter:
+    """Appends rows as the machine runs, so a crash or power cut loses nothing.
+
+    ``resume=True`` reopens an existing batch folder: the rows already in certs.csv are loaded
+    (and the file rewritten cleanly, dropping a torn last line) so new rows append after them.
+    """
+
+    def __init__(self, out_dir: Path, batch_id: str | None = None, resume: bool = False):
         self.batch_id = batch_id or time.strftime("%Y%m%d-%H%M%S")
         self.dir = Path(out_dir) / self.batch_id
         self.dir.mkdir(parents=True, exist_ok=True)
         (self.dir / "images").mkdir(exist_ok=True)
         self.csv_path = self.dir / "certs.csv"
         self._rows: list[SlabResult] = []
-        with self.csv_path.open("w", newline="") as f:
-            csv.writer(f).writerow(COLUMNS)
+        if resume and self.csv_path.exists():
+            self._rows = read_rows(self.csv_path)
+        tmp = self.csv_path.with_suffix(".csv.tmp")
+        with tmp.open("w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(COLUMNS)
+            for r in self._rows:
+                w.writerow(_row_values(self.batch_id, r))
+        tmp.replace(self.csv_path)
+
+    @classmethod
+    def reopen(cls, batch_dir: Path) -> "BatchWriter":
+        batch_dir = Path(batch_dir)
+        if not batch_dir.is_dir():
+            raise FileNotFoundError(f"no batch folder {batch_dir}")
+        return cls(batch_dir.parent, batch_dir.name, resume=True)
+
+    @property
+    def rows(self) -> list[SlabResult]:
+        return list(self._rows)
 
     def add(self, r: SlabResult) -> None:
         self._rows.append(r)
-        v = r.verdict
         with self.csv_path.open("a", newline="") as f:
-            csv.writer(f).writerow([
-                self.batch_id, r.position, r.source_pocket, r.source_index, r.out_pocket, r.out_index,
-                v.cert or "", v.grader, v.status, "+".join(v.sources), v.raw, v.note, r.image_front, r.image_back,
-                time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(r.scanned_at)),
-            ])
+            csv.writer(f).writerow(_row_values(self.batch_id, r))
 
     def duplicates(self) -> dict[str, list[int]]:
         seen: dict[str, list[int]] = {}

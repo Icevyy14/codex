@@ -114,8 +114,12 @@ class SimMotion:
     ACCEL = {"x": 2000.0, "z": 1200.0}  # mm/s^2, as in firmware/fluidnc/config.yaml
     SETTLE_S = 0.03  # command latency + settle per move
 
-    def __init__(self, world: SimWorld):
+    def __init__(self, world: SimWorld, x_offset: float = 0.0, z_offset: float = 0.0):
+        """x_offset / z_offset model an uncalibrated machine: machine coordinate = world + offset.
+        A correct calibration then finds offset_x == x_offset and pad_trigger_c == z_offset."""
         self.w = world
+        self.x_offset = x_offset
+        self.z_offset = z_offset
         self.log: list[str] = []
         self.move_time_s = 0.0
         self.travel_mm = 0.0
@@ -129,10 +133,23 @@ class SimMotion:
     def wait_idle(self):
         pass
 
+    def position(self) -> tuple[float, float]:
+        """Machine (x, z), like the controller's status report."""
+        return self.w.x + self.x_offset, self.w.z + self.z_offset
+
+    def pins(self) -> str:
+        """Active input pins like FluidNC's Pn: field ('P' = probe triggered)."""
+        w = self.w
+        surf = w.surface_below()
+        return "P" if surf is not None and w.z <= surf + w.held_thickness() + 0.01 else ""
+
     def move(self, feed, x=None, y=None, z=None):
         if not self.homed:
             raise Crash("move before homing")
         w = self.w
+        x = None if x is None else x - self.x_offset
+        y = None if y is None else y
+        z = None if z is None else z - self.z_offset
         if z is not None and z != w.z:
             w.check_z(z)
             self._account(abs(z - w.z), feed, "z")
@@ -150,19 +167,24 @@ class SimMotion:
         self.log.append(f"G1 X{w.x:.1f} Y{w.y:.1f} Z{w.z:.1f} F{feed:.0f}")
 
     def probe(self, z_target, feed):
+        if not self.homed:
+            raise Crash("probe before homing")
         w = self.w
         surf = w.surface_below()
         self.log.append(f"G38.3 Z{z_target:.2f}")
+        z_target = z_target - self.z_offset
         if surf is None:
             raise Crash("probing with nothing below")
         contact = surf + w.held_thickness()  # cup face height at first touch
         if contact > w.z + 0.01:
             raise Crash(f"probe started below the surface (cup {w.z:.1f}, surface {contact:.1f})")
+        if contact > w.z - 0.01:
+            raise Crash("probe started with the probe already triggered (FluidNC raises ALARM ProbeFailInitial)")
         trip = contact - TRIGGER_COMPRESSION + TRIGGER_COMPRESSION  # trip point expressed as cup-face height
         if trip >= z_target:
             self._account(w.z - trip, feed, "z")
             w.z = trip
-            return trip
+            return trip + self.z_offset
         # no trigger before z_target: if we passed the surface, the buffer compresses
         if z_target < contact - BUFFER_STROKE + 0.01:
             raise Crash("probe drove the cup past the buffer stroke")

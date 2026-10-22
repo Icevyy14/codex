@@ -14,7 +14,10 @@ import time
 from dataclasses import dataclass, field
 
 _PRB_RE = re.compile(r"\[PRB:([-\d.]+),([-\d.]+),([-\d.]+)(?:,[-\d.]+)*:(\d)\]")
-_STATUS_RE = re.compile(r"<(\w+)(?::\d+)?\|MPos:([-\d.]+),([-\d.]+),([-\d.]+)(?:,([-\d.]+))?")
+# FluidNC always reports at least 3 axes (X,Y,Z) even with no Y axis defined (Axes::afterParse).
+# MPos or WPos depending on the $10 status mask.
+_STATUS_RE = re.compile(r"<(\w+)(?::\d+)?\|(MPos|WPos):([-\d.]+),([-\d.]+),([-\d.]+)(?:,([-\d.]+))?")
+_PINS_RE = re.compile(r"\|Pn:([A-Za-z]+)")
 
 
 class MotionError(Exception):
@@ -60,14 +63,33 @@ class GcodeMachine:
         raise MotionError(f"timeout waiting for ok after {line!r}")
 
     def status(self) -> tuple[str, Pose]:
+        """(state, machine position). A WPos report is converted with the G54 offset."""
         self.ser.write(b"?")
         deadline = time.monotonic() + 2.0
         while time.monotonic() < deadline:
-            m = _STATUS_RE.search(self._readline())
+            line = self._readline()
+            m = _STATUS_RE.search(line)
             if m:
-                a = float(m.group(5)) if m.group(5) else 0.0
-                return m.group(1), Pose(float(m.group(2)), float(m.group(3)), float(m.group(4)), a)
+                self.last_status = line
+                a = float(m.group(6)) if m.group(6) else 0.0
+                pose = Pose(float(m.group(3)), float(m.group(4)), float(m.group(5)), a)
+                if m.group(2) == "WPos":
+                    ox, oy, oz = self.work_offset
+                    pose = Pose(pose.x + ox, pose.y + oy, pose.z + oz, a)
+                return m.group(1), pose
         raise MotionError("no status report")
+
+    def pins(self) -> str:
+        """Active input pins from the status report's Pn: field. 'P' = probe triggered, X/Z = limit switch pressed."""
+        self.status()
+        m = _PINS_RE.search(getattr(self, "last_status", ""))
+        return m.group(1) if m else ""
+
+    def position(self) -> tuple[float, float]:
+        """Work (x, z) - the coordinates G1/G38.3 use."""
+        _, pose = self.status()
+        ox, _, oz = self.work_offset
+        return pose.x - ox, pose.z - oz
 
     def wait_idle(self) -> Pose:
         self.send("G4 P0")  # planner barrier: 'ok' only after all queued motion is done
@@ -86,6 +108,14 @@ class GcodeMachine:
         self.wait_idle()
         self.send("G90")  # absolute
         self.send("G21")  # mm
+        self.send("G54")
+        self.send("G92.1")  # clear any G92 offset
+        # Calibration lives in software (offset_x, pad_trigger_c), so work coordinates must equal
+        # machine coordinates. A G54 offset left by a G-code sender would silently shift everything.
+        ox, _, oz = self.work_offset
+        if abs(ox) > 1e-6 or abs(oz) > 1e-6:
+            self.send("G10 L2 P1 X0 Z0")
+            self._wco = None
 
     def move(self, feed: float, **axes: float) -> None:
         words = " ".join(f"{k.upper()}{v:.3f}" for k, v in axes.items())
@@ -108,13 +138,20 @@ class GcodeMachine:
         raise MotionError("probe finished without a [PRB:] report")
 
     @property
-    def work_offset_z(self) -> float:
-        if not hasattr(self, "_wco_z"):
-            self._wco_z = 0.0
+    def work_offset(self) -> tuple[float, float, float]:
+        """G54 offset (x, y, z) from '$#', cached until home() changes it."""
+        if getattr(self, "_wco", None) is None:
+            self._wco = (0.0, 0.0, 0.0)
             for r in self.send("$#"):
                 if r.startswith("[G54:"):
-                    self._wco_z = float(r[5:-1].split(",")[2])
-        return self._wco_z
+                    v = [float(t) for t in r[5:].rstrip("]").split(",")]
+                    v += [0.0] * (3 - len(v))
+                    self._wco = (v[0], v[1], v[2])
+        return self._wco
+
+    @property
+    def work_offset_z(self) -> float:
+        return self.work_offset[2]
 
     def output(self, pin: int, on: bool) -> None:
         """Immediate digital output (FluidNC user_outputs): M64 = on, M65 = off."""
