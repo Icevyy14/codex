@@ -23,12 +23,12 @@ other moves it up and down.
   - **0A, camera test:** can the cameras read *your* labels? About $281 with a borrowed school
     Raspberry Pi, about $470 if you buy one. One or two evenings plus printing.
   - **0B, cup test:** does the cup seal on your holders, and does it leave a mark after 24 h? This
-    is the only part that touches your inventory. About $167 with a spare SMC cup (the one shop
+    is the only part that touches your inventory. About $155 with a spare SMC cup (the one shop
     that lists the exact code shows it back-ordered), a hand vacuum pump on the bench, no mains
     wiring.
 - **[Likely] The budget fits, with headroom.** The full list is about $2,182, and a realistic worst
-  case is about $2,365, inside the $2,500–3,000 you said is fine. With the school's shop stock it
-  drops to about $1,862 (worst case about $2,039). Upgrades (a genuine HIWIN rail, a stronger Z
+  case is about $2,380, inside the $2,500–3,000 you said is fine. With the school's shop stock it
+  drops to about $1,862 (worst case about $2,050). Upgrades (a genuine HIWIN rail, a stronger Z
   motor, a high-flex USB cable and others) are listed at qty 0: buy one only when the test it
   names fails. Details in [docs/BOM.md](docs/BOM.md); every order with a link per line in
   [docs/SHOPPING_LIST.md](docs/SHOPPING_LIST.md).
@@ -48,7 +48,11 @@ other moves it up and down.
   optical sensor on the Z spine checks that the head really is at carry height before every
   sideways move. It catches a lift that ended more than about 2.5 mm low; it does not make a weak
   Z motor strong, so the 100-lift test still has to pass.
-- **Build effort:** a real mechatronics project, roughly 60–85 hours of hands-on work plus
+- **[Certain, code] Every pre-2016 PSA slab comes out `needs_review`, not `ok`.** Its only code
+  is one front barcode, and nothing on it confirms that it is a PSA slab: OCR confirms the digits,
+  never the grader. These slabs stay in the output stack for you to check (7 of 61 real slabs at
+  machine scale; 20 of 330 in the simulator's default mix).
+- **Build effort:** a real mechatronics project, roughly 65–90 hours of hands-on work plus
   printing. Plan to use your school's instructors for the 120 V wiring, crimping and
   calibration.
 
@@ -62,9 +66,10 @@ other moves it up and down.
    on CGC labels, and the barcode on PSA labels from 2016 on.
 4. The cup sets the slab down in pocket 0, and the next slab is now on top. When stack 1 is
    empty, stack 2 moves into pocket 1, and so on down the row.
-5. Slabs whose back can't be read are held over an **upward camera** in the middle of the row,
-   which reads the front label. Anything still unreadable, read only by OCR, or from a grader
-   other than PSA or CGC, goes to **pocket 12** for you to check by hand.
+5. Slabs whose back can't be read, or that carry only barcodes (no QR), are held over an
+   **upward camera** in the middle of the row, which reads the front label and checks the printed
+   digits with OCR. Anything still unreadable, read only by OCR, or from a grader other than PSA or
+   CGC, goes to **pocket 12** for you to check by hand.
 
 The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
 
@@ -78,7 +83,7 @@ The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
 | Cycle | about 14 s per slab in the timing simulation: 79 min for a 330-slab load with the default label mix, including homing and the stack survey. Older front-only labels can take up to 30 s more each (OCR on the Pi), and each slab without a back-label code stops the run until the learned check is active, unless you use `--all-face-down`. Real speed will be measured in the acceptance tests. |
 | Touches the slab | cup on the **back** only; edges against wooden dowels; slabs rest on each other as in any stack |
 | Output | `certs.csv` (cert, grader, status, pocket and position), `certs.txt`, `report.html` with label photos |
-| Budget | about **$2,182** expected for everything including a 15% allowance; about **$2,365** worst case (tools, the conditional HT1 cups and light roof, [Guessing] prices 20% high), inside the $2,500–3,000 ceiling. About **$1,862** (worst case about $2,039) if the school supplies filament, wire and common screws. Junk test slabs and the test-triggered upgrades are extra. Details in [docs/BOM.md](docs/BOM.md) and [docs/SHOPPING_LIST.md](docs/SHOPPING_LIST.md). |
+| Budget | about **$2,182** expected for everything including a 15% allowance; about **$2,380** worst case (tools, the conditional HT1 cups and light roof, [Guessing] prices 20% high), inside the $2,500–3,000 ceiling. About **$1,862** (worst case about $2,050) if the school supplies filament, wire and common screws. Junk test slabs and the test-triggered upgrades are extra. Details in [docs/BOM.md](docs/BOM.md) and [docs/SHOPPING_LIST.md](docs/SHOPPING_LIST.md). |
 
 ## What's in this folder
 
@@ -100,13 +105,17 @@ The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Verification done so far (no hardware)
 
-- **[Certain] All 128 CAD checks pass** (`cad/checks.py`, re-run on 22 Oct 2026 in 5 min 11 s;
+- **[Certain] All 152 CAD checks pass** (`cad/checks.py`, re-run on 23 Oct 2026, about 6 min;
   every number is in `cad/out/checks.txt`, so trust that file over this list).
   - Picking the last slab of every pocket with full neighbours clears them by ≥ 14.5 mm.
   - Carried slabs clear the dowels by ≥ 21 mm; a double pick of two thick holders by ≥ 5 mm.
   - A held slab clears every part fixed to the X carriage by ≥ 5 mm, even at the Z top hard stop.
   - The cameras have an unobstructed view of the label, and the head camera of the face-down card
     window: no part in view at hover over stacks of 1, 15 and 30, or with a slab held.
+  - Both LED rings are modelled and seated; the barb elbow clears the head ring by 3.75 mm at the
+    full stroke.
+  - The card window is checked on the card plane for PSA and CGC slabs pushed into a pocket corner:
+    PSA keeps it all on the card, CGC has about 1.5% of it on the holder (limit 2%) [Likely].
   - The probe flag trips at 2.0 mm of buffer travel and clears its sensor and guide over the full
     20 mm stroke; the buffer is modelled from SMC's catalog.
   - The carry-height sensor trips at c = 246.5 mm: clear at every height up to 242, blocked from
@@ -116,13 +125,18 @@ The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
   - Both carriages stay on their rails at every printed hard stop, and no two parts overlap at
     any checked pose.
   - **Not checked:** belt slack, cables and the vacuum tube, the real shapes of bought parts,
-    loads or deflection, and the head LED ring (not modelled). The camera-aim tolerance is
-    reported, not enforced: a tilt over 0.56° toward the cup puts the cup pad in the card window.
-- **[Certain] Software tests: `259 passed, 1 skipped in 737.80s (0:12:17)`** (full suite,
-  22 Oct 2026; the skipped test runs the rules on the real image set when it is pointed at it). The simulator **raises a crash on any unsafe move**. Every
+    loads or deflection, and the X home and Z top switch mounts (not in the CAD). A camera tilt
+    over about 1.3° toward the cup puts the cup pad in the card window (1.34° in the CAD check). The
+    software checks a tilt toward the cup on every learned run; it does not see a tilt away from
+    the cup, a roll along the row, or a head part as dark as the pad.
+- **[Certain] Software tests: `288 passed, 1 skipped in 1020.95s (0:17:00)`** (full suite,
+  23 Oct 2026; the skipped test runs the rules on the real image set when it is pointed at it:
+  with it enabled the suite gave `289 passed in 862.10s (0:14:22)`). The simulator **raises a crash on any unsafe move**. Every
   slab is moved exactly once and read. The tests also cover:
   - the real payload strings of PSA and CGC labels (QR forms, ITF, Code128, the 13-digit CGC cert,
-    the phantom read),
+    the phantom read, which can no longer confirm itself or drop the real number),
+  - the grader rule (a one-barcode slab is never `ok`) and the OCR check of two-barcode reads,
+  - the camera-aim check over an empty pocket (a tilt toward the cup turns the learned check off),
   - pre-2016 labels routed to the front camera,
   - double-pick detection, thick holders, overfill and seal failures stopping safely,
   - CGC slabs read, BGS to the exception pocket,
@@ -133,9 +147,10 @@ The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
     not teach it a card front.
 - **[Certain for these images] Real-label check** (`python -m tools.real_eval`, public scans of 64
   real slabs, RESEARCH.md §4): **0 wrong certs in an `ok` verdict and 0 false face-down proofs**,
-  both on the images as they are (60 of 64 `ok`; two pre-2016 PSA held as `needs_review`, the BGS
-  and SGC unread: their labels have no code) and rescaled and degraded to what the machine's
-  cameras would see (60 of 61 `ok`, the BGS unread). The old rules gave one silent wrong cert on
+  both on the images as they are (55 of 64 `ok`; the 7 pre-2016 PSA held as `needs_review`
+  because their grader is not confirmed, the BGS and SGC unread: their labels have no code) and
+  rescaled and degraded to what the machine's cameras would see (53 of 61 `ok`, the same 7
+  `needs_review`, the BGS unread). The old rules gave one silent wrong cert on
   the same images. **Limits:** the rules were written from these same 64 slabs, and flat
   studio scans have no slab-plastic reflections; Phase 0 on your own slabs is the real test.
 - **[Certain, synthetic labels in the real formats] Decode sweep.**
@@ -145,16 +160,17 @@ The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Build order
 
-1. **Phase 0, two gates. Order the machine only if both pass.** (BOM order 1 ≈ $637 in all.)
+1. **Phase 0, two gates. Order the machine only if both pass.** (BOM order 1 ≈ $626 in all.)
    - **1a. Camera test, ≈ $281 with a borrowed Pi (≈ $470 buying one), one or two evenings plus
      printing.** Build the camera test jig (`docs/img/phase0_jig.png`) and run
      `python -m tools.phase0` on 30–50 of your own slabs. Go on only if at least 95% read, 0 come
      out wrong, and `python -m tools.real_eval --phase0 phase0_results` shows 0 wrong certs and 0
      false face-down proofs.
-   - **1b. Cup test, ≈ $167 with the spare cup, 3–4 h of hands-on work plus the 24 h test.** Seal,
+   - **1b. Cup test, ≈ $155 with the spare cup, 3–4 h of hands-on work plus the 24 h test.** Seal,
      leak and a 24 h marking test with a hand vacuum pump on the bench (BUILD_GUIDE §1.10). Go on
-     only if the slab shows no mark after a dry wipe. If it does, try the HT1 cup first.
-2. Order the rest of the BOM (order 2, ≈ $1,545; [docs/SHOPPING_LIST.md](docs/SHOPPING_LIST.md)).
+     only if the slab shows no mark after a dry wipe. If it does, stop and ask: the HT1 fallback
+     cup needs an adapter nobody has sourced yet.
+2. Order the rest of the BOM (order 2, ≈ $1,556; [docs/SHOPPING_LIST.md](docs/SHOPPING_LIST.md)).
    Print the parts in `cad/out/printed/`.
 3. Follow `docs/BUILD_GUIDE.md`.
 4. Calibrate. Run the acceptance tests on junk slabs, then do a supervised first batch.

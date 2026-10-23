@@ -41,7 +41,7 @@ filled. Every time estimate is **[Guessing]**.
 | The head lens sits **5 mm toward the label from the cup axis**, set by `camera_bracket` (and by the jig's bridge in Phase 0): there is no adjustment. With the lens on the axis, the vacuum elbow 23 mm under it hid the card window the learned face-down check needs [Certain, CAD ray cast]. Print the current `camera_bracket`, `station_mount`, `phase0_top` and `phase0_base`: their LED ring seats changed too. | §1.5, §3.2, §7.7 |
 | The LED rings are sold by their outside diameter only. The CAD models a 40 × 30 × 5 mm head ring and a 63 × 47 × 5 mm station ring (a 60 mm one fits too) [Likely OD, Guessing ID and thickness]. No 40 mm COB ring listing is live: a 12-SMD ring that fits the seat is the fallback. | §3.3 |
 | The card window is placed from the card position measured on 22 PSA and 27 CGC backs [Likely ±0.5 mm]. PSA slabs keep it on the card. On a CGC slab pushed into a pocket corner it has about zero margin: about 1.5% of the window can lie on the holder (up to about 4.5% at most) [Likely, CAD card-plane check]. | §1.2, §12.3 |
-| Camera aim: a tilt of more than about 1.3° toward the cup puts the cup pad into the card window (1.34° in the CAD check, 1.31° with the software's own mapping) [Certain]. Every learned run checks a tilt toward the cup over an empty pocket and then turns the learned check off [Certain, sim]. It does not see a head part as dark as the pad, a tilt away from the cup or a roll along the row, and a CGC slab in a pocket corner has almost no aim margin toward the label: for those, nothing catches it but your look at the frame. | §7.7, §12.3 |
+| Camera aim: a tilt of more than about 1.3° toward the cup puts the cup pad into the card window (1.34° in the CAD check, 1.31° with the software's own mapping) [Certain]. Every learned run looks for that tilt over an empty pocket, and turns the learned check off for the run if it finds it [Certain, sim]. It does not see a head part as dark as the pad, a tilt away from the cup or a roll along the row, and a CGC slab in a pocket corner has almost no aim margin toward the label: for those, nothing catches it but your look at the frame. | §7.7, §12.3 |
 | The carry-height sensor's trip (c = 246.5) is set by sliding its mount along the spine's slot, then measured by `selftest --motion`. | §7.4a, §12.1 |
 | The only Class 2 laser found is 7 mm across: the left gate post now prints with a 7.2 mm hole. Drill only a post printed from an older STL. | §5.9 |
 | The X home switch and the Z top switch have no mount in the CAD: each goes on a 2020 corner bracket. | §6.8, §7.4 |
@@ -190,8 +190,9 @@ Rows marked "PHASE 0A" in BOM.csv. [Certain for the list; prices as in the BOM]
   to the lens, and blocks the same share of the camera's view of the slab]
 - **The SMC cup, buffer and barb elbow are the real occluder.** They are in order 1b, but the
   cup's lead time can be 2–8 weeks [Likely], and Proax shows it back-ordered. **Order the two cups
-  and the two `M-5ALU-4` elbows (and the PTFE tape) with 1a** if you accept about $74 at risk: the elbow is part of the
-  occluder and also clamps the flag, so with cups but no elbow neither can go on the jig. Otherwise
+  and the two `M-5ALU-4` elbows (and the PTFE tape) with 1a** if you accept about $77 at risk: the
+  elbow is part of the occluder and also clamps the flag, so with cups but no elbow neither can go
+  on the jig. Otherwise
   use an M10 bolt with a 25 mm washer as a dummy and leave the flag off; the label view does not
   depend on it [Certain, `checks.txt`: nothing on the head blocks the label].
 - **With a Pi 4:** use the 15-pin camera cable that ships with the Camera Module 3, not the Pi 5
@@ -258,8 +259,7 @@ the same software as the machine.
    - **Slide `phase0_occluder_mount`'s clamp onto the RIGHT post now**, with a T-nut in the post's
      outer slot, before the bridge goes on. Leave its screw loose.
 4. **Face both tray ledges with a strip of microfiber cloth** (spray adhesive or double-sided tape;
-   school stock, §1.1): the slab's
-   front label rests on them. Slide the tray onto the posts. Set the **top of the cloth on the
+   school stock, §1.1): the slab's front label rests on them. Slide the tray onto the posts. Set the **top of the cloth on the
    ledges 140 mm above the station lens front** (± 2 mm; if you measure to the bare ledge, set it
    140 mm minus the cloth thickness), then fix both clamps with M5 screws and T-nuts. [Certain,
    `model.py`: slab front at lens + 140]
@@ -533,6 +533,10 @@ BIQU on 22 Oct 2026.
   does, and the flag guide handles it);
 - measure the optical endstop boards (slot 3.1 mm, holes 19 mm apart, header position) before you
   print `head_foot` and `carry_sensor_mount`;
+- measure both LED rings (OD, ID, thickness: §3.3) and the ELP board (hole pattern, board-to-lens
+  length) before you print the Phase 0 parts, which come first;
+- check that the laser receiver module fits the right gate post's 6.2 mm hole (never measured
+  [Guessing]) and the laser the left post's 7.2 mm one;
 - count the balls in the MGN12 carriages before you slide them anywhere (§6.1).
 
 ---
@@ -995,14 +999,16 @@ glue's full strength, or ream the hole and re-glue.
 empty] Use this as a starting point and check it works:
 - **Target 15–25 N.** [Guessing; one third-party calculator suggests 10–15 N, but this span is
   long]
-- **Measure by deflection, sideways:** park the carriage at one end. At mid-span, hook a small
-  spring scale (BOM.md tools) onto the lower strand and pull it **sideways (in Y)** to 100 g (1 N).
+- **Measure by deflection, sideways:** park the carriage at one end, out of the way. At mid-span,
+  hook a small spring scale (BOM.md tools) onto the lower strand and pull it **sideways (in Y)**
+  to 100 g (1 N).
   - It should move **13–23 mm**, which corresponds to 15–25 N.
   - Not up or down: the lower strand runs only 12.9 mm above the beam top, and the upper strand
     about 12.7 mm above the lower one (a 20T pulley), so both block a vertical deflection of that
     size. [Likely, CAD geometry]
-  - The formula is T = F·L / (4·d), with L = 1.35 m, the pulley-to-idler distance. [Certain,
-    statics; Likely that the carriage at one end leaves the lower strand's span about that long]
+  - The formula is T = F·L / (4·d), with L = 1.35 m, the pulley-to-idler distance: the lower
+    strand runs that whole span, because both belt ends clamp on the upper strand (§6.5).
+    [Certain, statics]
   - Tighten by re-clamping one belt end one tooth further. Fine-tune with the M3 tension screw:
     it pulls the idler slider toward −X (its axle travels −6 … +2 mm in the cheek slots). Then
     tighten the M5 axle to lock the slider.
@@ -1095,12 +1101,15 @@ All heights below are from `cad/layout.py` and `cad/model.py`. [Certain]
 
 **7.4 Z top switch** (WIRING.md §7). **The CAD has no mount for it either** [Certain]. Make one as in
 §6.8 [Guessing on the exact place]:
-- The switch on a 2020 corner bracket, the bracket on an M5×10 into a T-nut near the spine top
-  (for example the spine's right front slot, in the 9 mm above the Z rail's top end), so the
-  rising `z_plate` presses the lever.
-- Keep it clear of the `z_motor_mount` tab (left front slot, 15 mm below the top) and of the
-  carry-height sensor (left face). Turn the lead screw by hand through the top of the travel to
-  check that only the `z_plate` touches it.
+- The switch on a 2020 corner bracket, the bracket on an M5×10 into a T-nut in a free spine slot
+  near the top, so the rising `z_plate` presses the lever 4 mm before it meets the
+  `z_motor_mount`.
+- Keep it out of the Z carriage block's path: at the top hard stop only 3.6 mm of the block is
+  still on the rail [Certain, `checks.txt`], so the rest runs past the rail's top end, in front of
+  the right front slot. Keep it also clear of the `z_motor_mount` tab (left front slot, 15 mm
+  below the top) and of the carry-height sensor and its flag (left face). Turn the lead screw by
+  hand through the top of the travel to check that only the `z_plate` touches it. Your
+  instructor's eye helps here.
 - It must click at c ≈ 258 mm: the cup face 258 above the pad top, ± 2 mm. At that point the
   `z_plate` top is still 4 mm below the `z_motor_mount`, which is the top hard stop at c = 262.
 

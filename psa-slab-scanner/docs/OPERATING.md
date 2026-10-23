@@ -2,8 +2,8 @@
 
 Weekly use: loading, running, reading the results, unloading, maintenance, and what to do when
 it stops. The build and the acceptance tests are in [BUILD_GUIDE.md](BUILD_GUIDE.md). Commands
-are run from `~/psa-slab-scanner/software` with the venv active
-(`source .venv/bin/activate`).
+are run from `~/psa-slab-scanner/software` (BUILD_GUIDE §11.2 puts the project there) with the
+venv active (`source .venv/bin/activate`).
 
 Confidence tags: **[Certain]** = read in the code (`software/slabscan/`) or the CAD. **[Likely]**
 = strong inference. **[Guessing]** = not yet measured on a real machine.

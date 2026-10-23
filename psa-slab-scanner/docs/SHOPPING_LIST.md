@@ -25,7 +25,7 @@ Rows tagged PHASE 0A in BOM.csv. **Also take from school stock (or a hardware st
 - the screws: 6 × M5×10 with 6 M5 washers (one each) and 6 slot-6 M5 T-nuts, 1 × M5×30 + nylock, 2 × M3×16 + 4 washers + 2 nuts. No slot-6 T-nuts? A plain M5 hex nut slid into the slot from the open end of the post or stub works for the jig [Likely]. Or pull the KB-3D M5 T-nuts and the AFT M5×10 forward into this order (about $19);
 - for the tray ledges: a strip of microfiber cloth, and spray adhesive or double-sided tape. Or pull the order-2 Pad facing and Spray adhesive lines forward ($35.96).
 
-**Consider ordering the two SMC cups and the two M-5ALU-4 elbows (order 1b, with the PTFE tape for the elbow's thread) now.** The cup, buffer and elbow are the jig's real occluder, the elbow also clamps the probe flag, and Proax shows the cups back-ordered. That puts about $74 at risk if 0A fails.
+**Consider ordering the two SMC cups and the two M-5ALU-4 elbows (order 1b, with the PTFE tape for the elbow's thread) now.** The cup, buffer and elbow are the jig's real occluder, the elbow also clamps the probe flag, and Proax shows the cups back-ordered. That puts about $77 at risk if 0A fails.
 
 | Item | Qty | Link | Price each | Line cost | Notes |
 |---|---:|---|---:|---:|---|

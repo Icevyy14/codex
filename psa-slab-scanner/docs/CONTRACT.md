@@ -12,7 +12,7 @@ Every document and file must agree with this page. If something here is wrong, f
 - **Run order:** stack k is moved slab by slab onto pocket k−1, so every stack ends up one pocket to the left. Each slab is read on the way.
 - **Loading rules:** slabs go in **face-down**, with the **label end toward the front** (toward the operator).
 - **Sizes:** pocket interior 84 × 139 mm.
-  - Guide rods are 8 mm hardwood dowels, 218 mm tall above the pad.
+  - Guide rods are 8 mm hardwood dowels in the CAD (`ROD_D`); the BOM buys 5/16 in (7.94 mm). They stand 218 mm tall above the pad.
   - The fill line (MAX) is 210 mm.
   - An overfill laser beam runs at 214 mm along the row centre line.
 - **Axes (only two):**
@@ -48,7 +48,7 @@ Every document and file must agree with this page. If something here is wrong, f
   - Flag: 1 mm aluminium, in the CAD (`probe_flag`), its tab clamped between the buffer's M5 port hex and an SMC `M-5ALU-4` barb elbow (no washer, thread sealant; tube toward +Y). It trips the beam after 2.0 ± 0.5 mm of buffer travel (`buffer_trip_mm`), set with the board's ± 4 mm slots.
 
 ## CAD decisions after the build review (binding)
-- **Checks:** `cad/checks.py` runs 128 checks; all 128 pass (re-run on 22 Oct 2026, numbers in
+- **Checks:** `cad/checks.py` runs 152 checks; all 152 pass (re-run on 23 Oct 2026, numbers in
   `cad/out/checks.txt`). A CAD change is done only when they all pass again.
 - **Rails on slots:**
   - The X rail centre is at Z = 410, on the 4040 beam's upper front slot. It is fixed with M3
@@ -84,13 +84,23 @@ Every document and file must agree with this page. If something here is wrong, f
 - **Phase 0 occluder:** `phase0_occluder_mount` clamps to the jig's right post and holds
   `head_foot` on a 2020 × 66 mm stub, where the machine has it relative to the lens. For the
   face-up pass the mount slides 3 mm up the post.
-- **Card window:** `FACE_DOWN_WINDOW_MM = [[-27.5, -27.5, 27.5, -16.0]]`, mm from the CUP axis (−y =
-  the label end; 632.5 mm²). The software's `face_down_window_mm` is measured from the head-CAMERA
-  axis: `layout.face_down_window_cam()` = `[[-27.5, -22.5, 27.5, -11.0]]`, which `gen_config` writes.
-  `checks.py` proves it clear of every machine part at hover (stacks of 1, 15, 30) and with a slab
-  held, inside the card for the latest real PSA card top (`CARD_TOP_FROM_EDGE` 34.8–37.8 mm) with
-  the slab anywhere in its play, and clear of the label band; it also reports the camera-aim
-  tolerance (0.56° toward the cup).
+- **Card window:** `FACE_DOWN_WINDOW_MM = [[-27.5, -23.5, 27.5, -18.0]]`, mm from the CUP axis (−y =
+  the label end; 55 × 5.5 mm = 302.5 mm²). The software's `face_down_window_mm` is measured from the
+  head-CAMERA axis: `layout.face_down_window_cam()` = `[[-27.5, -18.5, 27.5, -13.0]]`, which
+  `gen_config` writes; the Phase 0 jig's flipped version is `[[-27.5, 13.0, 27.5, 18.5]]`. It is
+  placed from `layout.HOLDERS`, the card position measured on 22 PSA and 27 CGC backs (card top to
+  the holder's far end: PSA 97.18–99.95 mm, CGC 93.76–96.21 mm). `checks.py` proves it clear of every
+  machine part at hover (stacks of 1, 15, 30) and with a slab held, and clear of the label band; on
+  the card plane (card 3.5 mm under the back, rounded corners) a slab in a pocket corner has 0.0%
+  of it on the holder for PSA and 1.52% for CGC (limit 2%). It also reports the camera-aim
+  tolerance: 1.34° toward the cup (1.31° with the software's 147 mm mapping).
+- **LED rings:** in the CAD. Head ring modelled 40 × 30 × 5 mm, in a 41 mm bore against a 33 mm lip
+  on `camera_bracket` (and a pocket in `phase0_top`), its LED face 1 mm under the lens front, the
+  leads out through a notch; the barb elbow clears it by 3.75 mm at the full stroke. Station ring:
+  a 64 mm bore on a 45° shelf (`station_mount`, `phase0_base`) that takes a 63 × 47 or a 60 mm ring,
+  the leads down a slot into the ribbon slot. Each is fixed with three dots of glue.
+- **Switch mounts:** the X home and Z top switches have no mount in the CAD; BUILD_GUIDE §6.8 and
+  §7.4 put each on a 2020 corner bracket.
 - **Carry-height sensor:** the spare TCST2103 board on the Z spine's −X face (`carry_sensor_mount`,
   2 × M5×10 button heads into slot-6 T-nuts, beam at Z 561.5 above the pad top), and a flat 1 mm
   aluminium flag on `carry_flag_arm` (screwed to the `z_plate` front face). Its beam is clear at
@@ -147,7 +157,7 @@ Every document and file must agree with this page. If something here is wrong, f
 - **Cameras:**
   - Head: USB UVC 8 MP IMX179 board with an M12 3.6 mm lens (F2.8 or faster), manual focus, looking down at the held slab's back from 140 mm, 5 mm toward the label from the cup axis. Its frames are cropped to the slab under the cup (`head_roi_half_mm`, `cam_head.hfov_deg`, `row_axis`, `lens_to_label_mm`: check them on the real camera).
   - Station: Raspberry Pi Camera Module 3 (standard) on CSI port 0, looking up at the held slab's front from 140 mm.
-- **Lighting:** a 40 mm COB LED ring around the head lens (a 60 mm ring cuts into the drop arm) and a 60 mm ring around the station lens, both 12 V. The black foam-board "light roof" is optional (see the CAD decisions above).
+- **Lighting:** a 40 mm COB LED ring around the head lens (a 60 mm ring cuts into the drop arm; a 40 mm 12-SMD ring that fits the seat is the fallback) and a 60 or 63 mm ring around the station lens, both 12 V. The black foam-board "light roof" is optional (see the CAD decisions above).
 
 ## Software (repo folder `psa-slab-scanner/software`)
 - **Package:** `slabscan/`
@@ -162,11 +172,11 @@ Every document and file must agree with this page. If something here is wrong, f
   - `jog`: interactive.
   - `calibrate z`: probes the bare pad of pocket 0 and writes `pad_trigger_c`.
   - `calibrate x`: operator centres the awl over pocket 0 and pocket 12 and writes `offset_x` plus a scale check.
-  - `focus head|station`: live sharpness and decode score to set focus.
+  - `focus head|station`: live sharpness and decode score to set focus. On the machine `focus head` first checks the camera's aim over the empty pocket 12 and saves `focus/focus_head_empty.jpg`.
   - `mark`: drives the awl to every cell for the drill template.
   - `run [--name NAME] [--front-photo always|fallback] [--all-face-down] [--yes]`
   - `resume BATCH_DIR [--face-down-ok] [--accept-heights] [--yes]`
-  - `sim [--slabs N] [--mix MIX] [--eras E] [--face-down-check] [--jp-rate R] [--sim-head cad|cad_r2|open|none]`: full simulated batch, no hardware. `--mix` sets the label mix per grader and era (default: mostly PSA, some CGC, a few BGS); `--eras` is a PSA-only override. `--face-down-check` keeps the check on and counts the slabs it would stop at (a simulated operator confirms each). `cad` is today's head, `cad_r2` the round-2 head whose foot hid the card window.
+  - `sim [--slabs N] [--mix MIX] [--eras E] [--face-down-check] [--jp-rate R] [--sim-head cad|cad_r2|open|none] [--sim-head-tilt DEG]`: full simulated batch, no hardware. `--sim-head-tilt` tilts the simulated head camera toward the cup (every command that takes `--sim` accepts it). `--mix` sets the label mix per grader and era (default: mostly PSA, some CGC, a few BGS); `--eras` is a PSA-only override. `--face-down-check` keeps the check on and counts the slabs it would stop at (a simulated operator confirms each). `cad` is today's head, `cad_r2` the round-2 head whose foot hid the card window.
   - Bench tests (not part of the CLI): `python -m tools.bench_tests cycles|rest|lifts|drop|powercut N` (BUILD_GUIDE §7.8, §13).
   - Real-label check (not part of the CLI): `python -m tools.real_eval INDEX.json [--machine] [--glare]` or `--phase0 DIR`: the run's reading order, consensus and face-down rule on photos of real slabs; exit 1 on a wrong cert in an `ok` verdict or a false face-down proof.
   - `web [--port 8080]`: phone-friendly start/stop/progress page and CSV download.
@@ -174,19 +184,25 @@ Every document and file must agree with this page. If something here is wrong, f
   - `refs [--drop CERT | --drop-operator]`: list or delete the learned face-down check's references.
 - **Outputs:** `batches/<id>/certs.csv`, `certs.txt`, `report.html`, `summary.json`, `journal.jsonl`, `images/` (plus `run.json`, and `stop.json` after a stop).
   - `certs.csv`'s last column is `face_down`: `qr` (a PSA or CGC back QR), `code` (the CGC 2020–23 back barcode), `operator`, `learned(<score>)` or `off`. `report.html` has a Face-down column; `summary.json` a `face_down` entry, plus `itf_mode` (always `zero_pad`) and `itf_evidence`.
-  - Learned mode adds `images/face_down_window.jpg` (the run's first slab with the card window drawn) and `images/face_down_empty.jpg` (the view over an empty pocket).
+  - Learned mode adds `images/face_down_window.jpg` (the run's first slab with the card window drawn) and `images/face_down_empty.jpg` (the view over an empty pocket), and `summary.json`'s `face_down` gets `camera_aim`; a failed aim check prints a `CAMERA AIM:` summary line.
 - **Enrichment (optional, later):** `python -m tools.enrich batches/<id>` (PSA API, quota-metered).
-- **Graders:** PSA and CGC are read and stacked normally. Other graders go to pocket 12, and so does
-  every `needs_review` whose grader is `unknown` (an OCR-only number, or a code with no grader's
-  format), whatever `needs_review_to` says.
+- **Graders:** PSA and CGC are read and stacked normally. An `ok` needs its grader confirmed: a
+  code that names it (a cert URL) or two printed symbols in its format; OCR confirms digits, never a
+  grader, so a one-barcode slab (every pre-2016 PSA) is `needs_review`. Every barcode-only `ok` also
+  gets the front OCR. Other graders go to pocket 12, and so does every `needs_review` whose grader is
+  not an accepted one (`unknown`: an OCR-only number or a code with no grader's format; `PSA/CGC`;
+  none), whatever `needs_review_to` says. A grader guessed from a barcode's length counts as
+  accepted.
 - **Face-down check:** before the cup touches a slab, the frame from above must prove it is
   face-down. `face_down_check` sets how:
   - `"learned"` (the default): a back-label code (`certs.SIDE_PROOFS`: a PSA back QR, a graded CGC
     QR, the CGC 2020–23 back barcode), or a card window that matches two references (two different
     slabs of one back design) among the card backs of code- or operator-proven slabs
     (`slabscan/facedown.py`). It is active only with a Phase 0 threshold (≥ 0.55) and its matching
-    `face_down_threshold_sig`, `face_down_min_refs` (5) references, the empty-pocket view, and at
-    most 10% of the window static on 5 machine-proven slabs. Until then it acts like `"stop"`. A
+    `face_down_threshold_sig`, `face_down_min_refs` (5) references, the empty-pocket view, at
+    most 10% of the window static on 5 machine-proven slabs, and a clear camera-aim check on that
+    view (`facedown.aim_problem`: no edge in the middle of the window or within 1 mm of its cup
+    side; a tilt toward the cup only). Until then it acts like `"stop"`. A
     code-proven or confirmed slab becomes a reference only after it is placed: never if a
     back-label code is seen from below, and a code proof only with an `ok` read of the same cert.
   - `"stop"`: only a back-label code.
@@ -201,7 +217,7 @@ Every document and file must agree with this page. If something here is wrong, f
   - Journal events: the stop line carries `face_down_stop` (pocket) and `why`;
     `face_down_confirmed`, `face_down_reference` (a confirmed slab learned after placement, with
     its cert and back photo), `face_down_learned` (score, ncc, hist, prototype, threshold, refs,
-    texture, baseline, `position`), `face_down_baseline`, `face_down_ok_unused`; `stall_set_down`
+    texture, baseline, `position`), `face_down_baseline` (with `aim`), `face_down_ok_unused`; `stall_set_down`
     (the pocket a held slab was lowered onto after a Z stall). Events that are not transfers never
     use the `pos` key: `rebuild_state()` reads `pos` with `src` as a finished transfer.
 - **Stops:** Ctrl-C once (or web Stop) = stop after the current slab. Ctrl-C twice = hard stop: the
@@ -217,6 +233,6 @@ Every document and file must agree with this page. If something here is wrong, f
 
 ## Budget
 The original figure was $2,000; on 22 Oct 2026 the user said $2,500–3,000 is fine as long as the machine works properly and is good quality. The user has school 3D printers and mechatronics instructors.
-The current BOM is about $2,182 with a 15% allowance, and the worst case about $2,365 (BOM.md has
+The current BOM is about $2,182 with a 15% allowance, and the worst case about $2,380 (BOM.md has
 the breakdown; SHOPPING_LIST.md the orders with links). Upgrades are qty-0 BOM lines, each bought
 only when the test it names fails.

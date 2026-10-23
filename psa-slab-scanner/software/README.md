@@ -27,7 +27,7 @@ starts the web page at every boot.
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
-.venv/bin/python -m pytest -q tests        # 260 tests, about 12 minutes
+.venv/bin/python -m pytest -q tests        # 289 tests (1 skipped without SLABRAIL_REAL_IMAGES), about 13-17 minutes
 ```
 
 ## First-time order
@@ -39,11 +39,11 @@ Do these in order. Each step depends on the one before it.
 | 1 | `python -m tools.gen_config` | Writes `config/machine.toml` from `cad/layout.py` (setup_pi.sh already did this). |
 | 2 | `python -m slabscan selftest -i` | Checks every part. `-i` adds the hand checks: push the cup up, press a slab on the cup, block the beam. |
 | 3 | `python -m slabscan home` | X goes to its left switch, Z to its top switch. Keep a hand on the e-stop the first time. |
-| 4 | `python -m slabscan mark` | **Before the rods go in.** Awl adapter on. For each pocket, the awl drops into the drill template's two dimples. You clamp the template and drill 8 rod holes. Pockets 0 and 12 come last, because one of their dimples is past the X travel: two 8 mm pins through the template into the neighbour's holes set them. `--only 0,12` continues after a break. |
+| 4 | `python -m slabscan mark` | **Before the rods go in.** Awl adapter on. For each pocket, the awl drops into the drill template's two dimples. You clamp the template and drill 8 rod holes. Pockets 0 and 12 come last, because one of their dimples is past the X travel: two 5/16 in dowel offcuts through the template into the neighbour's holes set them. `--only 0,12` continues after a break. |
 | 5 | Glue the rods, lay the pads | |
 | 6 | `python -m slabscan calibrate z` | Cup on, pocket 0 empty. Probes the bare pad 4 times and writes `pad_trigger_c`. It also checks that the contact sensor triggers when you push the cup up by hand. |
 | 7 | `python -m slabscan calibrate x` | Awl on. Centre it over pocket 0, then over pocket 12: first by eye at the safe height, then low over the pad. Writes `offset_x` and prints the scale error across the row. |
-| 8 | `python -m slabscan focus head` | One slab face-down in pocket 0. The cup rests on it. Turn the M12 lens until the score peaks, then lock the lens nut. |
+| 8 | `python -m slabscan focus head` | One slab face-down in pocket 0, pocket 12 empty. It first checks the camera's aim over pocket 12 (`camera aim: OK` or `FAIL`, picture in `focus/focus_head_empty.jpg`). Then the cup rests on the slab: turn the M12 lens until the score peaks, then lock the lens nut. |
 | 9 | `python -m slabscan focus station --save` | One slab in pocket 0. The machine picks it up and holds it over the station camera. It sweeps `LensPosition`, saves the sharpest value that decodes, then puts the slab back. |
 | 10 | `python -m slabscan run --name test` | First real batch, on junk slabs, with you watching. |
 
@@ -64,11 +64,11 @@ All commands are `python -m slabscan <command>`. Add `--sim` to use the simulato
 
 | Command | Does |
 |---|---|
-| `selftest [-i] [--motion]` | Checks the controller, the probe pin (a cut wire reads TRIGGERED because the wiring is fail-safe), the vacuum sensor, pump, valves (and, with `-i`, seal, leak and vent), the LED rings, both cameras (saves an image of each), the overfill beam, the lid switch, the carry-height sensor (GPIO 6; with `--motion` it homes, steps the head down past `carry_sensor_c0` over pocket 0 and reports where the sensor trips), tesseract and disk space. Exit code 1 if anything fails. |
+| `selftest [-i] [--motion]` | Checks the controller, the probe pin (a cut wire reads TRIGGERED because the wiring is fail-safe), the vacuum sensor, pump, valves (and, with `-i`, seal, leak and vent), the LED rings, both cameras (saves an image of each), the overfill beam, the lid switch, the carry-height sensor (GPIO 6; with `--motion` it homes, steps the head down past `carry_sensor_c0` over pocket 0 and reports where the sensor trips), tesseract, disk space and, in learned mode, the camera aim the last run measured over an empty pocket (WARN until one has). Exit code 1 if anything fails. |
 | `home` | Homes both axes and prints the position. |
 | `jog [--no-rods]` | Typed moves, `x 300`, `x +2`, `z -1`, `p 3`, `station`, `up`, `probe`, plus `keys` for arrow keys. `help` lists everything. |
 | `calibrate z` / `calibrate x` | See above. |
-| `focus head\|station [--save] [--no-motion]` | Live sharpness score (Laplacian variance of the sharpest tiles) plus what decodes. With `--no-motion` you hold the slab in view, for example in the Phase 0 jig. |
+| `focus head\|station [--save] [--no-motion]` | Live sharpness score (Laplacian variance of the sharpest tiles) plus what decodes. With `--no-motion` you hold the slab in view, for example in the Phase 0 jig (then the camera aim is not checked). |
 | `mark [--only 0,12] [--dry-run]` | Drill-template walk (above). `--dry-run` prints the order and positions. |
 | `run [--name NAME] [--front-photo always\|fallback] [--all-face-down] [--yes]` | One batch. It refuses to start before `calibrate z` and `calibrate x` have been run. `--yes` skips the start question. `--all-face-down` turns the face-down check off for this batch (below). |
 | `resume BATCH_DIR [--accept-heights] [--face-down-ok]` | Continues a stopped batch (below). `--face-down-ok`: you checked the slab the face-down check stopped on. It is refused unless the last stop was that face-down stop, and it confirms that one slab only. |
@@ -125,7 +125,9 @@ confirm it with `resume --face-down-ok`.
     run, and the start line, every stop, the summary and `selftest` say to re-aim the camera
     (BUILD_GUIDE §7.7). `focus head` looks over the empty pocket 12 first and says the same.
     [Certain, sim, round-3 card window: a square camera passes, 0.5° toward the cup is caught; the
-    camera-locked check alone let 0.6–1.0° through: only 0–2% of the window was camera-locked.]
+    camera-locked check alone let 0.6–1.0° through: only 0–2% of the window was camera-locked.
+    With today's smaller window a head part enters at about 1.3°, and the check fires from about
+    1.3° (a verifier measured 1.30° and 1.33°).]
   - What the aim check does not see [Certain, sim and geometry]:
     - A head part as dark as the pad shows no edge, and the 10% camera-locked rule does not catch it
       either while it covers a strip of the window (a dark foot over 9–26% of the window read
@@ -148,14 +150,16 @@ The machine:
 
 Afterwards each stack sits **one pocket to the left, in reverse order**. Pocket 12 holds the slabs
 to check by hand: unreadable ones, numbers read only by OCR (no grader), conflicts, or graders other
-than PSA and CGC. Only a `needs_review` row of PSA or CGC may stay in the output stack.
+than PSA and CGC. Only a `needs_review` row of PSA or CGC may stay in the output stack. A grader
+guessed from a barcode's length counts, so another grader's slab whose barcode has a PSA or CGC
+format can end up there as `needs_review` too.
 
 **What makes an `ok`** (`slabscan/certs.py`):
 - A QR carries its own error correction. A barcode (ITF, Code128) needs a second printed code
   (the other label side, or the QR) or OCR of the printed digits to agree.
 - Two barcodes alone (no QR) can agree on the same misread, because both sides carry the same
   pattern. So the front OCR also checks every barcode-only `ok`. If it reads other digits, the
-  slab is `needs_review`.
+  slab is `needs_review`; if it reads nothing, the slab stays `ok`.
 - Two frames of one printed code are one source. A thin false read inside a real barcode (a
   phantom) is dropped only when a different code or OCR confirms the other number, and then from
   every frame of that barcode. Only the thin read can be dropped. If the confirmed number is the
@@ -214,8 +218,8 @@ It tells you which stack to put the slab back on.
 | `certs.csv` | One row per slab: cert, grader, status (`ok`, `needs_review`, `no_read`, `conflict`, `other_grader`), which pocket it came from and where it is now (`out_pocket`, `out_index` counted from the bottom), image paths, and `face_down`: how it was proven face-down (`qr` a PSA or CGC back QR, `code` the CGC 2020-23 back barcode, `operator`, `learned(0.93)` or `off`). Written row by row, so a crash loses nothing. |
 | `certs.txt` | Only the `ok` certs, one per line, in machine order. Paste it into a spreadsheet or Card Dealer Pro. |
 | `report.html` | Every slab with its label photo and a Face-down column (learned rows in bold: check their photos). Opens on a phone. |
-| `summary.json` | Counts, duplicates, the per-stack slab count check, `itf_mode` (always `zero_pad`: the ITF is the cert padded to 8 digits) and `itf_evidence` (slabs where QR and ITF agreed), mean cycle time, and `face_down` (mode, counts, every learned row, the references). |
-| `journal.jsonl` | Machine log used by resume, including the face-down events (`face_down_stop` on the stop line, `face_down_confirmed`, `face_down_reference`, `face_down_learned`, `face_down_baseline`, `face_down_ok_unused`). |
+| `summary.json` | Counts, duplicates, the per-stack slab count check, `itf_mode` (always `zero_pad`: the ITF is the cert padded to 8 digits) and `itf_evidence` (slabs where QR and ITF agreed), mean cycle time, and `face_down` (mode, counts, every learned row, the references, and in learned mode `camera_aim`). A failed aim check also prints a `CAMERA AIM:` summary line. |
+| `journal.jsonl` | Machine log used by resume, including the face-down events (`face_down_stop` on the stop line, `face_down_confirmed`, `face_down_reference`, `face_down_learned`, `face_down_baseline` with its camera-aim verdict `aim`, `face_down_ok_unused`). |
 | `images/` | Back photo of every slab, plus a front photo when the station camera was used. In learned mode also `face_down_window.jpg` (the run's first slab with the card window drawn) and `face_down_empty.jpg` (the view over an empty pocket). |
 | `stop.json` | Why the last run stopped (deleted when a run finishes). |
 

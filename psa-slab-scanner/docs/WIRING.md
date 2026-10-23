@@ -75,6 +75,12 @@ search-engine extracts of the listings, and every "measure" step below exists be
     (115 in the US) **before** the first power-up. On 115 V mains, the 230 position won't run
     properly. On 230 V mains, the 115 position destroys the supply.
 - Wire L, N and PE with 18 AWG (0.75 mm²) mains-rated wire, using the colours in the wire table.
+  - **Colour mapping** (the BOM line is the EU set; US 18 AWG MTW is easier to buy, and the
+    instructor decides which): line = brown (EU) or black (US); neutral = blue (EU) or white (US);
+    earth = green/yellow (EU) or green (US). W2–W6 below accept either set. [Certain, IEC 60445 and
+    US NEC conventions]
+  - Keep the mains wire inside the mains box and the LRS terminals. On the low-voltage side black
+    means 0 V and white +5 V (the colour table in §3), so never reuse leftover mains wire there.
   - The terminal labels are printed on the supply's terminal strip. Follow them.
   - Fit the supply's terminal cover.
 - The Pi's 27 W USB-C supply plugs into its own wall socket, or into the same power strip as the
@@ -204,9 +210,9 @@ Power is on screw terminals. [Certain]
 | W1 | Wall socket | IEC C14 inlet | C13 cord | moulded | BOM power cord |
 | W2 | Inlet L (after fuse and switch) | LRS L | 18 AWG brown/black, 300 V | fork crimp or ferrule | **mains** |
 | W3 | Inlet N | LRS N | 18 AWG blue/white, 300 V | fork or ferrule | **mains** |
-| W4 | Inlet PE | LRS FG (⏚) | 18 AWG green/yellow | fork or ferrule | earth |
-| W5 | LRS FG | Frame bond point on the base 2040 | 18 AWG green/yellow | M5 ring + serrated washer into a T-nut | §12 |
-| W6 | LRS −V | LRS FG | 18 AWG green/yellow, short | ferrules | the **only** 0 V-to-earth bond |
+| W4 | Inlet PE | LRS FG (⏚) | 18 AWG green/yellow (US: green) | fork or ferrule | earth |
+| W5 | LRS FG | Frame bond point on the base 2040 | 18 AWG green/yellow (US: green) | M5 ring + serrated washer into a T-nut | §12 |
+| W6 | LRS −V | LRS FG | 18 AWG green/yellow (US: green), short | ferrules | the **only** 0 V-to-earth bond |
 | W7 | LRS +V | E-stop box contact IN | 18 AWG red (one core of a 2-core cable, about 1.5 m) | ferrule / contact screw | |
 | W8 | E-stop contact OUT | 24 V switched bus (Wago 221-415) | 18 AWG red (other core of W7's cable) | ferrule / lever | |
 | W9 | LRS −V | 0 V bus (Wago 221-415, two joined if needed) | 18 AWG black | ferrule / lever | |
@@ -564,9 +570,13 @@ with the room lights on.
 ## 9. LED rings
 
 **Parts (BOM):** two 12 V COB "angel eye" white rings: **40 mm** for the head (a 60 mm ring would
-cut into the drop arm; the seat in `camera_bracket` and `phase0_top` has a 41 mm bore) and 60 mm for
-the station (seat 52–60 mm in `station_mount` and `phase0_base`). Measure OD and ID before
-printing the ring seats.
+cut into the drop arm; the seat in `camera_bracket` and `phase0_top` is a 41 mm bore with a 33 mm
+lip, for a ring up to 5 mm thick) and 60 or 63 mm for the station (a 64 mm bore on a shelf in
+`station_mount` and `phase0_base`). Measure OD, ID and thickness before printing the ring seats
+(BUILD_GUIDE §3.3). If no 40 mm COB ring can be found, a 40 mm 12-SMD ring that fits the seat is
+the fallback. **Leads:** the head ring's pads and leads leave through the notch in its seat's lip;
+the station ring's drop through the shelf slot into the camera ribbon's slot and leave with it.
+[Certain, CAD]
 
 **Switching**
 - Low side, from GPIO23 (head ring, Q4) and GPIO24 (station ring, Q5).

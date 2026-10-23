@@ -14,13 +14,15 @@ Confidence tags: **[Certain]** = primary source (for a price: the product page i
 - **The total did not change this round.** Two lines moved between orders: the push fittings
   kit to order 2 (Phase 0B never uses it) and the PTFE tape, split out of the reservoir set, to
   order 1b (Phase 0B seals the elbow's thread with it). The 11 confidence tags that differed
-  between the CSV and the shopping list now agree, each set by what the line's price evidence says. The round before, the list went up $209 ($182 of parts plus the
-  allowance), almost all of it real product-page prices replacing estimates (below).
+  between the CSV and the shopping list now agree, each set by what the line's price evidence
+  says. The round before, the list went up $209 ($182 of parts plus the allowance), almost all of
+  it real product-page prices replacing estimates (below).
 - **$1,383 of the $1,897 subtotal is a price seen on the product page** [Certain, 22 Oct 2026],
   $175 is [Likely] and $339 is [Guessing] (mostly the Misumi extrusions, which block scripts: get
-  that quote first, and Amazon lines whose price was not visible). The allowance covers shipping already seen but not in the line prices (LiMo
-  DDP $39, Digi-Key Marketplace $28, MakerStock $13.49, the endstop boards $5.70) and the ones not
-  shown (ELP express and duty, Proax shipping and brokerage, AFT's small-order fee, Misumi).
+  that quote first, and Amazon lines whose price was not visible). The allowance covers shipping
+  already seen but not in the line prices (LiMo DDP $39, Digi-Key Marketplace $28, MakerStock
+  $13.49, the endstop boards $5.70) and the ones not shown (ELP express and duty, Proax shipping
+  and brokerage, AFT's small-order fee, Misumi).
 - **The worst case fits too.** [Guessing] Add the tools you will probably have to buy
   ($45–50), the conditional lines Phase 0 is designed to trigger (HT1 cups and the light roof,
   about $77 with the allowance), and the [Guessing] lines coming in 20% high (about +$78): about

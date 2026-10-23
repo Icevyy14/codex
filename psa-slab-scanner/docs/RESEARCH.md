@@ -134,9 +134,18 @@ labels (face-up); a PSA ITF or Code128 is on both, so it proves nothing. Applied
   the default threads timed out at 30 s; with `OMP_THREAD_LIMIT=1` a station frame took about 3 s
   and the label band alone about 1.4 s.
 
-**Where the card sits** [Likely ±1 mm, from image scale]: on 27 PSA backs the card's top edge is
-34.8–37.8 mm (median 36.1) from the slab's label-end edge; on 15 CGC backs about 2.5–3 mm further
-(about 39–41 mm). The face-down card window is placed from the PSA numbers.
+**Where the card sits** [Likely ±0.5 mm, scale from the card itself, 63 × 88 mm; `cad/layout.py`
+`HOLDERS`]: measured on the good studio-scan backs, the card's top edge lies 97.2–100.0 mm (median
+98.7) from the holder's far (non-label) end on 22 PSA slabs and 93.8–96.2 mm (median 95.2) on 27 CGC
+slabs, so a CGC card top sits about 3.5 mm nearer the far end. The face-down card window is placed
+from these numbers (the far end is what sets the worst case: a slab at the cup end of its pocket
+play has its far end on the wall). The PSA median length came out at the nominal 135.5 mm, which
+checks the method. The CGC holders measured about 133.9 × 79.4 mm, but most CGC scans are cropped a
+few pixels inside the slab edge, so that probably reads short: CGC publishes about 3.15 × 5.30 in
+(80.0 × 134.6 mm) [Likely]. The card-top distance is not affected. An earlier pass, on 27 PSA backs,
+gave the card top 34.8–37.8 mm from the label-end edge (`CARD_TOP_FROM_EDGE`, still used by the
+simulator) and guessed CGC 2.5–3 mm further in from 15 backs; the per-grader numbers above replace
+that guess.
 
 **Read rates at the machine's resolution** [Certain for flat scans]: PSA codes read on every slab;
 the CGC 2023+ front Code128 was the weakest symbol (16 of 19 standard labels; very short bars and
