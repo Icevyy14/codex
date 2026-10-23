@@ -48,7 +48,10 @@ Safety rules (``CardBackRefs``, ``learned_ready`` and ``learned_match``):
   * The camera's aim, on that same view over an empty pocket (``aim_problem``): only the pad far below may show in the
     middle of the card window and just beyond its cup-side edge. A tilt toward the cup brings the cup pad and the foot
     in there (each mm of clearance is about 0.39 deg of tilt). With an edge there the mode is not active and nothing is
-    learned, until a run's view over an empty pocket is clear again. Its limits [Certain, sim and geometry]:
+    learned, until a run's view over an empty pocket is clear again. A verdict counts only for the run that took it
+    (``CardBackRefs.stale``): a resume whose survey finds no empty pocket accepts nothing and learns nothing until it
+    looks over the first source pocket it empties, as after a failed check. So a camera knocked while the run was
+    stopped is seen. Its limits [Certain, sim and geometry]:
       - A part as dark as the pad shows no edge, and nothing catches it while it covers a strip of the window. The
         camera-locked check above does not: at 1 px per mm the strip's pixels are part and card mixed, so they do not
         follow the empty view's levels (a foot at the pad's grey over 9-26 % of the window read 0.3-0.9 % camera-locked).
@@ -352,6 +355,10 @@ class CardBackRefs:
         self.last_used: dict[int, float] = {}
         self.baseline: Descriptor | None = None
         self.baseline_meta: dict = {}
+        # why the stored view over an empty pocket (and its aim verdict) does not count for this run ("" = it does). Set
+        # when a run's survey starts (Runner.survey), cleared by its view over an empty pocket (set_baseline): only a
+        # resume can be left without one. Never saved: the file keeps the last real check.
+        self.stale = ""
         self.rejected: dict[str, int] = {}  # why confirmed slabs were not taken as references (for the report)
         self.note = ""  # what load() found
         self._next_proto = 0
@@ -441,7 +448,7 @@ class CardBackRefs:
     # ---- updates
     def set_baseline(self, d: Descriptor | None, meta: dict | None = None) -> None:
         if d is not None:
-            self.baseline, self.baseline_meta = d, dict(meta or {})
+            self.baseline, self.baseline_meta, self.stale = d, dict(meta or {}), ""
 
     def add(self, d: Descriptor | None, source: str, meta: dict | None = None, cluster: float | None = None) -> tuple[int | None, str]:
         """Add a proven face-down slab's descriptor. Returns (prototype, "") or (None, why it was not used)."""
@@ -458,6 +465,8 @@ class CardBackRefs:
             why = "card window looks like the empty-pocket view (the head hides it)"
         elif self.baseline is not None and self.baseline_meta.get("aim"):
             why = "the head camera's aim puts a part of the head in the card window"
+        elif self.baseline is not None and self.stale:
+            why = "the head camera's aim is not checked this run yet"
         if why:
             self.rejected[why] = self.rejected.get(why, 0) + 1
             return None, why
@@ -562,7 +571,10 @@ def _threshold_problem(threshold: float | None, rects, tag: str | None) -> str:
 
 def _aim_refusal(refs: CardBackRefs) -> str:
     """The aim check's verdict on the stored view over an empty pocket (Runner._take_baseline runs aim_problem on it):
-    a head part in the window makes every frame alike, so nothing may be accepted."""
+    a head part in the window makes every frame alike, so nothing may be accepted. A verdict from before a resume is
+    stale (CardBackRefs.stale): nothing is accepted until this run has looked over an empty pocket."""
+    if refs.baseline is not None and refs.stale:
+        return f"learned check not active: {refs.stale}"
     aim = refs.baseline_meta.get("aim") if refs.baseline is not None else None
     if not aim:
         return ""

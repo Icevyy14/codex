@@ -214,7 +214,19 @@ def test_sim_head_matches_the_cad_export():
     exp = json.loads((CAD / "out" / "heads_cad.json").read_text())
     assert [list(b) for b in sim.HEADS["cad"]] == exp["HEADS"]
     assert (sim.HEAD_CAM_DY, exp["lens"]["x"], exp["lens"]["z"]) == (exp["HEAD_CAM_DY"], 0.0, sim.CAM_ABOVE_CUP_MM)
-    assert sim.CARD_TOP_RANGE_MM == (exp["card_top_from_label_edge_mm"]["min"], exp["card_top_from_label_edge_mm"]["max"])
+    # the card's place in its holder, per grader (round 4: the sim used one PSA range for every slab, the CAD per grader)
+    for g, h in exp["holders"].items():
+        far = h["card_top_to_far_edge_mm"]
+        assert sim.HOLDERS[g] == (h["length_mm"], h["width_mm"], (far["min"], far["max"])), g
+        lo, hi = round(h["length_mm"] - far["max"], 2), round(h["length_mm"] - far["min"], 2)
+        if g == "PSA":  # and the earlier PSA measurement from the label-end edge: PSA slabs spread over both
+            lo = min(lo, exp["card_top_from_label_edge_mm"]["min"])
+            assert sim.CARD_TOP_FROM_EDGE_PSA == (exp["card_top_from_label_edge_mm"]["min"], exp["card_top_from_label_edge_mm"]["max"])
+        assert sim.CARD_TOP_RANGE_MM[g] == (lo, hi), g
+        # the nearest the cup a simulated card top comes (slab at the end of its play) is the CAD's worst case, less only
+        # the cup's X calibration residual the CAD adds
+        cup = h["length_mm"] / 2 - far["min"] + sim.SLAB_PLAY_Y_MM[g]
+        assert h["card_top_worst_from_cup_axis_mm"] - 0.75 <= cup <= h["card_top_worst_from_cup_axis_mm"] + 0.01, (g, cup)
     (x0, y0, x1, y1), = from_layout().face_down_window_mm
     assert [x0, y0, x1, y1] == exp["face_down_window_mm_from_camera_axis"][0]
     for distance in (exp["hover_lens_to_slab_mm"], exp["held_lens_to_slab_mm"]):

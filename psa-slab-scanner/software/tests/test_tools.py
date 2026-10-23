@@ -188,3 +188,18 @@ def test_phase0_report_is_honest_about_what_zero_wrong_proves():
     rows[3] = ("", rows[3][1], rows[3][2])  # one slab not typed
     rep = "\n".join(phase0_report(rows, ItfModel()))
     assert "HOLD:" in rep and "1 NOT typed" in rep and "instructor" in rep
+
+
+def test_phase0_refuses_to_overwrite_an_earlier_run(tmp_path, capsys):
+    """A second Phase 0 run with the same --out used to overwrite phase0.csv (the walkthrough lost a run that way)."""
+    from tools import phase0
+
+    out = tmp_path / "p0"
+    assert phase0.main(["--sim", "1", "--out", str(out)]) == 0
+    before = (out / "phase0.csv").read_text()
+    assert phase0.main(["--sim", "2", "--out", str(out)]) == 2
+    msg = capsys.readouterr().out
+    assert "already there" in msg and "--out p0_2" in msg and "--force" in msg
+    assert (out / "phase0.csv").read_text() == before  # untouched
+    assert phase0.main(["--sim", "2", "--out", str(out), "--force"]) == 0
+    assert (out / "phase0.csv").read_text() != before

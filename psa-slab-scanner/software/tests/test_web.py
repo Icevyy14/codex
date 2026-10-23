@@ -18,7 +18,7 @@ def from_layout():
     return dataclasses.replace(_layout(), face_down_check="off")
 
 H = {"X-SlabRail": "1"}
-# Labels with a back QR only: every slab reads 'ok'. (A pre-2016 PSA label's only code is its front ITF: needs_review.)
+# Labels with a back QR only: every slab reads 'ok'. (A pre-2016 PSA label's only code is its front ITF: 'ok' only when OCR confirms it.)
 QR_MIX = {"psa:current": 0.6, "psa:2017+": 0.2, "cgc:2023+": 0.2}
 
 

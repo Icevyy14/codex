@@ -96,6 +96,9 @@ class FaceDownStop(Stop):
 
 
 BACK_CODES = "a PSA back QR, a CGC back QR or the CGC 2020-23 back barcode"  # certs.SIDE_PROOFS: what proves a slab face-down
+AIM_STALE = ("the head camera's aim is not checked this run yet: its last check is from before (a resume whose survey found no "
+             "empty pocket), and a knock since then would not be seen. It is checked over the first source pocket this run empties; "
+             "until then every slab without a back-label code stops for you")
 FACE_DOWN_OK_REFUSED = ("--face-down-ok refused: the batch did not stop at the face-down check last time, so there is no slab for it to "
                         "confirm. Nothing moved. Resume without it; if a slab the check cannot confirm comes next, the run stops there and "
                         "you can confirm that one.")
@@ -103,8 +106,9 @@ FACE_DOWN_OK_REFUSED = ("--face-down-ok refused: the batch did not stop at the f
 
 def needs_ocr(verdict: Verdict, reads: list[CodeRead]) -> bool:
     """Front OCR is worth its time when nothing was read, or when only barcodes (no QR) were: the printed digits are
-    then the independent check of a one-barcode read. They catch a misread and a phantom (certs.consensus); they never
-    confirm a grader, so a one-barcode read stays needs_review, with a note that says whether its digits agree.
+    then the independent check of a one-barcode read. They catch a misread and a phantom (certs.consensus). Agreeing
+    digits make an 8-digit ITF 'ok' as PSA (certs.psa_itf_confirmed: a pre-2016 PSA label's only code); any other
+    one-barcode read stays needs_review (OCR confirms its digits, not its grader), with a note that says whether they agree.
     A two-barcode 'ok' (back + front label, no QR) is checked too: one fixed misread of a printed pattern can come back
     from both sides (PSA 2016 labels print one ITF on both, current labels one Code128), and then the two agree on the
     wrong number. OCR that reads other digits makes it needs_review (one OCR per slab without a QR read)."""
@@ -853,6 +857,8 @@ class Runner:
         """
         cfg = self.cfg
         measured: dict[int, float] = {}
+        if cfg.face_down_check == "learned" and not self._baseline_taken:
+            self.refs.stale = AIM_STALE  # a stored aim verdict is from an earlier run: _take_baseline over an empty pocket clears it
         for p in cfg.pockets:
             top = self._find_top(p)
             if top is None:
@@ -878,7 +884,9 @@ class Runner:
         straight above it). A card window that looks like this view does not show the slab: the head hides it. The same
         view checks the camera's aim (facedown.aim_problem): a head part in the window there means the camera is tilted,
         and then the learned check accepts nothing and learns nothing (facedown.learned_ready), every slab without a
-        back-label code stops, until a run's view over an empty pocket is clear again."""
+        back-label code stops, until a run's view over an empty pocket is clear again. A resume takes it at its survey
+        if a pocket is empty, else over the first source pocket it empties (_work); until then the stored view is
+        stale (AIM_STALE) and the learned check accepts nothing."""
         if self.cfg.face_down_check != "learned" or self._baseline_taken:
             return
         self._baseline_taken = True
@@ -1262,7 +1270,11 @@ class Runner:
         counts = Counter(r.face_down.split("(")[0] for r in rows)
         learned = [{"position": r.position, "out_pocket": r.out_pocket, "out_index": r.out_index, "face_down": r.face_down, "image_back": r.image_back}
                    for r in rows if r.face_down.startswith("learned")]
-        aim = (self.refs.baseline_meta.get("aim") or "ok") if self.refs.baseline is not None else "not checked (no view over an empty pocket)"
+        if self.refs.baseline is None:
+            aim = "not checked (no view over an empty pocket)"
+        else:
+            aim = ("not checked this run (the resume survey found no empty pocket, and no source pocket was emptied after it)"
+                   if self.refs.stale else (self.refs.baseline_meta.get("aim") or "ok"))
         return {"mode": self.cfg.face_down_check, "counts": dict(counts), "learned": learned, "references": self.refs.summary(),
                 "stops_this_run": self.face_down_stops, **({"camera_aim": aim} if self.cfg.face_down_check == "learned" else {})}
 
@@ -1460,6 +1472,11 @@ class Runner:
             self._check_pause()
             while self.transfer(k, dst):
                 self._check_pause()
+            if self.cfg.face_down_check == "learned" and not self._baseline_taken:
+                # a resume that found no empty pocket: pocket k is empty now, and the head is straight above it
+                self._z(self.c(self.cfg.c_safe_empty))
+                self._take_baseline(k)
+                self.log(self.face_down_status())
             self.st.done_sources.append(k)
             self._journal({"source_done": k})
         self.current = None

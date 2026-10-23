@@ -48,9 +48,10 @@ T_STATION_FRAME = 0.35  # [Guessing] Camera Module 3 full-resolution still from 
 T_SEAL = 0.15  # [Guessing] cup reaching the seal threshold
 # Learned face-down threshold the simulator uses when none is measured, picked on the simulator's own synthetic card
 # backs: with the round-2 window and the "open" head `phase0 --sim 30 --face-up 5 --sim-head open` gave lowest back 0.88,
-# highest face-up 0.24 (midpoint 0.56); 15 face-up slabs reached 0.38. With today's window (632 mm2, closer to the card top),
-# the card top spread over 34.8-37.8 mm and today's CAD head, `phase0 --sim 30 --face-up 15` gives lowest back 0.82, highest
-# face-up 0.46 (midpoint 0.64). Japanese backs against English references (round-2 window): up to 0.49. Never for a machine.
+# highest face-up 0.24 (midpoint 0.56); 15 face-up slabs reached 0.38. With today's window (302.5 mm2), the card top per
+# grader (sim.CARD_TOP_RANGE_MM: PSA 34.8-38.32 mm from the label-end edge) and today's CAD head, `phase0 --sim 30 --face-up
+# 15` gives lowest back 0.81, highest face-up 0.57 (midpoint 0.69). Japanese backs against English references (round-2
+# window): up to 0.49. Never for a machine.
 SIM_FACE_DOWN_THRESHOLD = 0.6
 
 

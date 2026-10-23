@@ -39,10 +39,13 @@ Confidence tags: **[Certain]** = read in the code (`software/slabscan/`) or the 
 - **A wrong cert is worse than no cert.** The software refuses to guess: two codes that disagree
   give `conflict`, and a barcode-only read (ITF or Code128, any grader) with nothing to confirm it
   gives `needs_review`. Even two barcodes that agree get their printed digits checked by OCR. An
-  `ok` also needs its grader confirmed: a code that names it (a cert URL), or two printed codes in
-  its format. So **every pre-2016 PSA slab is `needs_review`** (its only code is the front ITF),
-  even when OCR agrees. A number read only by OCR has no grader and always goes to pocket 12.
-  Respect those statuses. Don't paste `needs_review` certs into your inventory unchecked.
+  `ok` also needs its grader confirmed: a code that names it (a cert URL), two printed codes in
+  its format, or an 8-digit ITF whose digits OCR of the printed number confirms (that names PSA).
+  So **a pre-2016 PSA slab is `ok` only when OCR agrees with its front ITF**, its only code; when
+  OCR reads nothing or other digits it is `needs_review`. Any other single barcode stays
+  `needs_review` even when OCR agrees. A number read only by OCR has no grader and always goes to
+  pocket 12. Respect those statuses. Don't paste `needs_review` certs into your inventory
+  unchecked.
 - **The web page has no login.** [Certain, `web.py`] Use it only on your own home or shop network.
   Never port-forward it.
 
@@ -124,6 +127,8 @@ python -m slabscan run --name "high-value" --front-photo always  # also photogra
   - `learned check not active: over an empty pocket the head camera sees edges where only the pad
     should show … Re-aim the head camera (BUILD_GUIDE 7.7) …` (the camera-aim check failed, §8.4;
     the same in every stop of that run);
+  - `learned check not active: the head camera's aim is not checked this run yet …` (a resume whose
+    survey found no empty pocket: §8);
   - `learned (threshold 0.56, 23 references in 1 prototype(s) …): a slab without a back-label code
     is picked only if its card window matches a known card back` (§8.4);
   - `OFF - a slab loaded face-up gets the cup on its front` (`--all-face-down`, or
@@ -170,7 +175,8 @@ The page shows:
    (`images/face_down_empty.jpg`): every card window is compared with it, so a head part in the
    way is noticed, and the camera's aim is checked on it. A failed aim check logs a
    `CAMERA AIM (pocket N, …)` line and turns the learned check off for that run. [Certain,
-   `runner._take_baseline`]
+   `runner._take_baseline`] A resume whose survey finds no empty pocket takes that view over the
+   first source pocket it empties instead (§8).
 2. A slow probe down to it. Every downward move is a probing move, so anything unexpected in the
    way stops the head.
 3. The cup line must read atmosphere, then the cup seals.
@@ -182,7 +188,9 @@ The page shows:
 6. **If the back can't be read** (old label, glare), or the read is barcode-only (no QR), it
    carries the slab over the upward camera in the middle of the row and photographs the front,
    then decodes it and runs OCR on the printed digits, with the slab over its output stack. OCR
-   that reads other digits makes the slab `needs_review`. [Certain, `runner.needs_ocr`]
+   that reads other digits makes the slab `needs_review`. For a pre-2016 PSA slab (front ITF
+   only), OCR that agrees is what makes it `ok`. [Certain, `runner.needs_ocr`,
+   `certs.psa_itf_confirmed`]
 7. It probes down onto the destination stack (slowly past the rod tops), measures the slab's
    thickness from the contact height, vents the cup and checks the vent worked before it lifts.
 
@@ -194,6 +202,14 @@ The page shows:
 - **A grader guessed from a barcode's length** (note "grader … not confirmed") counts as PSA or
   CGC, so that slab stays in the output stack. Another grader's slab whose barcode has a PSA or CGC
   format can therefore end up there too. [Certain, `runner.transfer`] Check every `needs_review`.
+- **The same goes for an `ok` from the 8-digit ITF rule.** Another grader's slab with an 8-digit
+  ITF whose printed number OCR reads would come out `ok PSA`, with the right digits and the wrong
+  grader, in the output stack. [Guessing that such a slab exists: none of the 64 real slabs had
+  one] See §5.2.
+- **A code in no grader's format is not read as a cert:** a 7-digit Code128, a 10-digit one
+  starting with 0 (a BGS-style number), or an ITF of any length but 8. It is listed as unparsed,
+  so a slab with nothing else readable ends `no_read` (or OCR-only) in pocket 12. [Certain,
+  `certs.parse_payload`]
 - **`no_read`, `conflict` and `other_grader`** go to **pocket 12**, except the `UNREAD` row of a
   double pick: that slab came along under a read one and sits in the output pocket (§5.4).
 
@@ -255,8 +271,8 @@ Everything is in `batches/<batch id>/`:
 
 | Status | Meaning | Where the slab is | What you do |
 |---|---|---|---|
-| `ok` | A machine-readable code read with confirmation, and its grader confirmed: a QR, or a barcode on two printed symbols (back and front label) or confirmed by OCR of the printed digits, plus a code that names the grader (a cert URL) or two printed codes in its format. A barcode-only `ok` has had its digits checked by OCR too; if OCR read nothing, it stays `ok`. | output stack | Nothing. It's in `certs.txt`. |
-| `needs_review` | A cert was found but isn't trusted. The note says why: "grader PSA not confirmed: no code names it and only one printed barcode has its format (OCR confirms digits, never a grader) - check it is a PSA slab" (every pre-2016 PSA slab, often after "barcode confirmed by OCR"), "one printed barcode only (no QR) - confirm", "barcode N but OCR read M - verify by eye", "OCR only (no barcode or QR read), grader unknown - check by hand", "grader not confirmed (a code with no grader's format)", "read only in the frame from above the stack (a neighbour's label?)", "N-digit PSA cert, but Phase 0 saw only … digits", or **DOUBLE PICK**. Any note can start "dropped a phantom read Code128:…": a thin false read inside a real barcode, dropped only when a different code or OCR confirms the other number. If the confirmed number is the thin read itself, the slab is a `conflict` instead. | **output stack** (the default `needs_review_to = "output"`) if the grader is PSA or CGC; **pocket 12** otherwise | Check the photo against the slab, and type the cert in yourself. |
+| `ok` | A machine-readable code read with confirmation, and its grader confirmed: a QR, or a barcode on two printed symbols (back and front label) or confirmed by OCR of the printed digits, plus a code that names the grader (a cert URL), two printed codes in its format, or an 8-digit ITF whose digits OCR confirms (grader PSA; note "barcode confirmed by OCR; grader PSA from its 8-digit ITF": a pre-2016 PSA slab). A two-barcode `ok` has had its digits checked by OCR too; if OCR read nothing, it stays `ok`. | output stack | Nothing. It's in `certs.txt`. |
+| `needs_review` | A cert was found but isn't trusted. The note says why: "grader PSA not confirmed: no code names it and only one printed barcode has its format (OCR confirms its digits, not its grader) - check it is a PSA slab" (one Code128 only, often after "barcode confirmed by OCR"), "one printed barcode only (no QR) - confirm" (for example a pre-2016 PSA slab whose OCR read nothing), "barcode N but OCR read M - verify by eye" (OCR read other digits), "OCR only (no barcode or QR read), grader unknown - check by hand", "grader not confirmed (a code with no grader's format)", "read only in the frame from above the stack (a neighbour's label?)", "N-digit PSA cert, but Phase 0 saw only … digits", or **DOUBLE PICK**. Any note can start "dropped a phantom read Code128:…": a thin false read inside a real barcode, dropped only when a different code or OCR confirms the other number. If the confirmed number is the thin read itself, the slab is a `conflict` instead. | **output stack** (the default `needs_review_to = "output"`) if the grader is PSA or CGC; **pocket 12** otherwise | Check the photo against the slab, and type the cert in yourself. |
 | `no_read` | Nothing decoded on either face | pocket 12. **Exception:** a row whose note starts `UNREAD:` is the hidden slab of a double pick; it is in the output pocket the row names (§5.4) | Scan or type it by hand. Look at the photo: glare? damaged label? |
 | `conflict` | Two codes on the slab disagree (e.g. QR ≠ barcode), the cert was already recorded earlier in this batch, or the back-label code that proved it face-down before the pick was another cert ("… this slab may have been FACE-UP and the cup may have touched its front - check it by hand") | pocket 12 | **Check it carefully.** It can be a misread or a neighbour's label in view, but it's also what a doctored label or a reused cert number looks like. For the last kind, also look at the slab's front for a cup mark. |
 | `other_grader` | A BGS, SGC or TAG URL was read | pocket 12 | Handle outside SlabRail. |
@@ -264,6 +280,29 @@ Everything is in `batches/<batch id>/`:
 **`needs_review` slabs with grader PSA or CGC stay in the output stack by default.** To send them to
 pocket 12 too, put `needs_review_to = "exceptions"` in `config/calibration.toml`. [Certain,
 `config.py`, `runner.transfer`]
+
+**What `needs_review` means.** The machine found a number, but one piece of the evidence it needs
+for an `ok` is missing or disagrees: a second printed code or OCR for the digits, or a code that
+confirms the grader. The note names which. On the 64 real slabs only 2 pre-2016 PSA slabs ended
+there on the images as they are (OCR read nothing on one and other digits on the other), and none
+at the machine's resolution. [Certain for that set; `tools.real_eval`]
+
+**Two settings change what can be `ok`** (BUILD_GUIDE §11.5) [Certain, `runner._decide`,
+`certs.parse_payload`]:
+- `psa_cert_digits`: a PSA cert of a length not in the list is `needs_review`. Lengths count
+  without leading zeros, so **include 7** if you have pre-2016 slabs: a cert printed `02074012` has
+  7 digits. Leave it out, and every 7-digit pre-2016 cert becomes `needs_review`.
+- `custom_regex`: with it set, every ITF is typed by your pattern, so the 8-digit ITF rule never
+  fires and every pre-2016 PSA slab is `needs_review` ("grader PSA not confirmed"). Safe, but set
+  it only if Phase 0 found a prefix or suffix around the cert.
+
+**The 8-digit ITF rule rests on one assumption** [Guessing]: that only PSA prints an 8-digit ITF.
+In the real set only PSA labels carry ITF, but that set has just 1 BGS and 1 SGC slab, and neither
+showed a code. BGS and SGC are reported to print a barcode or a QR on some holders, of unknown
+type [Likely, second-hand]. If you deal other graders, put a few of their slabs through Phase 0
+(or photograph them and check the photos with `python -m tools.real_eval`, BUILD_GUIDE §1.7)
+before you trust `ok PSA` on slabs with no QR: an `ok PSA` on a BGS or SGC slab means the rule is
+wrong for them. Tell the software owner.
 
 ### 5.3 The summary lines
 
@@ -284,7 +323,9 @@ Shown at the end of the run and in `summary.json`:
   check the back photos of the learned ones. In `report.html` the Face-down column shows the same
   per slab, with learned rows in bold. `summary.json`'s `face_down` holds the mode, the counts,
   every learned row (position, pocket, score, back photo), the references, this run's stops and
-  `camera_aim` (`ok`, what was wrong, or "not checked" when the run saw no empty pocket).
+  `camera_aim`: `ok`, what was wrong, "not checked" when no view over an empty pocket exists yet,
+  or "not checked this run (the resume survey found no empty pocket, and no source pocket was
+  emptied after it)".
   [Certain, `cli.face_down_line`, `runner._face_down_summary`]
 - **`CAMERA AIM: …`** (only when the aim check failed): "The learned check accepted nothing this
   run. Re-aim the head camera (BUILD_GUIDE 7.7)". [Certain, `cli.summary_lines`]
@@ -394,6 +435,14 @@ page. Resume asks "hands clear?" first (skip it with `--yes`). Resume:
 2. probes every pocket again and compares it with what the journal expects;
 3. continues.
 
+**In learned mode, empty pocket 12 before you resume.** The camera's aim verdict counts only for
+the run that took it, because the camera could have been knocked while the run was stopped. The
+resume survey checks the aim over an empty pocket. If no pocket is empty (normal mid-run, unless
+you emptied pocket 12), the learned check accepts nothing and learns nothing until the run has
+emptied its next source pocket and looked over it: until then every slab without a back-label
+code stops for you ("… the head camera's aim is not checked this run yet …"). [Certain,
+`runner.survey`, `runner._work`; tested in the simulator]
+
 Every slab still appears exactly once. [Certain, in the simulator: `tests/test_resume.py`, 8
 passed when I ran it on 2026-10-22]
 
@@ -423,6 +472,7 @@ Messages are quoted from the code, shortened where marked "…". [Certain]
 | "… learned check not active: face_down_threshold was not measured for this card window (face_down_threshold_sig …)" | The card window changed since Phase 0, or the threshold was typed in by hand | Run Phase 0 again with `--save` |
 | "… learned check not active yet: N of 5 card-back references" or "… checked on 5 slabs proven face-down on this machine …, N so far" | The first batches: not enough code-proven (or confirmed) slabs placed yet | Normal. Every back-code slab whose read is `ok` adds one once it is placed. |
 | "… learned check not active: over an empty pocket the head camera sees edges where only the pad should show, in the card window or within 1 mm of its cup side (… mm2 …): a part of the head is in the window, or about to be. The head camera is tilted toward the cup, or something lies on the pad there (lint, dust, a tag): look at the picture first. Re-aim the head camera (BUILD_GUIDE 7.7), then compare images/face_down_empty.jpg (pocket N) with images/face_down_window.jpg. Dirt on that pocket's pad looks the same: clean it" | The camera-aim check failed on this run's view over an empty pocket: the camera is tilted toward the cup (with today's head a part enters the window at about 1.3°), or something lies on that pad. The learned check accepts nothing and learns nothing this run. [Certain, `facedown.aim_problem`] | Confirm the slab as above. Open `images/face_down_empty.jpg`: clean the pad if it shows lint or a tag; otherwise shim the camera board (BUILD_GUIDE §7.7) and run `focus head`. The next run checks again. |
+| "… learned check not active: the head camera's aim is not checked this run yet: its last check is from before (a resume whose survey found no empty pocket), and a knock since then would not be seen. It is checked over the first source pocket this run empties; until then every slab without a back-label code stops for you" | A resume found no empty pocket at its survey, so it could not check the camera's aim yet. The learned check accepts nothing and learns nothing until the run has emptied its next source pocket and looked over it (journal `face_down_baseline`). [Certain, `runner.AIM_STALE`] | Confirm the slab as above. To avoid more of these stops, empty pocket 12 before that resume (§5.5): its survey then checks the aim at once. |
 | "… N% of the card window shows the same thing on every proven slab as over an empty pocket (allowed 10%): a part of the head is in the way" or "… the card window looks like the view over an empty pocket (…): the head hides it" | A head part is in the camera's view of the card window: a camera tilted toward the cup (with today's head a part enters at about 1.3°), or a tube or cable hanging in the view [Certain, CAD aim check] | Confirm the slab as above. Compare `images/face_down_window.jpg` with `face_down_empty.jpg`; shim the camera board (BUILD_GUIDE §7.7, §12.3). |
 | "… only N known card back(s) of one design match it (0.xx); a match needs 2 slabs of that design at the threshold 0.yy (one odd reference, or a card front that looks like one, is not enough)" | One reference matched, a second did not: one odd back (a card sitting low in its holder), or a front that looks like one | Look at it. Face-down: confirm it. |
 | "… best match with a known card back 0.xx < threshold 0.yy" | A face-up slab, a card back the machine has not learned (Japanese, another game), or a sleeve or sticker over the window | Look at it. Face-down: confirm it. |
@@ -484,8 +534,10 @@ or hold the slab and pull the vacuum tube off the cup fitting.
 | "taller than expected" on random pockets | Slabs placed crooked: X calibration (`calibrate x`), belt tension, a leaning rod |
 | Camera errors | The head camera's USB extension in the drag chain (WIRING.md §16 risk 4) |
 | Many `no_read` | Focus (`focus head`, `focus station --save`), a ring not lighting, glare. Fit the light roof. |
-| Every pre-2016 PSA label `needs_review` "… grader PSA not confirmed …" | Expected: the front ITF is their only code, and OCR confirms digits, never a grader. They stay in the output stack: check each by hand. [Certain, `certs.consensus`] |
-| Many `needs_review` "one printed barcode only (no QR) - confirm" on pre-2016 labels | Their front barcode is their only code, and OCR of the printed digits did not even confirm the digits: the `tesseract` line of `selftest`, `focus station --save`, the station ring. [Certain, `certs.consensus`] |
+| Many pre-2016 PSA labels `needs_review`: "one printed barcode only (no QR) - confirm" or "barcode N but OCR read M" | Their front ITF is their only code, and it is `ok` only when OCR of the printed number agrees. OCR read nothing or other digits: the `tesseract` line of `selftest`, `focus station --save`, the station ring. [Certain, `certs.consensus`] |
+| Every pre-2016 PSA label `needs_review` "… grader PSA not confirmed …", or "N-digit PSA cert, but Phase 0 saw only …" | `custom_regex` is set (it turns off the 8-digit ITF rule), or `psa_cert_digits` leaves out 7 (§5.2) |
+| After a resume, every slab without a back-label code stops ("… aim is not checked this run yet …") | No pocket was empty at the resume survey. Empty pocket 12 before resuming (§8). |
+| A BGS, SGC or other non-PSA slab reads `ok PSA` | The 8-digit ITF rule is wrong for that grader (§5.2). Treat its `ok PSA` rows as `needs_review` and tell the software owner. |
 | `CAMERA AIM:` on every run | The head camera is tilted toward the cup, or a pocket pad has lint or a tag on it: BUILD_GUIDE §7.7, §12.3 |
 | A face-down-check stop at every older PSA label (and CGC Authentic, BGS) | Expected until the learned check is active (the start line says why). Check the stacks yourself and start such batches with `--all-face-down`. |
 | "Z stall suspected" more than once | The Z axis: a bind (lead screw, nut, rail), the motor current, the motor itself (BUILD_GUIDE §7.8 lift test). Not the sensor, if `selftest --motion` passes. |
@@ -517,7 +569,8 @@ slab shows its card front there instead.
 1. Phase 0 measured a threshold on your slabs and said GO, and `--save` wrote it with its
    `face_down_threshold_sig` (BUILD_GUIDE §1.7). No threshold below 0.55 is used.
 2. At least 5 card-back references exist.
-3. The view over an empty pocket was taken (once per run, during the survey).
+3. The view over an empty pocket was taken this run: during the survey, or, on a resume whose
+   survey found no empty pocket, over the first source pocket it empties.
 4. On the newest 5 or more slabs proven on this machine, at most 10% of the card window looked
    the same as over the empty pocket. More means a part of the head is in the view.
 5. The camera-aim check found no edge in the middle of the card window, or within 1 mm of its cup
@@ -584,7 +637,8 @@ window is not used. [Certain, `facedown.CardBackRefs`]
     photo, result);
   - `face_down_confirmed`: your confirmation and what became of it;
   - the stop line carries `face_down_stop` (the pocket) and why;
-  - `face_down_baseline`: the empty-pocket view, with its camera-aim verdict (`aim`);
+  - `face_down_baseline`: the empty-pocket view, with its camera-aim verdict (`aim`). After a
+    resume with no empty pocket it comes mid-run, when the first source pocket is emptied;
     `face_down_ok_unused`: a confirmation that did not apply.
 - **After a wrong `--face-down-ok`** (you confirmed a slab that was face-up): the cup touched its
   front, so check that slab. Then delete what it taught: `refs --drop <its cert>` (the cert is in
@@ -623,10 +677,11 @@ STOP     web "Stop after this slab" / Ctrl-C once = clean stop.
          Ctrl-C twice = motors halt NOW, nothing moves; a held slab stays on the pump -> hold it, type vent.
          E-STOP = the only stop that cuts motor power. Use it for anything dangerous.
 RESUME   python -m slabscan resume batches/<id>    (or web: Resume)
+         learned mode: empty pocket 12 first, so the camera aim is checked at once
 AFTER    stack k is now in pocket k-1, order reversed: top slab = highest out_index.
          Unload from the TOP, max 5 at a time, face-down into a tray. Never lift or flip a stack.
          Pocket 12 = check by hand (incl. OCR-only rows).  needs_review = check by hand
-         (every pre-2016 PSA slab is needs_review: its grader is never confirmed).
+         (a pre-2016 PSA slab is ok only when OCR confirms its front ITF).
          DOUBLE PICK = an extra UNREAD row: that slab is in the OUTPUT pocket, under the read one.
          face_down = learned(0.xx) -> open its back photo.  refs / refs --drop CERT = references.
 WEEKLY   pads wiped, selftest -i.   MONTHLY  belt, rails, bolts, E-stop check, carry sensor (selftest --motion)

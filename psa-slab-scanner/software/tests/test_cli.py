@@ -63,6 +63,7 @@ def test_calibrate_x_offset_and_low_move_refusal(tmp_path):
     code, out = _run(["--sim", "--sim-x-offset", "2.5", "--calibration", str(cal), "calibrate", "x"], answers)
     assert code == 0, out
     assert "Refused" in out
+    assert "a tape cross on each pad" in out and "(BUILD_GUIDE 12.2)" in out and "centre it exactly on the tape cross" in out
     raw = tomllib.loads(cal.read_text())
     assert raw["offset_x"] == pytest.approx(2.5, abs=0.01)
     assert "error +0.000 mm" in out

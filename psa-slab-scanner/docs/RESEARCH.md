@@ -104,7 +104,15 @@ renders and mock-ups) were used only to collect more payload strings, from **cgc
 - **Every one of the 54 QR payloads with a cert agreed with the printed cert.** [Certain]
 - **The ITF is the cert zero-padded to 8 digits.** All 48 ITF payloads were 8 digits, including
   three 7-digit certs on guide photos. 9-digit certs never used ITF. [Certain for the set;
-  Likely in general: a reholdered 7-digit cert could sit on a QR + ITF label]
+  Likely in general: a reholdered 7-digit cert could sit on a QR + ITF label] On the oldest labels
+  the printed number is zero-padded too: OCR read `02074012` and `02458772`. [Certain, 8 extra
+  old-label images]
+- **ITF appeared only on PSA labels.** CGC uses Code128, and the set's 1 BGS and 1 SGC slab showed
+  no code at all; a sweep of 216 BGS, SGC and CGC frames found no ITF of any length. [Certain for
+  the set] But BGS and SGC are reported to print a code on some holders: Beckett's FAQ, quoted
+  second-hand, mentions "a bar coded serial number", and SGC says the cert can be read from a QR
+  code on newer holders. Their symbology is unknown. [Likely] The machine's 8-digit ITF rule (an
+  ITF-8 confirmed by OCR names PSA) assumes no other grader prints an 8-digit ITF. [Guessing]
 - **CGC 2023+ backs never carried a Code128** (0 of 26) and **graded CGC fronts never a QR** (0 of
   26). OG fronts carried no code (0 of 10). [Certain for the set, Likely in general]
 - **Grade `0_0` was on both Authentic fronts**, and their backs decoded nothing. One official CGC
@@ -142,10 +150,16 @@ from these numbers (the far end is what sets the worst case: a slab at the cup e
 play has its far end on the wall). The PSA median length came out at the nominal 135.5 mm, which
 checks the method. The CGC holders measured about 133.9 × 79.4 mm, but most CGC scans are cropped a
 few pixels inside the slab edge, so that probably reads short: CGC publishes about 3.15 × 5.30 in
-(80.0 × 134.6 mm) [Likely]. The card-top distance is not affected. An earlier pass, on 27 PSA backs,
-gave the card top 34.8–37.8 mm from the label-end edge (`CARD_TOP_FROM_EDGE`, still used by the
-simulator) and guessed CGC 2.5–3 mm further in from 15 backs; the per-grader numbers above replace
-that guess.
+(80.0 × 134.6 mm) [Likely]. The card-top distance is not affected. A second measurement of every
+good back (card bottom to far edge, plus 88 mm) found one PSA back the set above leaves out,
+`fc_18805593`, at 96.29 mm, and put the CGC minimum at 94.18 (0.4 mm on the safe side). The PSA
+one would cut the PSA window margin from about 3.7 to about 2.8 mm: harmless, because the CGC
+worst case sets the window. [Likely] An earlier pass, on 27 PSA backs,
+gave the card top 34.8–37.8 mm from the label-end edge (`CARD_TOP_FROM_EDGE`) and guessed CGC
+2.5–3 mm further in from 15 backs; the per-grader numbers above replace that guess. The simulator
+now uses them too (`sim.HOLDERS`, the same as the CAD's): a PSA card top 34.8–38.3 mm from the
+label-end edge (both PSA measurements), a CGC one 37.7–40.1 mm on its 133.9 mm holder with 2.55 mm
+of play. [Certain, `tests/test_carry_sensor.py` checks it against the CAD's export]
 
 **Read rates at the machine's resolution** [Certain for flat scans]: PSA codes read on every slab;
 the CGC 2023+ front Code128 was the weakest symbol (16 of 19 standard labels; very short bars and

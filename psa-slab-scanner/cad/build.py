@@ -115,7 +115,7 @@ def write_cut_list() -> None:
     """cad/out/cut_list.csv. Fields with commas are quoted (csv module), so every row has exactly 4 columns."""
     OUT.mkdir(exist_ok=True)
     rows = [("profile", "use", "length_mm", "qty")] + [(a, b, f"{c:.0f}", q) for a, b, c, q in M.cut_list()]
-    rows += [("8mm hardwood dowel", "guide rod", f"{L.POST_H + L.PAD_T + L.ROD_EMBED:.0f}", len(L.rods()))]
+    rows += [("5/16 in (7.94 mm) hardwood dowel", "guide rod", f"{L.POST_H + L.PAD_T + L.ROD_EMBED:.0f}", len(L.rods()))]
     with open(OUT / "cut_list.csv", "w", newline="") as f:
         csv.writer(f, lineterminator="\n").writerows(rows)
 

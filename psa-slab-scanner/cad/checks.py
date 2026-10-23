@@ -16,10 +16,15 @@ Builds the machine at every critical pose and measures exact minimum distances
   * the card window on the card for PSA AND CGC slabs anywhere in their pockets (card positions measured on real backs),
     seen where the camera meets the card: its width, rounded corners and depth under the slab back (refraction),
   * both LED rings in their seats: seated, clear of the arm, camera and moving head parts, out of every camera view above,
-    the seat's fit for the ring sizes sold, where each camera sees its ring mirrored in the slab (glare), and the Phase 0 copies,
+    the seat's fit for the ring sizes sold (head: every check at both ends of 39.5-42.5 mm; station: 60 and 63 mm), where each
+    camera sees its ring mirrored in the slab (glare), and the Phase 0 copies,
   * the carry-height sensor (Z stall guard): trip height, beam clear below / blocked up to the hard top stop, the highest
     Z stall it cannot see (a double pick there still over the rods), flag and arm clear of the carriage over the whole Z
     travel, and a path for its lead,
+  * the X home and Z top switches: where the striker trips the lever, how far past OP it holds it up to the hard stop (short of
+    the lever's overtravel, so the switch is never the stop), lever free in normal travel, nothing else near the switch, its
+    mount or screws over the whole X / Z travel, the M2 slots against the switch's OP tolerance, a path for each lead, and the
+    longest lever each takes (X: clear of the carry flag and its arm; Z: still caught by the z_plate's lead-in),
   * X / Z hard stops (bumpers, Z end cap, top stop) and carriage-on-rail margins,
   * the contact probe over the whole 20 mm buffer stroke: trip travel, beam fully blocked after the trip, flag
     clear of the sensor and of its anti-rotation guide (also turned against the guide, for a rotating buffer),
@@ -27,10 +32,12 @@ Builds the machine at every critical pose and measures exact minimum distances
     hex-key access to the board screws, and the moving parts out of the head camera's label view,
   * every printed part is ONE solid, and the Phase 0 jig (ledge overlap, line of sight, fit, its occluder against
     the machine's: same parts at the same place under the lens, same blocked view, and the face-up lift).
-What is NOT checked: flexible parts (belt slack, cables, vacuum tube, the LED rings' leads past their first 6 mm), real
-purchased-part shapes beyond the envelopes in model.py (the buffer's neck and rod, the barb elbow's arm, the endstop board and
-the LED rings' ID, thickness and lead exit are read off drawings or guessed), print tolerances, the flag's bend accuracy, the
-card's depth in the holder and the holder plastic's index (guessed; an all-air bound is reported), and anything under load.
+What is NOT checked: flexible parts (belt slack, cables, vacuum tube, the LED rings' leads past their first 6 mm), the frame's
+corner brackets and joining plates (not modelled: the switch leads are routed clear of where BUILD_GUIDE 4.3 puts them), real
+purchased-part shapes beyond the envelopes in model.py (the buffer's neck and rod, the barb elbow's arm, the endstop board,
+the microswitch lever's pivot and the LED rings' ID, thickness and lead exit are read off drawings or guessed), print
+tolerances, the flag's bend accuracy, the card's depth in the holder and the holder plastic's index (guessed; an all-air bound
+is reported), and anything under load.
 Exit code 1 if any check fails. Run:  python checks.py
 """
 
@@ -159,7 +166,7 @@ def record_interference(label: str, parts, movers_only=True) -> None:
 
 
 def moving_only(cup_x, c, held_slab=False):
-    parts = M.carriage_parts(cup_x) + M.head_parts(cup_x, c)
+    parts = M.carriage_parts(cup_x, c) + M.head_parts(cup_x, c)
     if held_slab:
         parts.append(M.Part("held_slab", M.slab(cup_x, L.Y_ROW, c - SLAB_T), M.SLAB, "slab", "head"))
         parts.append(M.Part("held_label", M.slab_label(cup_x, L.Y_ROW, c - SLAB_T), M.LABEL, "slab", "head"))
@@ -320,7 +327,7 @@ HOVER_GAP = 7.0  # cup face above the top slab's back for the frame from above (
 
 def _free_machine(x: float, c: float, fill: dict) -> list:
     """The machine with the cup FREE (buffer at rest), as at hover and while a slab hangs on it (machine() poses the probe trip)."""
-    return M.frame_parts() + M.bed_parts() + M.carriage_parts(x) + M.head_parts(x, c, compression=0.0) + M.stacks(fill)
+    return M.frame_parts(x) + M.bed_parts() + M.carriage_parts(x, c) + M.head_parts(x, c, compression=0.0) + M.stacks(fill)
 
 
 def _window_view(parts, lens, plane_z: float, skip: tuple) -> tuple[float, float, str]:
@@ -615,6 +622,186 @@ def check_carry_sensor() -> None:
     record("carry sensor: its lead vs the parts fixed to the X carriage (parts it would cut through, count)", len(hit), 0, ",".join(hit), larger_is_better=False)
 
 
+SW_C_SWEEP = sorted({L.C_HARD_BOTTOM, *range(-10, 250, 20), L.C_MAX, 252.0, 254.0, 256.0, 257.0, 258.0, 258.5, 259.0, 260.0, 261.0, L.C_HARD_TOP})
+SW_X_SWEEP = sorted({L.X_HARD_STOP[0], 15.5, 16.0, 17.0, 18.0, 18.5, 19.0, 19.5, 20.0, 21.0, 22.0, 24.0, 27.0, 32.0, 42.0, *range(100, 1262, 116),
+                     L.X_HARD_STOP[1]})
+
+
+def _sw_op(ang: float) -> float:
+    """Height of a switch lever's operating point above its hole line (mm)."""
+    return M.sw_lever_v(M.SW_OP_U, ang)
+
+
+SW_LONG = 32.0  # longest lever end searched (u, mm from the hinge end)
+
+
+def _x_longest_lever() -> tuple[float, str]:
+    """Longest lever (end, u) the X home switch takes: 1 mm clear of every moving part but the x_bracket (its finger presses the
+    lever, from Y 86 back) and of the static parts, the carriage at the left end of X (cup X 15..70: from about 64 on the carry
+    flag and its arm are right of the switch) and the head anywhere in Z (every 4 mm). The finger covers the lever only up to
+    u = 20, so a longer one runs on, free, in front of the x_bracket. A shorter lever is part of a longer one at the same pose:
+    only the poses where a SW_LONG lever comes within 1 mm are bisected. Returns (end, what it meets first)."""
+    x0 = L.X_HARD_STOP[0]
+    mov0 = [(q, _bb(q.shape.val())) for q in M.carriage_parts(0.0) + M.head_parts(0.0, 0.0) if q.name != "x_bracket"]
+    static = [q for q in M.frame_parts() + M.bed_parts() if q.name not in ("x_home_switch", "light_roof")]
+    cups = [x0 + 2.5 * k for k in range(23)]
+    cs = [L.C_HARD_BOTTOM + 4.0 * k for k in range(int((L.C_HARD_TOP - L.C_HARD_BOTTOM) / 4.0) + 1)] + [L.C_HARD_TOP]
+    levers: dict = {}
+
+    def lever(x, e):
+        if (x, e) not in levers:
+            levers[(x, e)] = M._place_x(M.sw_lever(M.sw_lever_angle(M.x_finger_striker(x), e), e)).val()
+        return levers[(x, e)]
+
+    crit = []  # (shape, name, cup X, c): within 1 mm of a SW_LONG lever
+    for x in cups:
+        lv = lever(x, SW_LONG)
+        b = _bb(lv)
+        for q in static:
+            if _near(q.shape.val(), lv, 1.0) and q.shape.val().distance(lv) < 1.0:
+                crit.append((q.shape.val(), q.name, x, None))
+        for q, (x0_, x1_, y0_, y1_, z0_, z1_) in mov0:
+            dz = (0.0, ) if q.group == "carriage" else cs
+            if x1_ + x + 1.0 < b[0] or b[1] + 1.0 < x0_ + x or y1_ + 1.0 < b[2] or b[3] + 1.0 < y0_:
+                continue
+            for c in dz:
+                if z1_ + c + 1.0 < b[4] or b[5] + 1.0 < z0_ + c:
+                    continue
+                s = q.shape.val().translate(cq.Vector(x, 0, c))
+                if s.distance(lv) < 1.0:
+                    crit.append((s, q.name, x, c if q.group != "carriage" else None))
+    if not crit:
+        return SW_LONG, f"nothing within 1 mm of a {SW_LONG:g} mm lever"
+
+    def first_hit(e):
+        for s, name, x, c in crit:
+            if s.distance(lever(x, e)) < 1.0:
+                return f"{name} at cup X = {x:g}" + ("" if c is None else f", c = {c:g}")
+        return None
+    e = _bisect(lambda e: first_hit(e) is not None, M.SW_LEVER[2], SW_LONG, 12)
+    return e, f"then 1 mm from {first_hit(e + 0.01) or first_hit(SW_LONG)}"
+
+
+def _z_longest_lever() -> tuple[float, str]:
+    """Longest lever (end, u) the z_plate's lead-in catches: (1) every lever point that stands in the plate's path lies over the
+    chamfer (X >= ZP_CHAMFER_X; the lever reaches furthest left lying flat, at the trip), and (2) the free lever (FP max) stands
+    no deeper into the plate's path than the chamfer, with the switch set SW_SLOT toward the plate. Past either, the plate's
+    square top meets the lever edge-on, along its pivot axis. Returns (end, which limit)."""
+    pu, pv = M.SW_PIVOT
+    a = M.SW_FREE
+    e_cov = M.ZS_X0 - M.ZP_CHAMFER_X
+    e_depth = pu + (M.ZP_CHAMFER + M.SW_DWELL_V - M.SW_SLOT - pv - M.SW_E * math.cos(a)) / math.sin(a)
+    return min(e_cov, e_depth), (f"over the chamfer (from X {M.ZP_CHAMFER_X:g}) up to {e_cov:.1f}; free tip no deeper than its {M.ZP_CHAMFER:g} mm "
+                                 f"(switch {M.SW_SLOT:g} toward the plate) up to {e_depth:.1f}; the CAD's lever: {M.SW_LEVER[2]:g}")
+
+
+def check_home_switches() -> None:
+    """The X home and Z top switches (model.py 'homing switches'): bare hinge-lever microswitches on printed mounts in extrusion
+    slots, worked across the lever by a finger off the x_bracket and by the z_plate's chamfered back face. From the lever's pose
+    for each carriage / head position (its operating point: OP 8.8 +/- 0.8 above the hole line, OT min 1.2 [Certain, Omron SS-5GL];
+    the pivot [Guessing]): where it trips, how far past OP it is held up to the hard stop (never the full OT: the switch must not
+    become the stop), that it is free in normal travel, that nothing but its striker comes near the switch, its mount or screws
+    over the whole X and Z travel, and a path for its lead."""
+    op, ot = M.SW_OP, M.SW_OT
+    cases = (("X home switch", "cup X", lambda x: M.sw_lever_angle(M.x_finger_striker(x)), L.X_HOME_SWITCH, L.X_HARD_STOP[0], -1.0,
+              f"the x_bracket's finger, {L.X_HARD_STOP[0] - L.X_HOME_SWITCH:+.0f}", L.travel_needed()["x"][0] - 5.0, False),
+             ("Z top switch", "c", lambda c: M.sw_lever_angle(M.z_plate_striker(c)), L.Z_SWITCH_C, L.C_HARD_TOP, 1.0,
+              f"the z_plate, {L.C_HARD_TOP - L.Z_SWITCH_C:+.0f}", L.C_MAX + 1.0, True))
+    for name, ax, ang, nominal, stop, toward, who, normal, free_above in cases:
+        pressed = lambda q: _sw_op(ang(q)) <= op  # noqa: E731
+        trip = _bisect(pressed, stop - toward * 15.0, stop, 20)
+        record(f"{name}: {ax} at which {who.split(',')[0]} presses the lever to OP (nominal switch), error vs {nominal:g} (mm; the build sets "
+               f"it to +/- 2 by sliding the mount in its slot)", abs(trip - nominal), 0.05, f"trips at {ax} = {trip:.2f}", larger_is_better=False)
+        sweep = [q for q in (SW_X_SWEEP if ax == "cup X" else SW_C_SWEEP) if toward * (q - trip) >= 0.0]
+        past = max(op - _sw_op(ang(q)) for q in sweep)
+        record(f"{name}: lever travel past OP from the trip to the hard stop {stop:g} ({who} mm), max (mm; OT min {ot}: the switch never "
+               f"becomes the stop)", past, round(ot - 0.3, 2), f"held at {op - _sw_op(ang(stop)):.2f} past OP from {ax} = "
+               f"{_bisect(lambda q: op - _sw_op(ang(q)) >= M.SW_DWELL_OT - 0.01, trip, stop, 16):.2f} on", larger_is_better=False)
+        record(f"{name}: held on at the hard stop {stop:g} (mm past OP)", op - _sw_op(ang(stop)), 0.3)
+        free = _bisect(lambda q: ang(q) < M.SW_FREE - 1e-6, stop - toward * 20.0, stop, 16)
+        record(f"{name}: lever free (striker clear) in normal travel: {ax} where the striker first touches it, vs {normal:g}", free, normal,
+               f"normal travel {'ends at' if free_above else 'starts at'} {normal + (-1.0 if free_above else 5.0):g}", larger_is_better=free_above)
+    held = _sw_op(M.sw_angle(op - M.SW_DWELL_OT))
+    record(f"homing switches: M2 slot travel needed to set any switch in OP {op} +/- {M.SW_OP_TOL} to {M.SW_DWELL_OT} mm past OP at the hard stop "
+           f"(mm; slots +/- {M.SW_SLOT})", M.SW_OP_TOL, M.SW_SLOT,
+           f"as drawn, a switch with OP {held:.1f}-{held + ot:.1f} needs none; set so, the trip stays at the nominal point (45-deg lead-in)", larger_is_better=False)
+    # X: nothing but the finger reaches the switch, mount or screws, and the lever touches nothing but the finger, the carriage near
+    # the left end (the carry flag and its arm hang 27-64 mm left of the cup axis) and the head anywhere in Z; the finger clears
+    # every static part over the whole X travel
+    x0 = L.X_HARD_STOP[0]
+    sw = [q for q in M.x_switch_parts() if q.name != "x_home_switch"] + [M.Part("x_switch_body", M._place_x(M.sw_body()), M.BLACK, "purchased", "static")]
+    lev = [M.Part("lever", M._place_x(M.sw_lever(cases[0][2](x0))), M.BLACK, "purchased", "static")]
+    lead = [M.Part("lead", M.x_switch_cable(), M.LEAD, "purchased", "static")]
+    d_sw, d_lev, d_lead = (1e9, ""), (1e9, ""), (1e9, "")
+    cups = (x0, 20.0, 25.0, 30.0, 40.0, 55.0)
+    for c in SW_C_SWEEP[::2] + [L.C_HARD_TOP]:
+        mov0 = M.carriage_parts(0.0, c) + M.head_parts(0.0, c)
+        for x in cups:  # the lever posed for each X (pressed at the hard stop, free from cup X 24 on)
+            mov = [M.Part(q.name, q.shape.translate((x, 0, 0)), q.color, q.kind, q.group) for q in mov0]
+            at = f"cup X = {x:g}, c = {c:.0f}"
+            d, pair = min_dist(mov, sw, margin=30)
+            d_sw = min(d_sw, (d, f"{pair} at {at}"))
+            lv = lev if x == x0 else [M.Part("lever", M._place_x(M.sw_lever(cases[0][2](x))), M.BLACK, "purchased", "static")]
+            d, pair = min_dist([q for q in mov if q.name != "x_bracket"], lv, margin=30)
+            d_lev = min(d_lev, (d, f"{pair} at {at}"))
+            d, pair = min_dist(mov, lead, margin=60)
+            d_lead = min(d_lead, (d, f"{pair} at {at}"))
+    X = f"cup X = {x0:.0f}..{cups[-1]:.0f}, c = {L.C_HARD_BOTTOM:.0f}..{L.C_HARD_TOP:.0f}"
+    record(f"X home switch: carriage + head ({X}) vs the switch body, mount and screws (min clearance, mm)", d_sw[0], 1.0, d_sw[1])
+    record(f"X home switch: its lever vs every moving part but the x_bracket ({X}) (min clearance, mm)", d_lev[0], 1.0, d_lev[1])
+    static = [q for q in M.frame_parts() + M.bed_parts() if q.name not in ("x_home_switch", "light_roof")]
+    yc0 = M.BEAM_Y0 - L.MGN12_H
+    d_f = (1e9, "")
+    for x in SW_X_SWEEP:
+        d, pair = min_dist([M.Part("x_bracket finger", M.x_finger().translate((x, yc0, 0)), M.PETG, "printed", "carriage")], static + sw[-1:], margin=30)
+        d_f = min(d_f, (d, f"{pair} at cup X = {x:g}"))
+    record(f"X home switch: the x_bracket's finger over the whole X travel ({L.X_HARD_STOP[0]:.0f}..{L.X_HARD_STOP[1]:.0f}) vs every static part "
+           "but the lever (min clearance, mm)", d_f[0], 1.0, d_f[1])
+    cab = lead[0].shape.val()
+    hit = [q.name for q in static if _near(q.shape.val(), cab, 0.0) and q.shape.val().intersect(cab).Volume() > OVERLAP_TOL]
+    record("X home switch: its lead (down from the terminals, back under the beam, up behind it to the rear slot) vs the static parts "
+           "(parts it would cut through, count)", len(hit), 0, ",".join(hit), larger_is_better=False)
+    record(f"X home switch: its lead vs everything that moves ({X}) (min clearance, mm)", d_lead[0], 3.0, d_lead[1])
+    # long levers (the BOM's pack may have them): the build fits a lever ending up to SW_LEVER_MAX as is and cuts a longer one back
+    e, why = _x_longest_lever()
+    record(f"X home switch: longest lever it takes, end from the hinge end (mm; 1 mm clear of all that moves but the x_bracket and of the "
+           f"static parts; the build cuts any lever past {M.SW_LEVER_MAX:g} back to {M.SW_LEVER[2]:g})", e, M.SW_LEVER_MAX, why)
+    e, why = _z_longest_lever()
+    record(f"Z top switch: longest lever the z_plate's lead-in catches, end from the hinge end (mm; past it the plate's square top meets "
+           f"the lever edge-on)", e, M.SW_LEVER_MAX, why)
+    # Z: the same, carriage-local (cup X = 0): the head moves, the switch and its mount are fixed to the X carriage
+    zs = [q for q in M.z_switch_parts(0.0) if q.name != "z_top_switch"] + [M.Part("z_switch_body", M._place_z(M.sw_body(), 0.0), M.BLACK, "purchased", "carriage")]
+    za = cases[1][2]
+    lead = [M.Part("lead", M.z_switch_cable(), M.LEAD, "purchased", "carriage")]
+    d_sw, d_lev, d_lead, d_long = (1e9, ""), (1e9, ""), (1e9, ""), (1e9, "")
+    for c in SW_C_SWEEP:
+        head = M.head_parts(0.0, c)
+        d, pair = min_dist(head, zs, margin=30)
+        d_sw = min(d_sw, (d, f"{pair} at c = {c:g}"))
+        d, pair = min_dist([q for q in head if q.name != "z_plate"], [M.Part("lever", M._place_z(M.sw_lever(za(c)), 0.0), M.BLACK, "purchased", "carriage")], margin=30)
+        d_lev = min(d_lev, (d, f"{pair} at c = {c:g}"))
+        long_ang = M.sw_lever_angle(M.z_plate_striker(c), M.SW_LEVER_MAX)
+        d, pair = min_dist([q for q in head if q.name != "z_plate"], [M.Part("lever", M._place_z(M.sw_lever(long_ang, M.SW_LEVER_MAX), 0.0), M.BLACK, "purchased", "carriage")], margin=30)
+        d_long = min(d_long, (d, f"{pair} at c = {c:g}"))
+        d, pair = min_dist(head, lead, margin=60)
+        d_lead = min(d_lead, (d, f"{pair} at c = {c:g}"))
+    record(f"Z top switch: the head over c = {L.C_HARD_BOTTOM:.0f}..{L.C_HARD_TOP:.0f} vs the switch body, mount and screws (min clearance, mm)", d_sw[0], 1.0, d_sw[1])
+    record("Z top switch: its lever vs every moving part but the z_plate (min clearance, mm)", d_lev[0], 1.0, d_lev[1])
+    record(f"Z top switch: a {M.SW_LEVER_MAX:g} mm lever vs every moving part but the z_plate (min clearance, mm)", d_long[0], 1.0, d_long[1])
+    carriage = M.carriage_parts(0.0)
+    fixed = [q for q in carriage if not q.name.startswith(("z_switch_mount", "z_top_switch", "fc_zsw_", "z_spine"))]
+    d, pair = min_dist(zs + [M.Part("lever", M._place_z(M.sw_lever(M.SW_FREE), 0.0), M.BLACK, "purchased", "carriage")], fixed, margin=30)
+    record("Z top switch: switch (lever free), mount and screws vs the other parts fixed to the X carriage, spine excepted (min clearance, mm)", d, 1.0, pair)
+    lv = [M.Part("lever", M._place_z(M.sw_lever(a, M.SW_LEVER_MAX), 0.0), M.BLACK, "purchased", "carriage") for a in (M.SW_FREE, M.sw_angle(M.SW_OP - M.SW_DWELL_OT))]
+    d, pair = min_dist(lv, [q for q in carriage if not q.name.startswith("z_top_switch")], margin=30)
+    record(f"Z top switch: a {M.SW_LEVER_MAX:g} mm lever, free and held, vs the parts fixed to the X carriage (min clearance, mm)", d, 1.0, pair)
+    cab = lead[0].shape.val()
+    hit = [q.name for q in carriage if q.name != "z_top_switch" and _near(q.shape.val(), cab, 0.0) and q.shape.val().intersect(cab).Volume() > OVERLAP_TOL]
+    record("Z top switch: its lead (back past the spine, up behind the z_motor_mount to the spine top) vs the parts fixed to the X carriage "
+           "(parts it would cut through, count)", len(hit), 0, ",".join(hit), larger_is_better=False)
+    record("Z top switch: its lead vs everything that moves with Z (min clearance, mm)", d_lead[0], 3.0, d_lead[1])
+
+
 def _moved(shape: cq.Shape, dz: float = 0.0, deg: float = 0.0) -> cq.Shape:
     """Copy raised by dz and turned by deg about the cup axis (head-local coordinates: the axis is X = Y = 0)."""
     s = shape.translate(cq.Vector(0, 0, dz))
@@ -904,7 +1091,17 @@ def check_phase0() -> None:
     df = min((min(_moved(ju[n], t).distance(o) for n in movers for o in obst), t) for t in STROKE if t > 12.0)
     record(f"Phase 0 face-up pass: the same pushed on to the buffer's end ({L.BUFFER_STROKE:.0f} mm): no contact (min clearance, mm)", df[0], 0.1,
            f"at {df[1]:.0f} mm")
-    record("Phase 0: head board standoff for an 8 mm board-to-lens-front camera (mm, >= 0 = the posts work)", M.p0_board_spacer(8.0), 0.0)
+    # phase0_top: plastic left between each blind M2 standoff hole and the head ring's pocket (bore, ribs, lead slot)
+    face = M.P0_TOP_Z + M.HEAD_RING_FACE_DZ - M.P0_BAR_Z0
+    pocket = M.ring_pocket(face, M.P0_BAR_T).translate((0, M.CAM_DY, 0)).val()
+    holes = [M.cyl((x, y, M.P0_BAR_T - M.P0_M2_DEPTH), 1.8, M.P0_M2_DEPTH + 1.0).val() for x, y in M.P0_M2_HOLES]
+    record(f"Phase 0 phase0_top: plastic between each M2 standoff hole ({M.P0_M2_DEPTH:.0f} mm deep) and the head ring pocket (min, mm)",
+           min(h.distance(pocket) for h in holes), 2.0, f"bar {M.P0_BAR_T} mm thick (was 8: 1.23 mm); the pocket and the ring sit where they did, relative to the lens")
+    # the board sits on standoffs on the bar: the bar's top sets the shortest board-to-lens-front length the jig takes (the machine's
+    # camera_bracket takes down to ~8). [Guessing] an M12 lens-holder board measures 15 or more; the CAD assumes HEAD_LENS_PROJ.
+    shortest = M.P0_BAR_TOP - M.P0_TOP_Z
+    record("Phase 0: shortest head-camera board-to-lens-front length the M2 standoffs on phase0_top allow (mm)", shortest, 12.0,
+           f"standoff = measured length - {shortest:.1f} mm ({M.p0_board_spacer():.1f} mm for the CAD's {M.HEAD_LENS_PROJ:.0f}); was 7.4", larger_is_better=False)
 
 
 def _mirror_band(ring, ring_above_lens: float, lens_h: float) -> tuple[float, float]:
@@ -928,14 +1125,14 @@ GLARE_HALO = 2.0  # = software facedown.GLARE_DILATE_MM: the glare mask grows th
 GLARE_REF_MAX = 0.02  # = software facedown.GLARE_REF_MAX: a frame with more of the window under glare never becomes a reference
 
 
-def _glare_share(lens_h: float, rects, step: float = 0.2) -> float:
+def _glare_share(lens_h: float, rects, step: float = 0.2, ring=M.HEAD_RING) -> float:
     """Share of the window rectangles (cup-axis mm) under the software's glare mask from the head ring's mirror image in the
     slab back: the mirrored LED band (_mirror_band) where the cup pad does not hide it (the pad's top rim projected from the
     lens; other head parts ignored, which only adds glare), grown by GLARE_HALO. Raster of `step` mm."""
     import numpy as np
 
     fy = M.CAM_DY  # the lens's foot point is (0, CAM_DY)
-    r_in, r_out = _mirror_band(M.HEAD_RING, M.HEAD_RING_FACE_DZ, lens_h)
+    r_in, r_out = _mirror_band(ring, M.HEAD_RING_FACE_DZ, lens_h)
     hp = lens_h - M.CAM_Z - L.CUP_HANG + M.PAD_Y  # free pad's top rim above the slab plane
     k = lens_h / (lens_h - hp)
     pc, pr = fy + (0.0 - fy) * k, M.PAD_B / 2 * k  # its shadow: centre (0, pc), radius pr
@@ -962,43 +1159,62 @@ def check_led_rings() -> None:
     """The head and station LED rings (model.py HEAD_RING / STATION_RING; ID, thickness and lead exit [Guessing]) in their seats:
     on the seat, clear of the arm, the camera and everything that moves in the head, out of every camera view checked above,
     the seat's fit for the sizes sold, where each camera sees the ring mirrored in the slab (glare), and the Phase 0 copies."""
-    hp = {p.name: p.shape.val() for p in M.head_parts(0.0, 0.0, compression=0.0)}
-    ring = [hp["head_led_ring"], hp["head_ring_leads"]]
-    record("head LED ring on its seat's lip: overlap with camera_bracket (mm3)", hp["head_led_ring"].intersect(hp["camera_bracket"]).Volume(), OVERLAP_TOL,
-           f"gap {hp['head_led_ring'].distance(hp['camera_bracket']):.2f} mm (touching = seated)", larger_is_better=False)
-    record("head LED ring: solder pads and leads through the lip notch vs camera_bracket (min clearance, mm)", hp["head_ring_leads"].distance(hp["camera_bracket"]), 0.3)
-    record("head LED ring + leads vs the drop arm (min clearance, mm)", min(r.distance(hp["drop_arm"]) for r in ring), 1.0)
-    record("head LED ring + leads vs the head camera's board, holder and lens (min clearance, mm)", min(r.distance(hp["head_camera"]) for r in ring), 0.5)
+    rings = (M.HEAD_RING_RANGE[0], M.HEAD_RING, M.HEAD_RING_RANGE[1])  # the seat's range, and the modelled ring
+    R = f"rings {M.HEAD_RING_OD[0]}-{M.HEAD_RING_OD[1]} mm"
+    w = {k: (-1e9 if k in ("lip", "vol", "share_hover", "share_held") else 1e9, "") for k in
+         ("lip", "leads", "arm", "cam", "mov", "vol", "gap", "share_hover", "share_held")}
+
+    def worst(k, v, why, big=False):  # keep the worst value over the rings
+        if (v > w[k][0]) if big else (v < w[k][0]):
+            w[k] = (v, why)
     S = f"0..{L.BUFFER_STROKE:.0f} mm"
     movers = ("cup", "buffer_rod", "buffer_stop", "probe_flag", "vac_fitting")
-    dm = min((min(_moved(hp[n], t).distance(r) for n in movers for r in ring), t) for t in STROKE)
-    record(f"head LED ring + leads vs the buffer's moving parts (cup, rod, stop, flag, elbow) over {S} (min clearance, mm)", dm[0], 1.0, f"at {dm[1]:.0f} mm")
-    od, id_, t = M.HEAD_RING
-    lip_ir = (id_ + 3.0) / 2
-    record(f"head ring seat: radial play of a {od:.0f} mm ring in its bore (mm)", (od + 1.0 - od) / 2, 0.25)
-    record(f"head ring seat: lip under the ring's band (mm; holds any ID up to {2 * (od / 2 - 1.5):.0f})", od / 2 - max(id_ / 2, lip_ir), 1.5)
-    # out of the views: the label frustum (check_head_camera) and the window frustums at hover and held, against the ring alone
     p, c = P[4], L.C_SAFE_LOADED
-    mring = [q for q in M.head_parts(p.x, c, compression=0.0) if q.name in ("head_led_ring", "head_ring_leads")]
     lens = (p.x, p.y + M.CAM_DY, c + M.CAM_Z)
     label_y = p.y - SLAB_H / 2 + 5 + 10
     fr = [frustum((lens[0], lens[1], lens[2] - 0.5), (p.x - 37, label_y - 12, c + 0.5), (p.x + 37, label_y + 12, c + 0.5))]
     for lz in (c - L.CUP_HANG, c - HOVER_GAP):  # held slab back, and a slab back at hover with the cup at c
         fr += [frustum((lens[0], lens[1], lens[2] - 0.5), (lens[0] + x0, lens[1] - M.CAM_DY + y0, lz + 0.5), (lens[0] + x1, lens[1] - M.CAM_DY + y1, lz + 0.5))
                for x0, y0, x1, y1 in L.FACE_DOWN_WINDOW_MM]
-    vol = sum(blocked(f, mring)[0] for f in fr)
-    gap = min(f.distance(q.shape.val()) for f in fr for q in mring)
-    record("head LED ring + leads in the head camera's label view and face-down window frustums, hover and held (mm3)", vol, 0.01,
-           f"nearest {gap:.1f} mm (the LED face is {abs(M.HEAD_RING_FACE_DZ):.0f} mm {'below' if M.HEAD_RING_FACE_DZ < 0 else 'above'} the lens front)",
+    for rg in rings:  # the seat's ribs shaved to a ring bigger than the printed fit; a smaller one sits on the lip, centred
+        tag = f"{rg[0]:.1f}"
+        hp = {q.name: q.shape.val() for q in M.head_parts(0.0, 0.0, compression=0.0, ring=rg)}
+        ring = [hp["head_led_ring"], hp["head_ring_leads"]]
+        worst("lip", hp["head_led_ring"].intersect(hp["camera_bracket"]).Volume(), f"{tag}: gap {hp['head_led_ring'].distance(hp['camera_bracket']):.2f} mm", big=True)
+        worst("leads", hp["head_ring_leads"].distance(hp["camera_bracket"]), tag)
+        worst("arm", min(r.distance(hp["drop_arm"]) for r in ring), tag)
+        worst("cam", min(r.distance(hp["head_camera"]) for r in ring), tag)
+        dm = min((min(_moved(hp[n], t).distance(r) for n in movers for r in ring), t) for t in STROKE)
+        worst("mov", dm[0], f"{tag}, at {dm[1]:.0f} mm")
+        # out of the views: the label frustum (check_head_camera) and the window frustums at hover and held, against the ring alone
+        mring = [q for q in M.head_parts(p.x, c, compression=0.0, ring=rg) if q.name in ("head_led_ring", "head_ring_leads")]
+        worst("vol", sum(blocked(f, mring)[0] for f in fr), tag, big=True)
+        worst("gap", min(f.distance(q.shape.val()) for f in fr for q in mring), tag)
+        # glare: the slab back is a flat glossy face, so the camera sees the ring mirrored in it; the software masks glare + a halo
+        for name, lh in (("hover", M.CAM_Z + HOVER_GAP), ("held", M.CAM_Z + L.CUP_HANG)):
+            band = _mirror_band(rg, M.HEAD_RING_FACE_DZ, lh)
+            worst(f"share_{name}", _glare_share(lh, L.FACE_DOWN_WINDOW_MM, ring=rg),
+                  f"{tag}: band r {band[0]:.1f}-{band[1]:.1f} mm round the lens axis, {_rect_gap(0.0, M.CAM_DY, band, L.FACE_DOWN_WINDOW_MM):.2f} mm from the window", big=True)
+    record(f"head LED ring on its seat's lip, {R}: overlap with camera_bracket (mm3)", w["lip"][0], OVERLAP_TOL, f"worst {w['lip'][1]} (touching = seated)",
            larger_is_better=False)
-    # glare: the slab back is a flat glossy face, so the camera sees the ring mirrored in it; the software masks glare plus a halo
-    for name, lh in (("hover", M.CAM_Z + HOVER_GAP), ("held", M.CAM_Z + L.CUP_HANG)):
-        band = _mirror_band(M.HEAD_RING, M.HEAD_RING_FACE_DZ, lh)
-        gap = _rect_gap(0.0, M.CAM_DY, band, L.FACE_DOWN_WINDOW_MM)
-        record(f"head LED ring mirrored in the slab back ({name}) + the software's {GLARE_HALO:.0f} mm glare halo: share of the face-down window it covers "
-               f"(software refuses a reference above {GLARE_REF_MAX})", _glare_share(lh, L.FACE_DOWN_WINDOW_MM), GLARE_REF_MAX,
-               f"[Likely] flat-mirror model: band r {band[0]:.1f}-{band[1]:.1f} mm round the lens axis, {gap:.2f} mm from the window, partly behind the cup pad",
-               larger_is_better=False)
+    record(f"head LED ring: solder pads and leads through the lip notch vs camera_bracket, {R} (min clearance, mm)", w["leads"][0], 0.3, w["leads"][1])
+    record(f"head LED ring + leads vs the drop arm, {R} (min clearance, mm)", w["arm"][0], 1.0, w["arm"][1])
+    record(f"head LED ring + leads vs the head camera's board, holder and lens, {R} (min clearance, mm)", w["cam"][0], 0.5, w["cam"][1])
+    record(f"head LED ring + leads vs the buffer's moving parts (cup, rod, stop, flag, elbow) over {S}, {R} (min clearance, mm)", w["mov"][0], 1.0, w["mov"][1])
+    bore, (dmin, dmax) = M.HEAD_SEAT_BORE, M.HEAD_RING_OD
+    record(f"head ring seat: a {dmax} mm ring in the {bore:.1f} mm bore (radial clearance, mm)", (bore - dmax) / 2, 0.1)
+    record(f"head ring seat: lip (ID {M.HEAD_LIP_ID:.0f}) under the band of a {dmin} mm ring (mm)", (dmin - M.HEAD_LIP_ID) / 2, 1.5)
+    rib = (bore - M.HEAD_RING[0]) / 2
+    record(f"head ring seat: the 3 centring ribs as printed fit a {M.HEAD_RING[0]:.0f} mm ring; shaving needed for a {dmax} mm one vs the rib height (mm)",
+           (dmax - M.HEAD_RING[0]) / 2, round(rib, 2), f"ribs {rib:.2f} mm tall; a {dmin} mm ring sits {(M.HEAD_RING[0] - dmin) / 2:.2f} mm loose (centre it, glue)", larger_is_better=False)
+    record(f"head LED ring + leads in the head camera's label view and face-down window frustums, hover and held, {R} (mm3)", w["vol"][0], 0.01,
+           f"nearest {w['gap'][0]:.1f} mm ({w['gap'][1]}; the LED face is {abs(M.HEAD_RING_FACE_DZ):.0f} mm {'below' if M.HEAD_RING_FACE_DZ < 0 else 'above'} the lens front)",
+           larger_is_better=False)
+    for name in ("hover", "held"):
+        record(f"head LED ring mirrored in the slab back ({name}) + the software's {GLARE_HALO:.0f} mm glare halo, {R}: share of the face-down window it covers "
+               f"(software refuses a reference above {GLARE_REF_MAX})", w[f"share_{name}"][0], GLARE_REF_MAX,
+               f"[Likely] flat-mirror model, worst {w[f'share_{name}'][1]}, partly behind the cup pad", larger_is_better=False)
+    hp = {q.name: q.shape.val() for q in M.head_parts(0.0, 0.0, compression=0.0)}  # the modelled ring, for the Phase 0 copies below
     # station ring
     bp = {q.name: q for q in M.bed_parts()}
     sr = [bp["station_led_ring"].shape.val(), bp["station_ring_leads"].shape.val()]
@@ -1063,6 +1279,7 @@ def main() -> int:
     check_led_rings()
     check_probe()
     check_carry_sensor()
+    check_home_switches()
     check_extremes()
     check_rail_slots()
     check_printed()

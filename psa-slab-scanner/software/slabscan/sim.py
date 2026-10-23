@@ -236,12 +236,25 @@ def _degrade(img: np.ndarray, deg: Degrade, rng, glare_spots=(), occluders=()) -
 
 
 # ---------------------------------------------------------------------- head camera: label end + card window
-# Where the card sits in the slab, measured from the slab's label-end edge: cad/layout.py CARD_TOP_FROM_EDGE [Likely,
-# measured on 27 real PSA backs: 34.8-37.8 mm, median 36.1]. Each simulated slab draws its own value from that range.
-# The card is the standard 63.5 x 88.9 mm.
+# The holder and where the card sits in it, per grader: cad/layout.py HOLDERS, exported to cad/out/heads_cad.json
+# "holders" [Likely +/-0.5 mm, measured on real studio-scan backs in the realslabs set: 22 PSA, 27 CGC]. Each entry is
+# (length, width, (min, max) of the card top's distance to the holder's FAR, non-label, edge). The card top from the
+# label-end edge is the length minus that: PSA 35.55-38.32 mm, CGC 37.69-40.14 mm. An earlier measurement of 27 PSA
+# backs from the label-end edge (layout.CARD_TOP_FROM_EDGE: 34.8-37.8, median 36.1) reads 0.5-0.7 mm lower, so PSA
+# slabs spread over both. A CGC card top lies about 3.4 mm nearer the cup than a PSA one, with the slab at the same
+# place: the CAD's card window is set by the CGC worst case (layout.card_top_worst). The CGC length and width come from
+# cropped scans and may read short (CGC gives about 134.6 x 80.0); the far-edge distance does not depend on that.
+# BGS, SGC and other holders were not measured: they use PSA's [Guessing]. The card is the standard 63.5 x 88.9 mm.
+HOLDERS = {"PSA": (135.5, 80.3, (97.18, 99.95)), "CGC": (133.9, 79.4, (93.76, 96.21))}
+CARD_TOP_FROM_EDGE_PSA = (34.8, 37.8)  # layout.CARD_TOP_FROM_EDGE min, max
+CARD_TOP_RANGE_MM = {
+    "PSA": (CARD_TOP_FROM_EDGE_PSA[0], round(HOLDERS["PSA"][0] - HOLDERS["PSA"][2][0], 2)),
+    "CGC": (round(HOLDERS["CGC"][0] - HOLDERS["CGC"][2][1], 2), round(HOLDERS["CGC"][0] - HOLDERS["CGC"][2][0], 2)),
+}
 CARD_W_MM, CARD_H_MM = 63.5, 88.9
-CARD_TOP_MM = 36.1  # median (card_top_mm() spreads each slab over CARD_TOP_RANGE_MM)
-CARD_TOP_RANGE_MM = (34.8, 37.8)
+# How far a slab lies off its pocket's centre along the slab (mm, either way): the pocket is 139 mm long
+# (layout.POCKET_L), so a CGC holder has (139 - 133.9) / 2 = 2.55 mm of play; PSA (1.75 mm) is drawn with 2.0 as before.
+SLAB_PLAY_Y_MM = {"PSA": 2.0, "CGC": 2.55}
 CARD_PX_PER_MM = 4  # the card patterns are smooth: rendered coarse, scaled up
 # The head camera's axis is not on the cup axis: cad/layout.py HEAD_CAM_DY puts the lens 5 mm toward the label end, so
 # the parts on the cup axis (elbow, flag tab, port hex, nut) throw their shadows away from the label-side card. Head kinds
@@ -423,10 +436,16 @@ def _card_layer(card: np.ndarray, rows_mm: float) -> np.ndarray:
     return cv2.resize(top, (int(round(top.shape[1] * k)), int(round(top.shape[0] * k))), interpolation=cv2.INTER_LINEAR)
 
 
-def card_top_mm(cert: str) -> float:
-    """The card's top edge from the slab's label-end edge for one slab: spread over CARD_TOP_RANGE_MM, the same for both
-    sides of a slab."""
-    lo, hi = CARD_TOP_RANGE_MM
+def holder(grader: str) -> tuple[float, float]:
+    """(length, width) of this grader's slab (HOLDERS; other graders: PSA's)."""
+    length, width, _ = HOLDERS.get(grader, HOLDERS["PSA"])
+    return length, width
+
+
+def card_top_mm(cert: str, grader: str = "PSA") -> float:
+    """The card's top edge from the slab's label-end edge for one slab: spread over this grader's CARD_TOP_RANGE_MM
+    (other graders: PSA's), the same for both sides of a slab."""
+    lo, hi = CARD_TOP_RANGE_MM.get(grader, CARD_TOP_RANGE_MM["PSA"])
     return lo + (hi - lo) * (_stable_seed("card_top", cert) % 1001) / 1000
 
 
@@ -442,9 +461,10 @@ def head_view(cert: str, side: str, deg: Degrade, era: str = "2017+", grader: st
               head: str = "cad", seed: int | None = None, front: str = "art", tilt_deg: float = 0.0) -> np.ndarray:
     """What the head camera sees of one slab from above: HEAD_VIEW_MM of it. ``side`` is the slab side facing up:
     'back' (face-down: the back label with what it carries for this grader and era, none on old PSA labels, and the
-    card BACK in the card window) or 'front' (face-up: the front label and the card's own front). The slab lies up to
-    +/-2 mm off centre and up to 1 deg off square in its pocket, the exposure differs by up to 12 %, and about a third of
-    the slabs carry a glare spot on the card window. The card sits card_top_mm(cert) from the slab's label-end edge.
+    card BACK in the card window) or 'front' (face-up: the front label and the card's own front). The slab is this
+    grader's holder size (HOLDERS) and lies up to +/-2 mm off centre across the row and up to its play (SLAB_PLAY_Y_MM)
+    along the slab, up to 1 deg off square in its pocket; the exposure differs by up to 12 %, and about a third of the
+    slabs carry a glare spot on the card window. The card sits card_top_mm(cert, grader) from the slab's label-end edge.
     The head's own parts (``head``, see HEADS) are drawn in front of it, and the slab lies where that head's lens sees
     it (lens_dy). ``front``: "art" (card_front) or "plain" (plain_front). ``tilt_deg``: the camera tilted toward the cup
     (aim_shift_mm)."""
@@ -452,15 +472,17 @@ def head_view(cert: str, side: str, deg: Degrade, era: str = "2017+", grader: st
     x0v, y0v, x1v, y1v = HEAD_VIEW_MM
     W, H = x1v - x0v, y1v - y0v
     dx, dy = rng.uniform(-2.0, 2.0, 2)
+    dy *= SLAB_PLAY_Y_MM.get(grader, SLAB_PLAY_Y_MM["PSA"]) / 2.0
+    slab_h, slab_w = holder(grader)
     canvas = np.full((int(round(H * PX_PER_MM_RENDER)), int(round(W * PX_PER_MM_RENDER))), 40, np.uint8)
     # slab corner on the canvas (mm): the cup axis (slab centre) is -lens_dy from the camera axis
     tilt = aim_shift_mm(tilt_deg)
-    sx, sy = -SLAB_W_MM / 2 - x0v + dx, -SLAB_H_MM / 2 - lens_dy(head) - y0v + dy - tilt
-    cv2.rectangle(canvas, (int(sx * PX_PER_MM_RENDER), int(sy * PX_PER_MM_RENDER)), (int((sx + SLAB_W_MM) * PX_PER_MM_RENDER), canvas.shape[0]), 70, -1)
-    cx, cy = sx + (SLAB_W_MM - CARD_W_MM) / 2, sy + card_top_mm(cert)
+    sx, sy = -slab_w / 2 - x0v + dx, -slab_h / 2 - lens_dy(head) - y0v + dy - tilt
+    cv2.rectangle(canvas, (int(sx * PX_PER_MM_RENDER), int(sy * PX_PER_MM_RENDER)), (int((sx + slab_w) * PX_PER_MM_RENDER), canvas.shape[0]), 70, -1)
+    cx, cy = sx + (slab_w - CARD_W_MM) / 2, sy + card_top_mm(cert, grader)
     card = card_back(back) if side == "back" else (plain_front(cert) if front == "plain" else card_front(cert))
     _paste_clip(canvas, _card_layer(card, H - cy + 1), cx, cy)
-    lx, ly = sx + (SLAB_W_MM - LABEL_W_MM) / 2, sy + LABEL_TOP_MM
+    lx, ly = sx + (slab_w - LABEL_W_MM) / 2, sy + LABEL_TOP_MM
     if not label_blank(grader, era, side):
         _paste_clip(canvas, render_label(cert, side, grader, era), lx, ly)
     spots = [(lx + deg.glare_pos[0] * LABEL_W_MM, ly + deg.glare_pos[1] * LABEL_H_MM, deg.glare)] if deg.glare > 0 else []

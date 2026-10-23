@@ -48,8 +48,8 @@ Every document and file must agree with this page. If something here is wrong, f
   - Flag: 1 mm aluminium, in the CAD (`probe_flag`), its tab clamped between the buffer's M5 port hex and an SMC `M-5ALU-4` barb elbow (no washer, thread sealant; tube toward +Y). It trips the beam after 2.0 ± 0.5 mm of buffer travel (`buffer_trip_mm`), set with the board's ± 4 mm slots.
 
 ## CAD decisions after the build review (binding)
-- **Checks:** `cad/checks.py` runs 152 checks; all 152 pass (re-run on 23 Oct 2026, numbers in
-  `cad/out/checks.txt`). A CAD change is done only when they all pass again.
+- **Checks:** `cad/checks.py` runs 177 checks; all 177 pass (re-run on 23 Oct 2026, about 12–15
+  min, numbers in `cad/out/checks.txt`). A CAD change is done only when they all pass again.
 - **Rails on slots:**
   - The X rail centre is at Z = 410, on the 4040 beam's upper front slot. It is fixed with M3
     screws into M3 T-nuts.
@@ -94,13 +94,26 @@ Every document and file must agree with this page. If something here is wrong, f
   the card plane (card 3.5 mm under the back, rounded corners) a slab in a pocket corner has 0.0%
   of it on the holder for PSA and 1.52% for CGC (limit 2%). It also reports the camera-aim
   tolerance: 1.34° toward the cup (1.31° with the software's 147 mm mapping).
-- **LED rings:** in the CAD. Head ring modelled 40 × 30 × 5 mm, in a 41 mm bore against a 33 mm lip
-  on `camera_bracket` (and a pocket in `phase0_top`), its LED face 1 mm under the lens front, the
-  leads out through a notch; the barb elbow clears it by 3.75 mm at the full stroke. Station ring:
+- **LED rings:** in the CAD. Head ring modelled 40 × 30 × 5 mm. Its seat on `camera_bracket` (and
+  the pocket in `phase0_top`) is a 42.8 mm bore with three centring ribs, printed to fit a 40.0 mm
+  ring, and a 33 mm lip: it takes OD 39.5–42.5 mm (shave each rib by half of OD − 40), and
+  `checks.py` runs every head ring check at 39.5, 40 and 42.5 mm. Its LED face sits 1 mm under the
+  lens front, the leads go out through a notch, and the barb elbow clears it by 3.75 mm at the full
+  stroke. Station ring:
   a 64 mm bore on a 45° shelf (`station_mount`, `phase0_base`) that takes a 63 × 47 or a 60 mm ring,
   the leads down a slot into the ribbon slot. Each is fixed with three dots of glue.
-- **Switch mounts:** the X home and Z top switches have no mount in the CAD; BUILD_GUIDE §6.8 and
-  §7.4 put each on a 2020 corner bracket.
+- **Switch mounts:** printed, in the CAD, for a bare SPDT hinge-lever switch of the Omron SS-5GL
+  size (2 holes 9.5 mm apart, M2×12 through ±1 mm slots). `x_switch_mount` sits under the beam's
+  left end (2 × M5×10 button heads into the beam's lower front slot, at X −48.5 and −37) and is
+  worked by a 17.4 mm finger on `x_bracket`'s left edge; `z_switch_mount` sits on the Z spine's +X
+  face (2 × M5×10 button heads into that face's slot) and is worked by a 45° chamfer, 7.5 mm deep,
+  along the `z_plate`'s top back edge from X 20 to its right end. Each striker slides across the
+  lever: a 45° lead-in, then a flat that holds the lever 0.6 mm past its operating point (at the
+  lever tip) up to the hard stop, under its 1.2 mm overtravel. Trips: cup X 19.00 and c = 258.00.
+  Each mount slides about ±3 mm in its slot to set the trip. The lever must end within 23 mm of the
+  switch's hinge end (`SW_LEVER_MAX`; a longer one is cut back to 20 mm); the X mount takes up to
+  27.24 mm and the Z mount 24.19 mm. Lead paths are modelled (X: under the beam into its lower rear
+  slot; Z: behind the `z_motor_mount` to the spine top).
 - **Carry-height sensor:** the spare TCST2103 board on the Z spine's −X face (`carry_sensor_mount`,
   2 × M5×10 button heads into slot-6 T-nuts, beam at Z 561.5 above the pad top), and a flat 1 mm
   aluminium flag on `carry_flag_arm` (screwed to the `z_plate` front face). Its beam is clear at
@@ -180,16 +193,20 @@ Every document and file must agree with this page. If something here is wrong, f
   - Bench tests (not part of the CLI): `python -m tools.bench_tests cycles|rest|lifts|drop|powercut N` (BUILD_GUIDE §7.8, §13).
   - Real-label check (not part of the CLI): `python -m tools.real_eval INDEX.json [--machine] [--glare]` or `--phase0 DIR`: the run's reading order, consensus and face-down rule on photos of real slabs; exit 1 on a wrong cert in an `ok` verdict or a false face-down proof.
   - `web [--port 8080]`: phone-friendly start/stop/progress page and CSV download.
-  - `phase0 [--sim N] [--out DIR] [--face-up N] [--save]`: the Phase 0 camera read-rate test (same as `python -m tools.phase0`). The read-rate report is written as soon as the operator types `q`. `--face-up` (default 0) adds the face-up pass for the learned face-down check; a GO needs 15. `--save` writes `face_down_threshold` and `face_down_threshold_sig` and merges the backs into `config/card_backs.npz`, only on a GO.
+  - `phase0 [--sim N] [--out DIR] [--face-up N] [--save] [--force]`: the Phase 0 camera read-rate test (same as `python -m tools.phase0`). An `--out` folder that already holds a `phase0.csv` is refused (exit 2, nothing changed) unless `--force` is given. The read-rate report is written as soon as the operator types `q`. `--face-up` (default 0) adds the face-up pass for the learned face-down check; a GO needs 15. `--save` writes `face_down_threshold` and `face_down_threshold_sig` and merges the backs into `config/card_backs.npz`, only on a GO.
   - `refs [--drop CERT | --drop-operator]`: list or delete the learned face-down check's references.
 - **Outputs:** `batches/<id>/certs.csv`, `certs.txt`, `report.html`, `summary.json`, `journal.jsonl`, `images/` (plus `run.json`, and `stop.json` after a stop).
   - `certs.csv`'s last column is `face_down`: `qr` (a PSA or CGC back QR), `code` (the CGC 2020–23 back barcode), `operator`, `learned(<score>)` or `off`. `report.html` has a Face-down column; `summary.json` a `face_down` entry, plus `itf_mode` (always `zero_pad`) and `itf_evidence`.
-  - Learned mode adds `images/face_down_window.jpg` (the run's first slab with the card window drawn) and `images/face_down_empty.jpg` (the view over an empty pocket), and `summary.json`'s `face_down` gets `camera_aim`; a failed aim check prints a `CAMERA AIM:` summary line.
+  - Learned mode adds `images/face_down_window.jpg` (the run's first slab with the card window drawn) and `images/face_down_empty.jpg` (the view over an empty pocket), and `summary.json`'s `face_down` gets `camera_aim` (`ok`, the failed check's message, "not checked (no view over an empty pocket)", or "not checked this run (…)" after a resume that never looked over an empty pocket); a failed aim check prints a `CAMERA AIM:` summary line.
 - **Enrichment (optional, later):** `python -m tools.enrich batches/<id>` (PSA API, quota-metered).
 - **Graders:** PSA and CGC are read and stacked normally. An `ok` needs its grader confirmed: a
-  code that names it (a cert URL) or two printed symbols in its format; OCR confirms digits, never a
-  grader, so a one-barcode slab (every pre-2016 PSA) is `needs_review`. Every barcode-only `ok` also
-  gets the front OCR. Other graders go to pocket 12, and so does every `needs_review` whose grader is
+  code that names it (a cert URL), two printed symbols in its format, or an 8-digit ITF whose
+  digits OCR of the printed number confirms (`certs.psa_itf_confirmed`: grader PSA, note "grader
+  PSA from its 8-digit ITF"; a pre-2016 PSA slab). Any other one-barcode slab is `needs_review`
+  even when OCR agrees (OCR confirms its digits, not its grader), and an ITF alone or OCR alone is
+  never `ok`. A code in no grader's format never confirms a grader. A PSA Code128 is 8–9 digits and
+  a 10-digit CGC Code128 never starts with 0; any other Code128 is not typed. Every barcode-only
+  `ok` also gets the front OCR. Other graders go to pocket 12, and so does every `needs_review` whose grader is
   not an accepted one (`unknown`: an OCR-only number or a code with no grader's format; `PSA/CGC`;
   none), whatever `needs_review_to` says. A grader guessed from a barcode's length counts as
   accepted.
@@ -202,7 +219,9 @@ Every document and file must agree with this page. If something here is wrong, f
     `face_down_threshold_sig`, `face_down_min_refs` (5) references, the empty-pocket view, at
     most 10% of the window static on 5 machine-proven slabs, and a clear camera-aim check on that
     view (`facedown.aim_problem`: no edge in the middle of the window or within 1 mm of its cup
-    side; a tilt toward the cup only). Until then it acts like `"stop"`. A
+    side; a tilt toward the cup only), taken this run (`CardBackRefs.stale`: a resume whose survey
+    finds no empty pocket takes the view over the first source pocket it empties, and accepts
+    nothing before that). Until then it acts like `"stop"`. A
     code-proven or confirmed slab becomes a reference only after it is placed: never if a
     back-label code is seen from below, and a code proof only with an `ok` read of the same cert.
   - `"stop"`: only a back-label code.

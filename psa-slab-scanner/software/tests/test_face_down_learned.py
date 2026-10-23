@@ -813,6 +813,91 @@ def test_a_square_camera_on_the_next_run_turns_the_learned_check_back_on(tmp_pat
     assert refs.baseline_meta["aim"] == "" and _kinds(tmp_path, "b2") == ["qr"] * 6 + ["learned"]
 
 
+def _baselines(tmp_path, batch="b"):
+    return [(e["face_down_baseline"], e["aim"]) for e in read_journal(tmp_path / batch / "journal.jsonl") if "face_down_baseline" in e]
+
+
+def test_a_resume_checks_the_camera_aim_again_over_an_empty_pocket(tmp_path):
+    """The aim verdict counts only for the run that took it. A camera knocked while the run was stopped: the resume
+    survey looks over an empty pocket again, sees the head part, and the learned check accepts nothing."""
+    cfg = _aim_cfg()
+    refs = CardBackRefs(None, cfg.face_down_window_mm)
+    world = _world(cfg, ["qr"] * 6 + ["old"], head="cad", start=CLEAN + 6)
+    r = _runner(cfg, world, tmp_path, refs=refs)
+    r.should_stop = lambda: len(r.w.rows) >= 6
+    with pytest.raises(Stop, match="Stopped on request"):
+        r.run()
+    assert _baselines(tmp_path) == [(0, "ok")] and refs.n_refs == 6
+    world.head_tilt_deg = 1.0  # knocked while the run was stopped
+    with pytest.raises(Stop, match=r"could not be confirmed FACE-DOWN .*learned check not active: over an empty pocket .*Re-aim the head camera"):
+        _resume(cfg, world, tmp_path, refs)
+    (p0, ok0), (p1, aim) = _baselines(tmp_path)
+    assert p1 in (0, 2, 3) and aim != "ok" and refs.baseline_meta["aim"] == aim and not refs.stale  # the first empty pocket of the resume survey
+    assert not world.gripping and len(world.stacks[1]) == 1  # the old label: untouched
+
+
+def _no_empty_pocket_world(cfg):
+    """Pocket 1: six QR slabs, a BGS slab (no code: the learned check accepts it, OCR alone sends it to the exception
+    pocket) and an old label; pocket 2: an old label; pockets 3-11: one QR slab each. Stopped after the BGS slab, no
+    pocket is empty: 0 holds outputs, 12 the BGS slab."""
+    p1 = [_slab(CLEAN + 6 + i, "qr") for i in range(6)] + [SimSlab("0012345678", 7.6, "", grader="BGS"), _slab(CLEAN, "old")]
+    stacks = {1: p1[::-1], 2: [_slab(CLEAN + 1, "old")], **{k: [_slab(k, "qr")] for k in range(3, 12)}}
+    return SimWorld(cfg, stacks=stacks, head="cad")
+
+
+@pytest.mark.parametrize("knocked", [False, True])
+def test_a_resume_with_no_empty_pocket_refuses_learned_acceptances_until_it_checks_the_aim(tmp_path, knocked):
+    """Round 4 left this open: a resume whose survey finds no empty pocket kept the aim verdict of the run before, so a
+    camera knocked while the run was stopped went on accepting slabs. Now the stored verdict is stale: every slab
+    without a back-label code stops until the run has looked over an empty pocket, which it does over the first
+    source pocket it empties. Then the learned check goes on (a square camera) or stays off (a knocked one)."""
+    cfg = _aim_cfg()
+    refs = CardBackRefs(None, cfg.face_down_window_mm)
+    world = _no_empty_pocket_world(cfg)
+    r = _runner(cfg, world, tmp_path, refs=refs)
+    r.should_stop = lambda: len(r.w.rows) >= 7
+    with pytest.raises(Stop, match="Stopped on request"):
+        r.run()
+    assert _kinds(tmp_path) == ["qr"] * 6 + ["learned"] and r.w.rows[-1].out_pocket == cfg.exceptions.index
+    assert all(world.stacks[p.index] for p in cfg.pockets)  # no pocket is empty
+    world.head_tilt_deg = 1.0 if knocked else 0.0
+    with pytest.raises(Stop, match=r"could not be confirmed FACE-DOWN .*learned check not active: the head camera's aim is not checked this run yet"):
+        _resume(cfg, world, tmp_path, refs)
+    assert _baselines(tmp_path) == [(0, "ok")] and refs.baseline_meta["aim"] == ""  # no new view: the old 'ok' was not used
+    assert not world.gripping and len(world.stacks[1]) == 1  # the old label: untouched
+    if knocked:
+        # you confirm that slab; pocket 1 is then empty, the run looks over it, sees the head part and stops at pocket 2
+        with pytest.raises(Stop, match=r"Pocket 2: .*could not be confirmed FACE-DOWN .*Re-aim the head camera"):
+            _resume(cfg, world, tmp_path, refs, face_down_ok=True)
+        assert _baselines(tmp_path)[1][0] == 1 and _baselines(tmp_path)[1][1] != "ok"
+        assert _kinds(tmp_path) == ["qr"] * 6 + ["learned", "operator"] and len(world.stacks[2]) == 1
+    else:
+        r2, summary = _resume(cfg, world, tmp_path, refs, face_down_ok=True)
+        assert _baselines(tmp_path) == [(0, "ok"), (1, "ok")]
+        assert _kinds(tmp_path) == ["qr"] * 6 + ["learned", "operator", "learned"] + ["qr"] * 9
+        assert summary["face_down"]["camera_aim"] == "ok" and not refs.stale
+        assert "operator" not in refs.sources()  # the slab you confirmed was placed before the aim check: never learned
+
+
+def test_a_stale_aim_verdict_refuses_like_a_failed_one():
+    """CardBackRefs.stale (set by a resume until it looks over an empty pocket): no acceptance, no reference."""
+    cfg = _aim_cfg()
+    world = SimWorld(cfg, stacks={}, head="cad")
+    cam = SimCamera(world, "head")
+    frame = cam.capture()
+    empty = describe(frame, facedown.image_rects(AIM_WINDOW), frame_view_mm(frame.shape, 147.0, cfg.cam_head, cam))
+    refs = CardBackRefs(None, AIM_WINDOW)
+    d = describe(head_view("150000007", "back", Degrade(mm_per_px=0.05), head="open"), facedown.image_rects(AIM_WINDOW), HEAD_VIEW_MM)
+    refs.set_baseline(empty, {"aim": ""})
+    refs.stale = "the head camera's aim is not checked this run yet: test"
+    assert facedown.learned_ready(refs, THRESHOLD, 0, AIM_WINDOW, facedown.threshold_tag(AIM_WINDOW)).endswith("not checked this run yet: test")
+    ok, why, _ = facedown.learned_match(refs, d, THRESHOLD, 0, AIM_WINDOW, facedown.threshold_tag(AIM_WINDOW))
+    assert not ok and "not checked this run yet" in why
+    assert refs.add(d, "qr") == (None, "the head camera's aim is not checked this run yet")
+    refs.set_baseline(empty, {"aim": ""})  # a new view over an empty pocket clears it
+    assert refs.stale == "" and refs.add(d, "qr")[0] == 0
+
+
 def test_sim_selftest_and_focus_head_report_the_camera_aim(tmp_path):
     from slabscan.cli import main
     from slabscan.ops import ScriptedConsole

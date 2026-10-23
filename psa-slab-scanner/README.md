@@ -48,10 +48,13 @@ other moves it up and down.
   optical sensor on the Z spine checks that the head really is at carry height before every
   sideways move. It catches a lift that ended more than about 2.5 mm low; it does not make a weak
   Z motor strong, so the 100-lift test still has to pass.
-- **[Certain, code] Every pre-2016 PSA slab comes out `needs_review`, not `ok`.** Its only code
-  is one front barcode, and nothing on it confirms that it is a PSA slab: OCR confirms the digits,
-  never the grader. These slabs stay in the output stack for you to check (7 of 61 real slabs at
-  machine scale; 20 of 330 in the simulator's default mix).
+- **[Certain, code] A pre-2016 PSA slab is `ok` only when OCR confirms its barcode.** Its only
+  code is one front ITF. An 8-digit ITF whose printed number OCR reads the same names PSA; when OCR
+  reads nothing or other digits, the slab is `needs_review` and stays in the output stack for you
+  to check. Real set: 5 of 7 `ok` on the images as they are, 7 of 7 at machine scale; 20 of 21 in
+  the simulator's default mix. **[Guessing] The rule assumes only PSA prints an 8-digit ITF.** If
+  another grader does, its slab would come out `ok PSA` with the right digits and the wrong
+  grader. Put any BGS or SGC slabs you own through Phase 0 first (docs/OPERATING.md §5.2).
 - **Build effort:** a real mechatronics project, roughly 65–90 hours of hands-on work plus
   printing. Plan to use your school's instructors for the 120 V wiring, crimping and
   calibration.
@@ -105,15 +108,19 @@ The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Verification done so far (no hardware)
 
-- **[Certain] All 152 CAD checks pass** (`cad/checks.py`, re-run on 23 Oct 2026, about 6 min;
+- **[Certain] All 177 CAD checks pass** (`cad/checks.py`, re-run on 23 Oct 2026, about 12–15 min;
   every number is in `cad/out/checks.txt`, so trust that file over this list).
   - Picking the last slab of every pocket with full neighbours clears them by ≥ 14.5 mm.
   - Carried slabs clear the dowels by ≥ 21 mm; a double pick of two thick holders by ≥ 5 mm.
   - A held slab clears every part fixed to the X carriage by ≥ 5 mm, even at the Z top hard stop.
   - The cameras have an unobstructed view of the label, and the head camera of the face-down card
     window: no part in view at hover over stacks of 1, 15 and 30, or with a slab held.
-  - Both LED rings are modelled and seated; the barb elbow clears the head ring by 3.75 mm at the
-    full stroke.
+  - Both LED rings are modelled and seated; the head seat takes rings of 39.5–42.5 mm (every head
+    ring check runs at both ends), and the barb elbow clears the head ring by 3.75 mm at the full
+    stroke.
+  - The X home and Z top switches sit on printed mounts: each clicks where the firmware expects
+    (cup X 19, c = 258), and its striker holds the lever 0.6 mm past the click to the hard stop,
+    inside the switch's 1.2 mm overtravel. A lever up to 23 mm from the hinge end fits.
   - The card window is checked on the card plane for PSA and CGC slabs pushed into a pocket corner:
     PSA keeps it all on the card, CGC has about 1.5% of it on the holder (limit 2%) [Likely].
   - The probe flag trips at 2.0 mm of buffer travel and clears its sensor and guide over the full
@@ -124,19 +131,22 @@ The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
     relative to the lens.
   - Both carriages stay on their rails at every printed hard stop, and no two parts overlap at
     any checked pose.
-  - **Not checked:** belt slack, cables and the vacuum tube, the real shapes of bought parts,
-    loads or deflection, and the X home and Z top switch mounts (not in the CAD). A camera tilt
+  - **Not checked:** belt slack, cables and the vacuum tube, the real shapes of bought parts
+    (which lever the BOM's switches have, among them), loads or deflection, the sideways push the
+    switch strikers put on the lever, and the frame's corner brackets and plates. A camera tilt
     over about 1.3° toward the cup puts the cup pad in the card window (1.34° in the CAD check). The
     software checks a tilt toward the cup on every learned run; it does not see a tilt away from
     the cup, a roll along the row, or a head part as dark as the pad.
-- **[Certain] Software tests: `288 passed, 1 skipped in 1020.95s (0:17:00)`** (full suite,
+- **[Certain] Software tests: `299 passed, 1 skipped in 1135.84s (0:18:55)`** (full suite,
   23 Oct 2026; the skipped test runs the rules on the real image set when it is pointed at it:
-  with it enabled the suite gave `289 passed in 862.10s (0:14:22)`). The simulator **raises a crash on any unsafe move**. Every
+  on its own it gave `1 passed, 61 deselected in 137.29s (0:02:17)`). The simulator **raises a crash on any unsafe move**. Every
   slab is moved exactly once and read. The tests also cover:
   - the real payload strings of PSA and CGC labels (QR forms, ITF, Code128, the 13-digit CGC cert,
     the phantom read, which can no longer confirm itself or drop the real number),
-  - the grader rule (a one-barcode slab is never `ok`) and the OCR check of two-barcode reads,
+  - the grader rule (a one-barcode slab is `ok` only when it is an 8-digit ITF that OCR confirms;
+    a code in no grader's format never confirms one) and the OCR check of two-barcode reads,
   - the camera-aim check over an empty pocket (a tilt toward the cup turns the learned check off),
+    also on a resume, with and without an empty pocket,
   - pre-2016 labels routed to the front camera,
   - double-pick detection, thick holders, overfill and seal failures stopping safely,
   - CGC slabs read, BGS to the exception pocket,
@@ -147,10 +157,10 @@ The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
     not teach it a card front.
 - **[Certain for these images] Real-label check** (`python -m tools.real_eval`, public scans of 64
   real slabs, RESEARCH.md §4): **0 wrong certs in an `ok` verdict and 0 false face-down proofs**,
-  both on the images as they are (55 of 64 `ok`; the 7 pre-2016 PSA held as `needs_review`
-  because their grader is not confirmed, the BGS and SGC unread: their labels have no code) and
-  rescaled and degraded to what the machine's cameras would see (53 of 61 `ok`, the same 7
-  `needs_review`, the BGS unread). The old rules gave one silent wrong cert on
+  both on the images as they are (60 of 64 `ok`; 2 pre-2016 PSA `needs_review` because OCR read
+  other digits on one and nothing on the other, the BGS and SGC unread: their labels have no code)
+  and rescaled and degraded to what the machine's cameras would see (60 of 61 `ok`, the BGS
+  unread). The old rules gave one silent wrong cert on
   the same images. **Limits:** the rules were written from these same 64 slabs, and flat
   studio scans have no slab-plastic reflections; Phase 0 on your own slabs is the real test.
 - **[Certain, synthetic labels in the real formats] Decode sweep.**

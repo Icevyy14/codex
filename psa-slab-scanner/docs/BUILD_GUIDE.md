@@ -27,7 +27,7 @@ filled. Every time estimate is **[Guessing]**.
   software passes its tests against a simulator. Real labels, the real cup and real wiring are
   untested. That is why Phase 0 comes first and section 13 has the tests to pass before you trust
   the machine with inventory.
-- **Plan on 65–90 hours of hands-on work over 6–10 weeks**, plus about 43 hours of printer time.
+- **Plan on 65–90 hours of hands-on work over 6–10 weeks**, plus about 45 hours of printer time.
   [Guessing] Drilling 82 rod holes, the wiring and the acceptance tests are most of it.
 - **The CAD and BOM still have small gaps you fix during the build.** [Certain, from reading the
   CAD and BOM] Each one is handled where it comes up:
@@ -37,14 +37,14 @@ filled. Every time estimate is **[Guessing]**.
 | The CAD has no brackets, and the bed covers the base-rail tops where the upright brackets would go. | §4.3 |
 | The SMC cup code `ZPT25UUK20-B5-A10` comes from SMC's catalog (25 mm pads come only in 10/20/30/40/50 mm stroke [Certain]). Proax lists the exact code, but back-ordered with no lead time [Certain, 22 Oct 2026]. `head_foot` has a flag guide, so the rotating "J" buffer works too. | §2, §7.6 |
 | The flag, guide and sensor post are built on bought-part numbers you must check on arrival: the buffer's catalog heights [Certain, SMC catalog], the M-5ALU-4 elbow's height (9.3 mm) [Likely], and the endstop board's header position and component heights (unknown; the listing does not even name the TCST2103). Measure them before you cut the flag; the board slots give ±4 mm. The carry-height sensor uses the same board. | §3.3, §7.4a, §7.6 |
-| The head camera's board-to-lens-front length (20 mm) and its 32 mm hole pattern are guesses in the CAD (the ELP board is 38 × 38 mm). | §1.5, §3.3 |
+| The head camera's board-to-lens-front length (20 mm) and its 32 mm hole pattern are guesses in the CAD (the ELP board is 38 × 38 mm). The Phase 0 bridge takes any length from 10 mm up. | §1.5, §3.3 |
 | The head lens sits **5 mm toward the label from the cup axis**, set by `camera_bracket` (and by the jig's bridge in Phase 0): there is no adjustment. With the lens on the axis, the vacuum elbow 23 mm under it hid the card window the learned face-down check needs [Certain, CAD ray cast]. Print the current `camera_bracket`, `station_mount`, `phase0_top` and `phase0_base`: their LED ring seats changed too. | §1.5, §3.2, §7.7 |
-| The LED rings are sold by their outside diameter only. The CAD models a 40 × 30 × 5 mm head ring and a 63 × 47 × 5 mm station ring (a 60 mm one fits too) [Likely OD, Guessing ID and thickness]. No 40 mm COB ring listing is live: a 12-SMD ring that fits the seat is the fallback. | §3.3 |
+| The LED rings are sold by their outside diameter only. The CAD models a 40 × 30 × 5 mm head ring and a 63 × 47 × 5 mm station ring (a 60 mm one fits too) [Likely OD, Guessing ID and thickness]. The head seat takes any ring from 39.5 to 42.5 mm across: a 42.8 mm bore with three centring ribs that you shave for a ring over 40 mm. No 40 mm COB ring listing is live: a 12-SMD ring that fits the seat is the fallback. | §3.3 |
 | The card window is placed from the card position measured on 22 PSA and 27 CGC backs [Likely ±0.5 mm]. PSA slabs keep it on the card. On a CGC slab pushed into a pocket corner it has about zero margin: about 1.5% of the window can lie on the holder (up to about 4.5% at most) [Likely, CAD card-plane check]. | §1.2, §12.3 |
 | Camera aim: a tilt of more than about 1.3° toward the cup puts the cup pad into the card window (1.34° in the CAD check, 1.31° with the software's own mapping) [Certain]. Every learned run looks for that tilt over an empty pocket, and turns the learned check off for the run if it finds it [Certain, sim]. It does not see a head part as dark as the pad, a tilt away from the cup or a roll along the row, and a CGC slab in a pocket corner has almost no aim margin toward the label: for those, nothing catches it but your look at the frame. | §7.7, §12.3 |
 | The carry-height sensor's trip (c = 246.5) is set by sliding its mount along the spine's slot, then measured by `selftest --motion`. | §7.4a, §12.1 |
 | The only Class 2 laser found is 7 mm across: the left gate post now prints with a 7.2 mm hole. Drill only a post printed from an older STL. | §5.9 |
-| The X home switch and the Z top switch have no mount in the CAD: each goes on a 2020 corner bracket. | §6.8, §7.4 |
+| The X home switch and the Z top switch have printed mounts now (`x_switch_mount`, `z_switch_mount`), worked by a finger on `x_bracket` and a chamfer on `z_plate`. They are drawn for a short flat hinge lever: one that ends 23 mm or less from the switch's hinge end fits as it is, and a longer one is cut back to 20 mm first. Which lever the BOM's 10-pack has is not known [Guessing]. The strikers push the lever sideways as well as down: a 100-pass bench test on one switch comes first. | §6.8, §7.4 |
 | The Z lead screw must be cut to 340 mm below the motor face. | §7.3 |
 | The jig's M5×10 screws pass 4 mm printed walls with one washer each, and the probe board takes M3×16 with washers, as the CAD now models. Test the first jig screw anyway: the slot depth is a guess. [Guessing] | §1.5, §7.6 |
 
@@ -109,10 +109,10 @@ drill template), so §5 is split: 5A now, 5B after the machine moves (§12).
 
 | # | Step | Section | Hands-on | Printer / waiting | Instructor needed |
 |---|---|---|---|---|---|
-| 1 | Phase 0A: camera test (and the probe flag, if the SMC cup has arrived) | §1 | 6–7 h | about 15 h print | for power-tool rules (match-drilling, sawing the flag) |
+| 1 | Phase 0A: camera test (and the probe flag, if the SMC cup has arrived) | §1 | 6–7 h | about 17 h print | for power-tool rules (match-drilling, sawing the flag) |
 | 2 | Phase 0B: cup bench test (hand pump) | §1.10 | 3–4 h | 24 h test | no |
 | 3 | Order the machine parts | §2 | 1 h | 1–4 weeks delivery | no |
-| 4 | Print the machine parts | §3 | 3 h | about 27 h | no |
+| 4 | Print the machine parts | §3 | 3 h | about 28 h | no |
 | 5 | Frame | §4 | 4–6 h | | **yes: squaring** |
 | 6 | Bed, part A (cut, notch, bolt down, cut pads) | §5A | 3–4 h | | for power-tool rules |
 | 7 | X axis | §6 | 4–5 h | | helpful for the dial indicator |
@@ -222,12 +222,13 @@ the oldest holders.
   and 22 PSA backs]. If yours is under 93.5 mm, note it for §1.7: the window's label-side edge can
   then reach past the card's top edge onto the holder.
 
-### 1.3 Print the jig (about 15 h printer time)
+### 1.3 Print the jig (about 17 h printer time)
 
 Print `phase0_base`, `phase0_tray`, `phase0_top` and `phase0_occluder_mount` in black PLA or PETG,
 and `head_foot` in PETG (settings in §3; it goes on the machine later). Use the current STLs:
 `phase0_top` (the bridge) and `head_foot` changed with the head-camera offset, and `phase0_top` and
-`phase0_base` got new LED ring seats. Black matters around the
+`phase0_base` got new LED ring seats. `phase0_top` changed again: it is now 10.6 mm thick, with a
+ribbed ring pocket. Black matters around the
 cameras, because it cuts stray light. Before printing `head_foot`, check the optical endstop
 board (§3.3).
 
@@ -270,17 +271,20 @@ the same software as the machine.
    - Measure your ELP board's **board-to-lens-front length L**: from the board's underside to the
      front of the M12 lens holder, with the lens roughly in focus. The CAD guessed 20 mm.
      [Guessing in the CAD]
-   - Standoff height = **L − 7.4 mm** (12.6 mm for L = 20). Use brass M2 standoffs from the kit
-     (stack two if needed); they screw into the bridge's 1.8 mm blind holes.
+   - Standoff height = **L − 10.0 mm** (10.0 mm for L = 20). The bridge is 10.6 mm thick, so L
+     must be at least 10 mm. Use brass M2 standoffs from the kit (stack two if needed); they screw
+     into the bridge's 1.8 mm blind holes, 4 mm deep. [Certain, `checks.txt`]
    - The CAD assumes a 32 mm square hole pattern. Measure your board first; if it differs, drill
      new 1.8 mm holes in the bridge. [Guessing in the CAD]
-   - **Turn the standoffs in gently:** only about 1.2 mm of plastic separates each hole from the ring
-     pocket [Certain, CAD]. A forced standoff can split it or bulge it into the pocket.
+   - About 2.0 mm of plastic separates each hole from the ring pocket [Certain, CAD]. Turn the
+     standoffs in by hand; don't force them.
    - Fix the board with four M2 screws.
-   - **Head LED ring:** push the 40 mm ring LEDs down into the pocket on the bridge's underside, its
-     pads and leads up through the slot. Check it still drops in freely after the standoffs are in
-     (it has 0.5 mm of play). Fix it with three dots of glue. The pocket holds it where the machine's
-     seat does, relative to the lens. [Certain, `checks.txt`: 0.0 mm offset]
+   - **Head LED ring:** push the ring LEDs down into the pocket on the bridge's underside, its pads
+     and leads up through the slot. The pocket has three centring ribs, printed to fit a 40.0 mm
+     ring: the ring presses in between them. For a bigger ring, shave each rib by half of (ring
+     OD − 40), for example 1.0 mm for a 42 mm ring (§3.3). A ring under 40 mm sits a little loose:
+     centre it by eye. Fix it with three dots of glue. The pocket holds it where the machine's seat
+     does, relative to the lens. [Certain, `checks.txt`: 0.0 mm offset]
 6. **The bridge sits on the post tops in its blind sockets,** so the 312 mm posts set its height.
    [Certain, CAD: post tops at 314, socket roof at 314] Put a slab in the tray and measure the
    **head lens front to the slab's top face (its back): 140 ± 2 mm**. If it is off, change the
@@ -331,8 +335,9 @@ python -m slabscan focus station --no-motion --save    # sweeps LensPosition, sa
 python -m slabscan phase0 --out phase0_results --lens-position 7.1 --face-up 15 --save   # use the value focus station printed
 ```
 
-Without the face-up pass, leave out `--face-up 15 --save`. A second run with the same `--out`
-overwrites `phase0.csv`, so give each run a new folder. [Certain, `tools/phase0.py`]
+Without the face-up pass, leave out `--face-up 15 --save`. Give each run a new `--out` folder: a
+folder that already holds a `phase0.csv` is refused, and nothing in it changes. Add `--force` only
+to overwrite an earlier run on purpose. [Certain, `tools/phase0.py`]
 
 For each slab the tool asks you to type the printed cert number, then saves both images and what
 each camera decoded. **Type the cert every time:** the typed number is how it catches a *wrong*
@@ -359,8 +364,9 @@ window matches (OPERATING.md §8.4). Phase 0 measures whether that can work: how
 each other, and how well face-up slabs match the backs.
 - **With today's head the card window is clear** [Certain, CAD frustum check], so this pass decides
   whether you can use the learned check. In the simulator it says GO (lowest back-to-back 0.81,
-  highest face-up 0.56 with a reflection copy, threshold 0.69 [Certain, sim, 23 Oct 2026, today's
-  smaller window; with the larger round-3 window it was 0.82, 0.43 and 0.62]). On studio scans of
+  highest face-up 0.57 with a reflection copy, threshold 0.69 [Certain, sim, 23 Oct 2026, today's
+  smaller window and the card placed per grader; with the larger round-3 window it was 0.82, 0.43
+  and 0.62]). On studio scans of
   the 64 real slabs the same rule gave backs at 0.68 or more against face-up fronts at 0.45 or less,
   a GO at a threshold of about 0.56 [Certain for those images and the round-3 window; Likely
   optimistic, because they are flat scans, not the jig's camera]. With today's window the CAD's
@@ -422,7 +428,7 @@ machine: it settles the open questions in RESEARCH.md.
 | CGC QR payload (`cgccards.com/certlookup/<n>/<grade>/`; `cgccomics.com` on OG labels) | `back_reads` for CGC slabs | |
 | Any prefix or suffix around the cert | raw payloads | if yes, set `custom_regex` (§11.5) |
 | Time per side (`back_ms`, `front_ms`) | CSV | replaces the [Guessing] frame times in `cli.py` |
-| Cert lengths seen (8, 9 digits …) | `typed` column | set `psa_cert_digits = [8, 9]` in `calibration.toml` (§11.5) |
+| Cert lengths seen (7, 8, 9 digits …), counted without leading zeros | `typed` column | set `psa_cert_digits` in `calibration.toml` (§11.5). Include 7 if you have pre-2016 slabs: their certs are printed with a leading zero (`02074012` is a 7-digit cert). Leave it out, and every 7-digit cert is `needs_review`. |
 | Widths of your CGC / BGS / TAG holders | your calipers (§1.2) | wider than 82.6 mm: do not load |
 | Card top edge to the slab's far end | your calipers (§1.2) | at least 93.5 mm (real backs: CGC 93.8–96.2, PSA 97.2–100.0) |
 | Card window on the card back? | `window_check.jpg` | boxes on the card / on the label / on the cup or foot |
@@ -502,8 +508,8 @@ tapped, the Adafruit #5648 MOSFET modules, bare SPDT microswitches, the 1 A / 3 
 fuses, 2.2 kΩ resistors and 100 nF capacitors, the I/O perfboard, mains and earth wire, the closed
 mains box, a Class 2 laser, an E-stop with two contact blocks, the 12 V adapter, the hand vacuum
 pump, the flag sheet, the `M-5ALU-4` elbows, a spare SMC cup, a spare rail block, and the
-carry-height sensor's parts (its board is the second endstop board; its M5×10 button heads are the
-one new line). [Certain, BOM.csv] The upgrade lines (HIWIN rail, Z motor, constant-force spring,
+carry-height sensor's parts (its board is the second endstop board). The M5×10 button-head line
+covers 6: 2 for the carry-height sensor's mount and 2 for each switch mount. [Certain, BOM.csv] The upgrade lines (HIWIN rail, Z motor, constant-force spring,
 high-flex USB cable, branded pump, branded E-stop) have qty 0: buy one only when the test its line
 names fails.
 
@@ -516,7 +522,8 @@ names fails.
 | Z motor with lead screw | Buy one that lists 1.5–2.0 A per phase, ≤ 4 mH and an **8 mm lead** (T8×8). Not a 0.4–0.6 A "integrated" motor. The BOM's VXB 3-pack publishes all three (1.7 A, 3.1 mH). | The firmware runs Z at 0.8 A and 750 rpm; a high-impedance motor stalls there. The carry-height sensor stops the run after a stall, but it cannot stop the stalls. |
 | Class 2 laser | The BOM's Quarton module is 7 mm across | The left gate post now prints with a 7.2 mm hole; a post printed from an older STL needs drilling to 7.2 mm (§5.9). |
 | Dowels | The BOM's dowels are 5/16 in (7.94 mm) | Buy a 5/16 in brad-point bit and collar to match (BOM.md tools). |
-| M5 screws | M5×25 for the 16 bed bolts, M5×30 for the 4 bracket-through-plywood bolts, M5×16/20 and M5×12 button heads as the CSV notes say | An M5×30 through the bed bottoms on the profile core before it clamps (§4.3). |
+| M5 screws | M5×25 for the 16 bed bolts, M5×30 for the 4 bracket-through-plywood bolts, M5×16/20, M5×12 button heads and 6 × M5×10 button heads as the CSV notes say | An M5×30 through the bed bottoms on the profile core before it clamps (§4.3). |
+| Homing switches (10-pack) | A bare SPDT **hinge-lever** microswitch with a 19.8 × 10.2 × 6.4 mm body and two 2.35 mm holes 9.5 mm apart (Omron SS-5GL size). Prefer the short lever that ends at the body's end. Not a roller lever. | The printed mounts and strikers are drawn for that body and a flat lever ending at most 23 mm from the hinge end; a longer lever is cut back (§6.8). [Certain, Omron SS datasheet; Guessing which lever the BOM's pack has] |
 | Overfill laser | The listing must say ≤ 1 mW or Class 2. | It is on whenever the Pi is on, at face height (WIRING.md §8). |
 | Light roof (foam board, tape, 2 × 2020 posts, qty 0) | Buy only if Phase 0 showed glare (§1.9) | The roof is optional (CONTRACT). |
 
@@ -535,6 +542,8 @@ BIQU on 22 Oct 2026.
   print `head_foot` and `carry_sensor_mount`;
 - measure both LED rings (OD, ID, thickness: §3.3) and the ELP board (hole pattern, board-to-lens
   length) before you print the Phase 0 parts, which come first;
+- measure one homing switch: its body, its hole spacing and its lever, from the hinge end of the
+  body to the lever tip (§3.3, §6.8);
 - check that the laser receiver module fits the right gate post's 6.2 mm hole (never measured
   [Guessing]) and the laser the left post's 7.2 mm one;
 - count the balls in the MGN12 carriages before you slide them anywhere (§6.1).
@@ -573,7 +582,7 @@ part's volume. Fast printers (Bambu, MK4) take roughly half. [Guessing]
 |---|---:|---|---|---|---|---:|
 | `phase0_base` (128.0 cm³; reprint an older one: new ring seat) | 1 | PLA/PETG black | as exported (plate down) | 3 / 25 % | none | 7.1 h |
 | `phase0_tray` | 1 | PLA/PETG | as exported (ledges down) | 3 / 25 % | none | 2.8 h |
-| `phase0_top` (55.7 cm³, 8 mm thick; reprint an older one) | 1 | PLA/PETG | as exported (ring pocket up) | 3 / 25 % | none | 3.1 h |
+| `phase0_top` (75.7 cm³, 10.6 mm thick, ribbed ring pocket; reprint an older one) | 1 | PLA/PETG | as exported (ring pocket up) | 3 / 25 % | none | 4.2 h |
 | `phase0_occluder_mount` | 1 | PLA/PETG | as exported (flat on its beam) | 4 / 30 % | none | 0.8 h |
 | `head_foot` (31.0 cm³; Phase 0A, then the machine) | 1 | PETG | as exported (foot down) | 5 / 40 % | none | 1.7 h |
 | `station_mount` (65.0 cm³, 29 mm tall; reprint an older one: new ring seat) | 1 | PETG black | as exported (base plate down) | 3 / 25 % | none; the ribbon slot bridges | 3.6 h |
@@ -581,19 +590,21 @@ part's volume. Fast printers (Bambu, MK4) take roughly half. [Guessing]
 | `x_bumper_L` | 1 | PETG | as exported: beam face down | 4 / 40 % | none | 0.2 h |
 | `x_idler_mount` | 1 | PETG | as exported (foot down) | 5 / 40 % | none | 1 h |
 | `x_idler_slider` | 1 | PETG | as exported | 5 / 50 % | none | 0.3 h |
-| `x_bracket` | 1 | PETG | as exported: flat on its spine face | 6 / 50 % | none | 3.9 h |
+| `x_bracket` (70.7 cm³; reprint an older one: the finger off its left edge works the X home switch) | 1 | PETG | as exported: flat on its spine face | 6 / 50 % | none | 3.9 h |
 | `belt_clamp` | 2 | PETG | flat | 100 % | none | 0.1 h each |
 | `z_motor_mount` | 1 | PETG | as exported: motor face down, tab up | 5 / 40 % | none | 2.5 h |
 | `z_end_cap` | 1 | PETG | as exported (lips up) | 5 / 50 % | none | 0.5 h |
-| `z_plate` (with 2 × 2.5 mm pilots for the carry flag arm) | 1 | PETG | as exported: carriage face down, nut shelf up | 6 / 50 % | none | 2.3 h |
-| `camera_bracket` (16.9 cm³; reprint an older one: the lens moved 5 mm and the ring seat changed) | 1 | PETG matte black | as exported: shelf face down | 4 / 40 % | tree supports under the ring seat if your printer sags (it bridges about 30 mm between its 4 legs) | 0.9 h |
+| `z_plate` (40.9 cm³, with 2 × 2.5 mm pilots for the carry flag arm; reprint an older one: the 45° chamfer at its top right works the Z top switch, and it starts at the bed) | 1 | PETG | as exported: carriage face down, nut shelf up | 6 / 50 % | none | 2.3 h |
+| `camera_bracket` (17.3 cm³; reprint an older one: the ring seat now has three centring ribs) | 1 | PETG matte black | as exported: shelf face down | 4 / 40 % | tree supports under the ring seat if your printer sags (it bridges about 30 mm between its 4 legs) | 1.0 h |
 | `carry_sensor_mount` (6.2 cm³) | 1 | PETG | as exported: flat on its spine face | 4 / 40 % | none | 0.35 h |
 | `carry_flag_arm` (17.2 cm³) | 1 | PETG | as exported: on its bottom face | 4 / 40 % | none | 0.95 h |
+| `x_switch_mount` (6.8 cm³, new) | 1 | PETG | as exported: front plate down | 4 / 40 % | none | 0.4 h |
+| `z_switch_mount` (4.9 cm³, new) | 1 | PETG | as exported: spine plate down | 4 / 40 % | none (see the note) | 0.3 h |
 | `gate_post_L`, `gate_post_R` | 1 + 1 | PETG | as exported: upright on the foot, 10 mm brim (needs 230 mm Z) | 4 / 30 % | none upright; on its side: supports | 2.2 h each |
 | `drill_template` | 1 | PETG (or PLA) | as exported (plate down) | 4 walls, 50 %, bosses solid | none | 3.6 h |
 | `awl_adapter` | 1 | PETG | as exported | 100 % | none | 0.2 h |
 | `fill_gauge` | 2 | PLA | as exported (lying flat) | 3 / 20 % | none | 0.6 h each |
-| **Total** (768 cm³ in 25 prints) | | | | | | **≈ 43 h** (≈ 27 h after the Phase 0 prints) |
+| **Total** (801 cm³ in 27 prints) | | | | | | **≈ 44.5 h** (≈ 28 h after the Phase 0 prints) |
 
 **Notes**
 - **Gate posts:** slow down the last 50 mm of the upright print; a tall thin part wobbles. If your
@@ -601,8 +612,12 @@ part's volume. Fast printers (Bambu, MK4) take roughly half. [Guessing]
 - **`camera_bracket`:** print it shelf face down, as exported; the LED ring seat hangs between four
   legs and bridges about 30 mm. Use a brim.
 - **`station_mount`, `camera_bracket`, `phase0_base` and `phase0_top` changed** (the lens sits 5 mm
-  toward the label, and both LED ring seats are new): print them from the current
-  `cad/out/printed/`. [Certain, CAD export]
+  toward the label, and both LED ring seats are new), and so did **`x_bracket` and `z_plate`** (the
+  switch finger and chamfer): print them from the current `cad/out/printed/`. [Certain, CAD export]
+- **`z_switch_mount`:** where the shelf starts in front of the spine plate, a 3 × 11 mm strip of its
+  first layers prints over air and may droop. File that edge flat before fitting: the Z carriage
+  block passes 1.49 mm from the mount. Or add a support under that strip. [Certain, CAD: the
+  unsupported strip and the 1.49 mm; Likely that it droops]
 - **`head_foot`:** clear the 1.9 mm flag slot (in the two fins and through the foot) and the
   sensor post's board slots after printing. Use a junior hacksaw blade or a 1.5 mm needle file: a
   standard 12.7 mm hacksaw blade does not fit the slot in the foot. [Certain, CAD: that part of
@@ -618,13 +633,14 @@ gap 4] and took the others from datasheets you should check against your part:
 | Part | CAD value | Fits into |
 |---|---|---|
 | ELP camera board hole pattern | 32 × 32 mm, M2 [Guessing] | `camera_bracket`, `phase0_top` |
-| ELP board-to-lens-front length (board underside to the lens holder front) | 20 mm (`HEAD_LENS_PROJ`) [Guessing] | `camera_bracket` shelf height; the `phase0_top` standoffs (§1.5) |
+| ELP board-to-lens-front length (board underside to the lens holder front) | 20 mm (`HEAD_LENS_PROJ`) [Guessing] | `camera_bracket` shelf height; the `phase0_top` standoffs (§1.5), which need 10 mm or more |
 | ELP lens-holder footprint | 16 mm square (a 25 mm window passes it) [Guessing] | `camera_bracket`, `phase0_top` |
 | Optical endstop board | holes = the TCST2103's flange holes, 19 mm apart with the slot midway [Certain for the sensor, Vishay drawing]; header at the +Y end; **no component taller than 4 mm within 2 mm of the slot line** [Guessing] | `head_foot` sensor post (M3 slots, ± 4 mm) |
 | Second optical endstop board (carry-height sensor) | the same: holes 19 mm apart, header assumed at the +Y end [Guessing] | `carry_sensor_mount` (M3×10 heads in pockets on the spine side) |
-| Head LED ring OD, ID, thickness | modelled 40 × 30 × 5 mm [Likely OD, Guessing the rest]: a 41.0 mm bore with a 33 mm lip, so OD 41.0 mm or less and ID up to 37 mm; 5 mm thick or less (a thicker ring sits lower, and each mm takes 1 mm off the 3.75 mm barb clearance at full stroke) | `camera_bracket`, `phase0_top` (measure before printing `phase0_top`) |
+| Head LED ring OD, ID, thickness | modelled 40 × 30 × 5 mm [Likely OD, Guessing the rest]. The seat is a 42.8 mm bore with three centring ribs, printed to fit a 40.0 mm ring, and a 33 mm lip. It takes OD 39.5–42.5 mm: for a ring over 40, shave each rib by half of (OD − 40); for one over about 42.2 mm, also sand the bore, because printed holes come out a little small [Likely]. A ring under 40 sits up to 0.5 mm off-centre: centre it by eye (harmless [Certain, CAD]). ID about 24 mm (clear of the lens holder) up to OD − 3; 5 mm thick or less (a thicker ring sits lower, and each mm takes 1 mm off the 3.75 mm barb clearance at full stroke). [Certain, `checks.txt`: every head ring check passes at 39.5, 40 and 42.5 mm] | `camera_bracket`, `phase0_top` (measure before printing `phase0_top`) |
 | Station LED ring OD, ID | modelled 63 × 47 × 5 mm: a 64 mm bore on a shelf, so OD 59–63.5 mm (a 60 or a 63 mm ring) | `station_mount`, `phase0_base` (measure before printing `phase0_base`) |
 | Camera Module 3 holes | 21 × 12.5 mm, M2 | `station_mount`, `phase0_base` |
+| Homing switch | Omron SS-5GL size: body 19.8 × 10.2 × 6.4 mm; two 2.35 mm holes 9.5 ± 0.1 mm apart, the first 5.1 mm from the hinge end; a flat hinge lever that ends at the body's end, 20 mm from the hinge end [Certain, Omron SS datasheet; Likely for the BOM's 10-pack] | `x_switch_mount`, `z_switch_mount` (M2 slots); a lever longer than 23 mm is cut back (§6.8) |
 
 **Check on arrival, before you cut the flag** [Certain, SMC ZP catalog p.13-11-12 for
 `ZPT25UUK20-B5-A10`, unless marked]:
@@ -663,7 +679,11 @@ CadQuery), or drill new holes by hand.
   - the probe flag sliding freely in `head_foot`'s 1.9 mm guide slot, with the board off (§7.6);
   - the second endstop board's M3×10 heads in `carry_sensor_mount`'s pockets, and an M3×10 turning
     into each of the `z_plate`'s two 2.5 mm pilots for the flag arm;
-  - both LED rings in their seats;
+  - both LED rings in their seats: the head ring presses in between the three ribs of
+    `camera_bracket`'s seat (shave them if it does not go in, §3.3);
+  - each homing switch on its two M2×12 and nuts in its mount, sliding the full ±1 mm of the
+    slots (`x_switch_mount`: heads on the mount's outer side, nuts on the switch;
+    `z_switch_mount`: heads under the shelf, nuts on top);
   - the `x_idler_slider` sliding between the `x_idler_mount` cheeks, its M3 nut in the slot;
   - the M3 nuts in the `x_bracket` tab's nut traps, under the `belt_clamp` caps;
   - an M3 set screw in each gate post (2.5 mm hole: let it form its own thread, or tap M3).
@@ -689,7 +709,7 @@ From `cad/out/cut_list.csv` [Certain]. Misumi cuts to ±0.5 mm with square ends 
 | 1 mm aluminium sheet | probe flag blank, cut to `cad/out/probe_flag_blank.svg` (§7.6) | 24.4 × 55 | 1 |
 | 1 mm aluminium sheet | carry flag, flat, two 3.4 mm holes 15.9 mm from the inner edge, 6 and 18 mm below the top edge (§7.4a) | 19.9 × 36 | 1 |
 | 2020 | optional rear brace stock (§6.7) | 600 | 1 |
-| 5/16 in (7.94 mm) hardwood dowel (`cut_list.csv` still says 8 mm) | guide rod | 236 | 82 |
+| 5/16 in (7.94 mm) hardwood dowel | guide rod | 236 | 82 |
 | 18 mm (3/4 in, 17.9 mm actual) plywood | bed | 1416 × 289.5 | 1 |
 
 ### 4.2 Where everything sits
@@ -718,7 +738,10 @@ beam sits **on top of** the uprights, flush with their outer faces.
 **Beam to upright (×2):**
 - two 4040 L brackets in the inside corner, on the upright's inner face and the beam's bottom
   face, one in each slot pair;
-- one flat L joining plate on the back face, across the upright and the beam.
+- one flat L joining plate on the back face, across the upright and the beam. **At the left
+  end, put the plate's beam leg on the beam's upper rear slot:** the X home switch lead rises
+  behind the beam into the lower rear slot just right of the upright, at X ≈ −24 (§6.8). [Guessing:
+  the plate is not in the CAD]
 - **No brackets on the front faces.** The X rail ends only 18 mm from each upright (BOM.md open gap 1),
   and at the right end the `x_motor_mount` plate covers the beam's front face (§6.4).
 
@@ -751,8 +774,8 @@ beam sits **on top of** the uprights, flush with their outer faces.
 ### 4.4 Assembly steps (4–6 h, with the instructor for squaring)
 
 1. Slide T-nuts into every slot you will need **before** you close any joint. Drop-in T-nuts can
-   be added later, but sliding ones can't. Count them per the BOM: about 124 M5 here (126 in all:
-   the last 2 go into the Z spine in §7.1) and 65 M3.
+   be added later, but sliding ones can't. Count them per the BOM: about 126 M5 here (130 in all:
+   the last 4 go into the Z spine in §7.1) and 65 M3.
 2. Lay both base rails on a flat bench, 194.5 mm apart centre to centre (Y = −67.5 and 127).
 3. Bed part A (§5A) goes on now, because the upright brackets bolt through it.
 4. Stand the uprights in the notches on the back rail. Brackets snug, not tight.
@@ -1036,16 +1059,69 @@ midspan from the head's 127 mm overhang. [Guessing in DESIGN] Measure it once th
   - Keep it clear of the drag chain and of the station camera ribbon (X ≈ 686).
   - Repeat the measurement.
 
-**6.8 X home switch** (WIRING.md §7). **The CAD has no mount for it** [Certain: no switch part in
-`cad/`, none in `cad/out/printed/`]. Make one (instructor: helpful) [Guessing on the exact place]:
-- Take a 2020 corner bracket from the BOM's 20-pack. Fix the switch to one leg with two M2 or M3
-  screws and nuts from the kits (drill the leg to the switch's hole spacing).
-- Bolt the other leg to the beam's left end with an M5×10 into a T-nut, for example in the lower
-  front slot next to `x_bumper_L`, so the moving `x_bracket` presses the lever from the right.
-- Slide the bracket along the slot to set the click point, then tighten.
-- Check by hand over the whole X travel that nothing else (belt, cables, drag chain) touches it.
-- It must click when the cup axis is at **X ≈ 19 mm**, about 23 mm left of pocket 0's centre,
-  **± 2 mm**.
+**6.8 X home switch** (WIRING.md §7). [Certain, CAD `x_switch_mount` and `checks.txt`, unless
+tagged]
+
+![Home switches: the X switch at its click (left), the Z switch at its click (right)](img/home_switches.png)
+
+**How both switches work.** A striker slides *across* the lever: first a 45° lead-in presses it
+down, then a flat holds it there however far the axis runs on. The hard stops are 4 mm past each
+click, and the switch's lever can only travel 1.2 mm past its click point (Omron SS-5GL, OT min
+1.2 mm), so a striker that pushed the lever head-on would make the switch the stop and break it.
+The flat holds the lever 0.6 mm past its click point, measured at the lever tip. [Certain, Omron
+SS datasheet; CAD]
+
+**Before you fit either switch** (both are from the BOM's 10-pack):
+1. **Measure the lever** from the hinge end of the switch body to the lever tip. **Up to 23 mm:**
+   fit it as it is. **Longer:** cut it flush with the far end of the body, 20 mm from the hinge
+   end, with side cutters, then file the cut smooth. [Certain, `checks.txt`: the X mount takes a
+   lever up to 27.24 mm, the Z mount up to 24.19 mm, against a 23 mm limit; Guessing which lever
+   the pack has: long hinge levers often end 25–28 mm out] A longer lever reaches the carry flag
+   (X) or the square part of the `z_plate` top (Z) and breaks on the first homing. A roller lever
+   does not fit these strikers.
+2. **Bench test one switch, about 100 passes.** The 45° lead-in pushes the lever sideways about as
+   hard as it pushes it down, and the datasheet rates only a straight push. [Guessing that the
+   lever takes it] Fit the switch in `x_switch_mount` on the bench and slide the `x_bracket`'s
+   finger across the lever by hand about 100 times. The click must still come at the same place,
+   and the lever must not wobble sideways. If it fails, stop and ask: the fallback (a roller lever
+   on a cam that runs along the lever) is not in the CAD.
+
+**How the X switch sits.** `x_switch_mount` goes under the beam's left end, on the front faces of
+the beam and the left upright, left of `x_bumper_L`. The switch hangs on its side plate, lever up,
+hinge end toward the back. A 17.4 mm finger on the `x_bracket`'s left edge presses it as the
+carriage moves left. It clicks at cup X 19.00, is held 0.6 mm past the click point from 18.7 down
+to the left hard stop at 15, and the lever is free again above cup X 24. Everything stays behind
+Y 84: in front of that, the carry flag and its arm sweep the whole Z travel at the left end.
+
+**Fit it** (instructor: helpful):
+1. Put 2 slot-6 M5 T-nuts in the beam's **lower front** slot, left of `x_bumper_L`.
+2. Fix `x_switch_mount` with **2 × M5×10 button heads** into them (at about X −48.5 and −37), its
+   front plate flat on the beam and the upright. Snug, not tight.
+3. Fit the switch to the side plate with **2 × M2×12** through the ±1 mm slots: heads on the
+   mount's outer (left) side, nuts on the switch. Snug.
+4. **Set the click depth, at the bumper.** Motors off, push the carriage by hand until the
+   `x_bracket` rests on `x_bumper_L` (cup X 15). Slide the switch up in its slots until it clicks,
+   then **about 0.3 mm more**, and tighten the M2s.
+   - **Why 0.3, not 0.6:** the finger presses the lever about halfway along, so the lever tip moves
+     about twice as far as the switch body (1.87 times). 0.3 mm at the body is the CAD's 0.6 mm at
+     the tip. A 0.6 mm body slide would put the tip 1.1 mm past the click point, almost at its
+     limit. [Certain, CAD lever geometry]
+   - Set the 0.3 mm with calipers (the depth rod, from the switch body to an edge of the mount),
+     not by eye.
+   - **Check:** at the bumper the lever must still give a little when you press it with a finger.
+5. **Set the click point along X.** Move the carriage right, then push it slowly left, and slide
+   the mount along its slot until the click comes with a **4 ± 2 mm gap** between the `x_bracket`
+   and `x_bumper_L` (cup X 19 ± 2, about 23 mm left of pocket 0's centre). The mount slides about
+   ±3 mm. Tighten the M5s with the carriage at cup X 60 or more: at the bumper the carry flag
+   blocks the hex key. [Certain, CAD]
+6. **Lead (W52, WIRING.md §7):** from the terminals take the 2-core straight down to about 50 mm
+   below the beam (below the corner brackets), back under the beam, then up behind it into the
+   beam's **lower rear** slot. Keep the left joining plate off that spot (§4.3). [Certain, CAD
+   lead path; Guessing on the brackets and plate, which are not in the CAD]
+7. Check by hand over the whole X travel that the finger passes everything but the lever, and
+   that nothing else (belt, cables, drag chain) touches the switch. [Certain, `checks.txt`: the
+   finger clears every static part by 1.5 mm, and the moving parts clear the switch by 1.88 mm]
+
 - It must click at least 2 mm before the `x_bracket` reaches `x_bumper_L` at X 15 (§6.4). The
   carriage still has 2.3 mm of rail at the bumper. [Certain, `checks.txt`]
 
@@ -1071,7 +1147,9 @@ All heights below are from `cad/layout.py` and `cad/model.py`. [Certain]
   fixed to the X carriage stays at least 5 mm above a held slab even at the Z top hard stop.
   [Certain, `checks.txt`]
 - Drop two slot-6 M5 T-nuts into the spine's **left (−X) face slot** now, for the carry-height
-  sensor's mount (§7.4a).
+  sensor's mount (§7.4a), and two into its **right (+X) face slot**, for the Z switch mount
+  (§7.4). Those are the slots in the spine's narrow side faces, not the front slots: the front
+  right slot holds the Z rail.
 
 **7.2 Z rail.**
 - MGN12 330 mm in the spine's right slot, 13 × M3×10 into T-nuts. Its bottom is 1 mm above the
@@ -1099,17 +1177,36 @@ All heights below are from `cad/layout.py` and `cad/model.py`. [Certain]
    hand, then tighten. The nut then centres itself. The screw runs 8 mm clear of the plate face.
 - **The screw must not whip or push the carriage sideways at any height.**
 
-**7.4 Z top switch** (WIRING.md §7). **The CAD has no mount for it either** [Certain]. Make one as in
-§6.8 [Guessing on the exact place]:
-- The switch on a 2020 corner bracket, the bracket on an M5×10 into a T-nut in a free spine slot
-  near the top, so the rising `z_plate` presses the lever 4 mm before it meets the
-  `z_motor_mount`.
-- Keep it out of the Z carriage block's path: at the top hard stop only 3.6 mm of the block is
-  still on the rail [Certain, `checks.txt`], so the rest runs past the rail's top end, in front of
-  the right front slot. Keep it also clear of the `z_motor_mount` tab (left front slot, 15 mm
-  below the top) and of the carry-height sensor and its flag (left face). Turn the lead screw by
-  hand through the top of the travel to check that only the `z_plate` touches it. Your
-  instructor's eye helps here.
+**7.4 Z top switch** (WIRING.md §7). [Certain, CAD `z_switch_mount` and `checks.txt`, unless
+tagged] The picture is in §6.8. Measure (and if needed cut) the lever first, as in §6.8.
+
+**How it sits.** `z_switch_mount` goes on the Z spine's right (+X) face near the top, fixed to the
+X carriage. The switch lies on its 3 mm shelf, to the right of the Z carriage: lever toward the
+front (the `z_plate`), hinge end to the right. The `z_plate` has a 45° chamfer, 7.5 mm deep, along
+its top back edge from X 20 to its right end (X 40 from the cup axis). As the head rises, the
+chamfer slides across the lever and the plate's back face holds it. It clicks at c = 258.00, is
+held 0.6 mm past the click point from 258.3 up to the top hard stop at 262, and the lever is free
+again below c = 253.
+
+**Fit it:**
+1. Use the two T-nuts in the spine's right-face slot (§7.1). Fix `z_switch_mount` with
+   **2 × M5×10 button heads**, its plate flat on the spine. Snug, not tight.
+2. Lay the switch on the shelf and fix it with **2 × M2×12** up from under the shelf through the
+   ±1 mm slots, nuts on top. Snug.
+3. **Set the click depth, at the top stop.** Motors off, turn the lead screw by hand until the
+   `z_plate` meets the `z_motor_mount` (c = 262). Slide the switch toward the `z_plate` in its
+   slots until it clicks, then **about 0.3 mm more** (calipers, as in §6.8 step 4), and tighten
+   the M2s. At the top stop the lever must still give a little.
+4. **Set the click height.** Turn the screw down about 10 mm, until the lever is free, then slowly
+   up, and slide the mount in its slot until it clicks with the `z_plate` top **4 ± 2 mm below the
+   `z_motor_mount`** (c = 258 ± 2). The mount slides about ±3 mm; upward, the M2 nuts and screw tips meet the
+   `z_motor_mount` at about +3.5 mm [Certain, `checks.txt`: 3.58 mm clear]. Tighten the M5s.
+5. **Lead:** cores 4 and 5 of the 8-core, back past the spine, then up behind the `z_motor_mount`
+   to the spine top, where the 8-core's jacket is opened (WIRING.md §11).
+6. Turn the lead screw by hand through the whole travel. Only the `z_plate`'s chamfer and back
+   face may touch the lever, and the Z carriage block passes the mount (1.49 mm in the CAD, at
+   c ≈ 260; file the strip under the shelf flat first, §3.2). [Certain, `checks.txt`]
+
 - It must click at c ≈ 258 mm: the cup face 258 above the pad top, ± 2 mm. At that point the
   `z_plate` top is still 4 mm below the `z_motor_mount`, which is the top hard stop at c = 262.
 
@@ -1284,10 +1381,13 @@ when you push the cup up by hand, and release when you let go.
   the buffer nuts (§7.5 step 5).
 - Fit the ELP board on the shelf (4 × M2 + nuts). The shelf height assumes a 20 mm
   board-to-lens-front length (§3.3).
-- **Head LED ring:** push the 40 mm ring up into the seat around the lens until it sits against
-  the lip, LEDs down, its pads and leads through the notch in the lip. Fix it with three dots of
-  glue: the bore alone does not hold it. Its LED face then sits 1 mm under the lens front, and the
-  barb elbow clears it by 3.75 mm at the full 20 mm stroke. [Certain, `checks.txt`]
+- **Head LED ring:** push the ring up into the seat around the lens, between its three centring
+  ribs, until it sits against the lip, LEDs down, its pads and leads through the notch in the lip.
+  The ribs fit a 40.0 mm ring; for a bigger one (up to 42.5 mm), shave each rib by half of
+  (OD − 40) first (§3.3). Centre a smaller one by eye. Fix it with three dots of glue: the bore
+  alone does not hold it. Its LED face then sits 1 mm under the lens front, and the barb elbow
+  clears it by 3.75 mm at the full 20 mm stroke. [Certain, `checks.txt`, for rings of 39.5, 40 and
+  42.5 mm]
 - **The lens looks straight down, 5 mm toward the label from the cup axis.** The bracket sets
   that; there is no adjustment. [Certain, CAD `HEAD_CAM_DY`] With the lens on the cup axis, the
   vacuum elbow 23 mm under it would hide the card window the learned face-down check needs; offset,
@@ -1300,7 +1400,9 @@ when you push the cup up by hand, and release when you let go.
   on the machine (§12.3) looks over the empty pocket 12 first and says `camera aim: OK` or `FAIL`,
   and every run in learned mode looks again over the first empty pocket. A tilt toward the cup
   shows the cup pad or the foot there: the learned check then accepts nothing and learns nothing
-  that run, and every slab without a back-label code stops for you.
+  that run, and every slab without a back-label code stops for you. A resume whose survey finds no
+  empty pocket accepts nothing until it has emptied its first source pocket and looked over that
+  (OPERATING.md §8), so a camera knocked while the run was stopped is still seen.
 - **What it does not see:** a head part as dark as the pad (no edge against it), a tilt away from
   the cup, and a roll along the row. On a CGC slab pushed into a pocket corner a tilt of about
   0.01° toward the label already puts more than 2% of the window on the holder [Likely, CAD
@@ -1560,11 +1662,13 @@ calibrate commands write there too. A misspelt key is refused when the config lo
 
 ```toml
 serial_port = "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0"   # stable name for the Rodent's CH340 (CONTRACT)
-psa_cert_digits = [8, 9]     # the PSA cert lengths Phase 0 saw (§1.8); another length becomes needs_review
+psa_cert_digits = [7, 8, 9]  # the PSA cert lengths Phase 0 saw, without leading zeros (§1.8); another length becomes
+                             # needs_review. Keep 7 if you have pre-2016 slabs (a cert printed 02074012 has 7 digits)
 buffer_trip_mm = 2.0         # your measured trip travel (§7.6)
 buffer_trip_tol_mm = 0.1     # once it is measured
 # lid_switch = true          # only if you fitted the optional lid switch on GPIO 25
-# custom_regex = "..."       # only if Phase 0 found a prefix/suffix around the cert (one capture group)
+# custom_regex = "..."       # only if Phase 0 found a prefix/suffix around the cert (one capture group). It turns off
+                             # the 8-digit ITF rule: every pre-2016 PSA slab is then needs_review
 # cam_head: see §12.3 (the whole table must be given if you change any part of it)
 # face_down_check = "stop"   # "learned" (default) | "stop" (back-label codes only) | "off" (no check, like --all-face-down)
 # face_down_threshold = 0.56         # written by phase0 --face-up 15 --save on a GO (never below 0.55) ...
@@ -1645,7 +1749,7 @@ python -m slabscan calibrate x
 
 1. Centre the awl over pocket 0's centre: first by eye at the safe height, `ok`.
 2. Then low, just above the pad: `z -10`, `z -1`, and so on. Downward moves stop on contact.
-   Centre it exactly on the tape cross (`calibrate x` calls it "the pocket centre mark"), `ok`.
+   Centre it exactly on the tape cross, `ok`.
 3. Repeat for pocket 12.
 - It writes `offset_x` and prints the distance error across the row.
 
@@ -1792,9 +1896,10 @@ python -m tools.bench_tests powercut 300   # hold a slab at carry height and log
 
 **Pass:**
 - 100/100 transfers with no unexplained stop;
-- every PSA/CGC slab `ok` with the **right** cert (check `certs.txt` against your list), except
-  pre-2016 PSA slabs: their only code is the front ITF, which never confirms a grader, so they are
-  `needs_review` ("grader PSA not confirmed …") in the output stack. Check their cert by hand;
+- every PSA/CGC slab `ok` with the **right** cert (check `certs.txt` against your list). A
+  pre-2016 PSA slab (its only code is the front ITF) is `ok` when OCR of its printed number agrees
+  (note "… grader PSA from its 8-digit ITF"). When OCR reads nothing or other digits it is
+  `needs_review` in the output stack: check its cert by hand;
 - BGS/TAG lands in pocket 12 without rubbing on the rods: BGS labels carry no code, so as `no_read`
   or as an OCR-only `needs_review` (`other_grader` only if a BGS/TAG URL is read);
 - `count check: every stack matches` in every summary;
@@ -2044,8 +2149,10 @@ clear on 5 proven slabs: the start line reads `face-down check: learned (thresho
      face-down check until the learned check is active: check each one and
      `resume batches/<id> --face-down-ok`. Use `--all-face-down` only once you trust your own
      loading.
-   - Every pre-2016 PSA slab comes out `needs_review` ("grader PSA not confirmed …") and stays in
-     the output stack: type its cert in yourself after checking the label.
+   - A pre-2016 PSA slab is `ok` only when OCR of its printed number agrees with its front ITF.
+     When OCR reads nothing or other digits it is `needs_review` and stays in the output stack:
+     type its cert in yourself after checking the label. A BGS or SGC slab that comes out
+     `ok PSA` means the ITF rule is wrong for them (§15).
    - If the learned check is active (the start line says `face-down check: learned`), open the
      back photo of **every** `learned(...)` row in `report.html` (bold in the Face-down column) in
      the first batches, and the `face_down_learned` lines in `journal.jsonl`. A wrong one:
@@ -2097,8 +2204,8 @@ clear on 5 proven slabs: the start line reads `face-down check: learned (thresho
 | "Another slabscan process is using the machine" | The boot web service, or a command in another window | `sudo systemctl stop slabrail-web`, or close the other window |
 | Station camera not found | Ribbon backwards or not latched; wrong port | Power off, re-seat per the Raspberry Pi camera guide, CAM/DISP 0 |
 | Labels read on the bench but fail on the machine | Focus moved; ring not on; glare from room lights | `focus head` / `focus station --save`; fit the light roof |
-| Every pre-2016 PSA label is `needs_review` "… grader PSA not confirmed …" | Expected: the front ITF is its only code, and OCR confirms digits, never a grader | Check each one by hand. OPERATING.md §5.2. |
-| Many `needs_review` "one printed barcode only (no QR) - confirm" on pre-2016 labels | Their front barcode is their only code, and OCR of the printed digits did not even confirm the digits | Check the `tesseract` line of `selftest`, `focus station --save`, the station ring. OPERATING.md §8.3. |
+| Many pre-2016 PSA labels `needs_review` "one printed barcode only (no QR) - confirm" or "barcode N but OCR read M" | Their front ITF is their only code, and it is `ok` only when OCR of the printed number agrees. OCR read nothing, or other digits | Check each one by hand. Then the `tesseract` line of `selftest`, `focus station --save`, the station ring. If you set `custom_regex` or `psa_cert_digits` (without 7), see §11.5. OPERATING.md §8.3. |
+| A BGS, SGC or other non-PSA slab comes out `ok PSA` | The 8-digit ITF rule assumes only PSA prints an 8-digit ITF. BGS and SGC are reported to print some barcode or QR of unknown type [Likely]; none in the real set did [Certain, for that set] | Put your non-PSA slabs through Phase 0 (or `python -m tools.real_eval --phase0`) before trusting `ok PSA` on slabs with no QR. An `ok PSA` on a BGS or SGC slab means the rule is wrong for them: tell the software owner. OPERATING.md §5.2. |
 | Overfill beam reads blocked with nothing there | Misaligned laser, receiver trimmer, a receiver wire cut (reads blocked by design) | §12.5; WIRING.md §8 |
 | Overfill beam reads clear when blocked | Room light swamps the receiver, or its GND wire is cut | Trimmer under room light; check the GND wire; light roof |
 | Controller lost (E-stop) and resume says "still not answering" | The CH340 is slow to come back | Wait 10 s and press resume again; check the USB cable and the 24 V supply |
@@ -2113,12 +2220,15 @@ clear on 5 proven slabs: the start line reads `face-down check: learned (thresho
 ## Sources
 
 - **Repository files (primary for every [Certain] tag above):**
-  - `cad/layout.py`, `cad/model.py`, `cad/out/cut_list.csv`, `cad/out/checks.txt` (152/152 checks
+  - `cad/layout.py`, `cad/model.py`, `cad/out/cut_list.csv`, `cad/out/checks.txt` (177/177 checks
     passed, re-run on 23 Oct 2026), `cad/out/printed/print_list.json`;
   - `software/slabscan/*.py`, `software/tools/phase0.py`, `software/tools/real_eval.py`,
     `software/config/machine.toml`;
   - [CONTRACT.md](CONTRACT.md), [WIRING.md](WIRING.md), [FIRMWARE.md](FIRMWARE.md),
     [BOM.md](BOM.md), [DESIGN.md](DESIGN.md).
+- **Homing switch body, holes, lever and travel (SS-5GL: OP 8.8 ± 0.8 mm, FP max 13.6 mm, OT min
+  1.2 mm, holes 2.35 mm at 9.5 ± 0.1 mm):** Omron SS subminiature basic switch datasheet
+  (`en-ss.pdf`)
 - **Prusa PETG settings and the smooth-PEI warning:**
   [help.prusa3d.com/article/petg_2059](https://help.prusa3d.com/en/article/petg_2059)
 - **TCST2103 dimensions (slot 3.1 × 7.7 mm, axis 2.6 mm, flange holes 19 mm):**

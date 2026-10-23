@@ -55,9 +55,10 @@ def test_small_batch_every_slab_moved_and_read(tmp_path):
 
 
 def test_old_labels_go_to_station_and_still_read(tmp_path):
-    """A pre-2016 label's only code is its front ITF. OCR of the printed digits can confirm the number, never the
-    grader (another grader's 8-digit ITF would read the same), so such a slab is needs_review with grader PSA, on the
-    output stack: never 'ok', and never sent to the exception pocket for that alone."""
+    """A pre-2016 label's only code is its front ITF (8 digits). OCR of the printed number confirms its digits, and an
+    8-digit ITF so confirmed names PSA (round 5: in the real set only PSA prints ITF), so the slab is 'ok PSA'. Where
+    OCR reads nothing or other digits it stays needs_review with grader PSA, on the output stack: never sent to the
+    exception pocket for that alone."""
     cfg = _cfg(face_down_check="off")  # old labels have no back QR: the face-down check would stop on each
     stacks = make_batch(cfg, per_pocket=3, seed=5, eras=(0.4, 0.3, 0.3))
     w, r, summary = _run(tmp_path, cfg, stacks)
@@ -67,10 +68,14 @@ def test_old_labels_go_to_station_and_still_read(tmp_path):
     truth = {s.cert.lstrip("0"): s for v in stacks.values() for s in v}
     for row in rows:
         if row["status"] == "ok":
-            assert row["cert"] in truth and truth[row["cert"]].era != "old"
+            assert row["cert"] in truth
     old = [row for row in rows if row["cert"] in truth and truth[row["cert"]].era == "old"]
-    assert old and all(row["status"] == "needs_review" and row["grader"] == "PSA" and row["out_pocket"] != str(cfg.exceptions.index) for row in old)
-    assert sum("grader PSA not confirmed" in row["note"] for row in old) >= len(old) // 2  # the others: OCR read other digits
+    assert old and all(row["status"] in ("ok", "needs_review") and row["grader"] == "PSA" and row["out_pocket"] != str(cfg.exceptions.index) for row in old)
+    ok_old = [row for row in old if row["status"] == "ok"]
+    assert len(ok_old) >= len(old) // 2  # the others: OCR read nothing or other digits
+    assert all(row["sources"] == "front_barcode+ocr" and "barcode confirmed by OCR" in row["note"] and "grader PSA from its 8-digit ITF" in row["note"]
+               for row in ok_old)
+    assert not any("grader PSA not confirmed" in row["note"] for row in old)
     newer = [row for row in rows if row not in old]
     assert sum(row["status"] == "ok" for row in newer) >= 0.8 * len(newer)
 

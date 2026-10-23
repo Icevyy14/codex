@@ -16,12 +16,17 @@ payload strings are in tests/test_real_payloads.py). What each label carries:
 The PSA ITF payload is always 8 digits, the cert zero-padded (7- and 8-digit certs; 9-digit certs never use ITF), so
 there is nothing to learn about it, and an ITF read of any other length is a misread (glare cuts ITF short: a real
 '289412' was read from 28941258). Payloads are typed by symbology AND length; a CGC cert keeps all its digits (13-digit
-CGC certs exist). ITF and Code128 reads are 1D: one printed symbol can be misread, so a 1D-only 'ok' needs two printed
-symbols (back + front label) or OCR of the printed digits to agree. A QR carries its own error correction. OCR finds a
-digit run, not a grader: an OCR-only number is never 'ok' and goes to the exception pocket. A bare number's grader is a
-guess from symbology and length (another grader's barcode of the same length would pass), so an 'ok' also needs a code
-that names the grader (a cert URL) or two printed symbols in its format; OCR agreeing confirms the digits only.
-Every decoded payload goes through ``parse_payload``.
+CGC certs exist). A PSA Code128 is 8 or 9 digits and a 10-digit CGC Code128 never starts with 0 (every real one); a
+Code128 outside those formats is not typed (a BGS cert like 0019865140, a 7-digit number). ITF and Code128 reads are 1D:
+one printed symbol can be misread, so a 1D-only 'ok' needs two printed symbols (back + front label) or OCR of the
+printed digits to agree. A QR carries its own error correction. OCR finds a digit run, not a grader: an OCR-only number
+is never 'ok' and goes to the exception pocket. A bare number's grader is a guess from symbology and length (another
+grader's barcode of the same length would pass), so an 'ok' also needs a code that names the grader (a cert URL), two
+printed symbols in its format, or the PSA ITF rule: an 8-digit ITF names PSA once OCR of the printed number confirms
+its digits (``psa_itf_confirmed``). In the real set ITF is printed only on PSA labels (CGC uses Code128; BGS and SGC
+print no code), and it is the only code of a pre-2016 PSA label. A code in no grader's format (bare digits in a QR or
+another symbology) never confirms a grader, not even beside an ITF. Other OCR agreement confirms the digits only. Every
+decoded payload goes through ``parse_payload``.
 """
 
 from __future__ import annotations
@@ -51,8 +56,10 @@ _OTHER_URLS = [  # other graders' cert URLs: their slabs go to the exception poc
 _KEYED_CERT_RE = re.compile(r"cert(?:ificate)?(?:\s*(?:no\.?|number|#))?\s*[/=#:]?\s*(\d{%d,%d})\b" % (MIN_DIGITS, MAX_DIGITS + 1), re.I)
 _PSA_ITF_RE = re.compile(r"^\d{8}$")  # the cert zero-padded to 8 digits; anything else is a misread
 _CGC_OG_C128_RE = re.compile(r"^\d{16,18}(\d{10})$")  # CGC 2020-23 back: 26-28 digits, the cert is the last 10
-_CGC_C128_RE = re.compile(r"^(?:140\d{10}|\d{10})$")  # CGC 2023+ and Authentic front: the cert itself
-_PSA_C128_RE = re.compile(r"^\d{7,9}$")  # PSA current labels, front and back: the cert itself
+# CGC 2023+ and Authentic front: the cert itself. No real CGC cert starts with 0; a BGS cert does (0019865140).
+_CGC_C128_RE = re.compile(r"^(?:140\d{10}|[1-9]\d{9})$")
+# PSA current labels, front and back: the cert itself, 8 or 9 digits on every real one. A 7-digit Code128 is not PSA's.
+_PSA_C128_RE = re.compile(r"^\d{8,9}$")
 _BARE_DIGITS_RE = re.compile(r"^\d{%d,%d}$" % (RAW_MIN_DIGITS, MAX_DIGITS))
 OCR_TOKEN_RE = re.compile(r"(?<!\d)(?:140\d{10}|\d{8,10})(?!\d)")  # PSA 8-9 digits, CGC 10 or 140 + 10
 
@@ -161,7 +168,7 @@ def parse_payload(payload: str, symbology: str = "", custom_regex: str | None = 
         return Parsed("PSA", c, None, "psa_itf") if c else None
     if symbology == "Code128":
         if not _PSA_C128_RE.match(compact):
-            return None
+            return None  # not a PSA or CGC Code128 format (a 7-digit number, a 10-digit one starting with 0): not typed
         c = _strip(compact)
         return Parsed("PSA", c, None, "psa_c128") if c else None
     if not _BARE_DIGITS_RE.match(compact):
@@ -313,18 +320,36 @@ ACCEPTED_GRADERS = ("PSA", "CGC")  # read and stacked normally; others go to the
 NAMED_KINDS = {"psa_qr", "psa_url", "cgc_qr", "cgc_qr_nograde", "cgc_auth_qr", "cgc_url", "bgs_url", "sgc_url", "tag_url"}
 
 
+def _kind(r: CodeRead) -> str:
+    """The parse rule of a read: its kind, or (a read built without one) its payload parsed again. A payload the
+    built-in rules type differently than the read says ("custom") was typed by the custom_regex."""
+    if r.kind:
+        return r.kind
+    p = parse_payload(r.raw, r.symbology)
+    return p.kind if p is not None and p.grader == r.grader else "custom"
+
+
 def names_grader(r: CodeRead) -> bool:
     """Does this read's payload itself name its grader (NAMED_KINDS)? A read without a kind is parsed again. One that
     only the custom_regex types counts as naming it if it is a 2D code (as before), never if it is a 1D barcode."""
     if r.source == "ocr":
         return False
-    kind = r.kind
-    if not kind:
-        p = parse_payload(r.raw, r.symbology)
-        kind = p.kind if p is not None and p.grader == r.grader else "custom"
+    kind = _kind(r)
     if kind == "custom":
         return r.symbology in TWO_D
     return kind in NAMED_KINDS
+
+
+def psa_itf_confirmed(reads: list[CodeRead], cert: str) -> bool:
+    """The PSA ITF rule: an 8-digit ITF (kind psa_itf) of ``cert`` names grader PSA once OCR of the printed number
+    confirms its digits. In the real set ITF is printed only on PSA labels (CGC uses Code128; BGS and SGC print no
+    code), so a confirmed ITF-8 is PSA's. A second printed symbol does not count here: one in PSA's format already makes
+    two printed symbols (consensus), one in another grader's format is a conflict, and one in no grader's format (bare
+    digits in a QR, EAN-8, Code39, a keyed 'Cert #') is not on any PSA label, so it is no evidence for PSA. An ITF read
+    alone confirms nothing (one 1D symbol can be misread, and repeated reads of it are not independent); an ITF of
+    another length never parses (a misread); OCR alone names no grader."""
+    itf = [r for r in reads if r.source != "ocr" and r.symbology == "ITF" and r.cert == cert and r.grader == "PSA" and _kind(r) == "psa_itf"]
+    return bool(itf) and any(r.source == "ocr" and r.cert == cert for r in reads)
 
 
 def _inside(p: tuple, q: tuple) -> bool:
@@ -421,9 +446,12 @@ def consensus(reads: list[CodeRead], itf: ItfModel | None = None, min_sources: i
     * 1D only (ITF, Code128; any grader)               -> ok only with >= min_sources DIFFERENT printed symbols (back +
       front label barcode) or OCR of the printed digits agreeing. Repeated reads of one symbol (two frames from one
       pose, overlapping tiles) are not independent and count once. OCR that disagrees -> needs_review.
-    * the grader, on every 'ok': a code must name it (a cert URL, NAMED_KINDS), or two DIFFERENT printed symbols must
-      carry its format. A bare number's grader comes from its symbology and length only, and OCR confirms digits,
-      never a grader: one barcode in a grader's format (even with OCR agreeing) -> needs_review, grader kept
+    * the grader, on every 'ok': a code must name it (a cert URL, NAMED_KINDS), two DIFFERENT printed symbols must
+      carry its format, or an 8-digit ITF must have its digits confirmed by OCR (PSA: psa_itf_confirmed; note
+      "grader PSA from its 8-digit ITF"). A code in no grader's format (bare digits) never confirms a grader.
+      Otherwise a bare number's grader comes from its symbology and length only, and OCR confirms its digits, not its
+      grader: one Code128 in a grader's format (even with OCR agreeing) -> needs_review, grader kept. An ITF-8 alone
+      stays needs_review (one printed barcode only)
     * a code with no grader evidence (bare digits)     -> needs_review, grader unknown
     * only OCR                                          -> needs_review, grader unknown (the runner sends it to the
       exception pocket: OCR finds a digit run, not a grader, and it reads card numbers too)
@@ -460,18 +488,22 @@ def consensus(reads: list[CodeRead], itf: ItfModel | None = None, min_sources: i
     raw = (two_d or machine)[0].raw
     if grader not in accepted and grader != "unknown":
         return Verdict("other_grader", cert, srt(machine), note(f"{grader} slab"), grader=grader, raw=raw)
-    # no code names the grader and only one printed symbol has its format: the grader is a guess from a length
-    by_length = (grader != "unknown" and not any(names_grader(r) for r in machine if r.grader == grader)
-                 and len({r.source for r in machine if r.grader == grader}) < 2)
+    # no code names the grader and only one printed symbol has its format: the grader is a guess from a length. The
+    # exception: a PSA ITF-8 whose digits OCR confirms names PSA (psa_itf_confirmed).
+    named = any(names_grader(r) for r in machine if r.grader == grader)
+    two_symbols = len({r.source for r in machine if r.grader == grader}) >= 2
+    by_itf = grader == "PSA" and not named and not two_symbols and psa_itf_confirmed(reads, cert)
+    by_length = grader != "unknown" and not (named or two_symbols or by_itf)
+    itf_note = "grader PSA from its 8-digit ITF" if by_itf else ""
     guess = (f"grader {grader} not confirmed: no code names it and only one printed barcode has its format (OCR confirms "
-             f"digits, never a grader) - check it is a {grader} slab")
+             f"its digits, not its grader) - check it is a {grader} slab")
     if two_d:
         itf.observe(cert, [r for r in machine if r.symbology == "ITF"])
         if grader == "unknown":
             return Verdict("needs_review", cert, srt(machine), note("grader not confirmed (a code with no grader's format)"), grader="unknown", raw=raw)
         if by_length:
             return Verdict("needs_review", cert, srt(machine), note(guess), grader=grader, raw=raw)
-        return Verdict("ok", cert, srt(machine), note(), grader=grader, raw=raw)
+        return Verdict("ok", cert, srt(machine), note(itf_note), grader=grader, raw=raw)
     # 1D only: ITF or Code128, any grader
     if ocr and cert not in ocr_certs:
         # a 1D symbol has a weak or no checksum and repeated reads of it are not independent: the printed digits are
@@ -488,4 +520,4 @@ def consensus(reads: list[CodeRead], itf: ItfModel | None = None, min_sources: i
         return Verdict("needs_review", cert, srcs, note("grader not confirmed (a code with no grader's format)"), grader="unknown", raw=raw)
     if status == "ok" and by_length:
         return Verdict("needs_review", cert, srcs, note(why, guess), grader=grader, raw=raw)
-    return Verdict(status, cert, srcs, note(why), grader=grader, raw=raw)
+    return Verdict(status, cert, srcs, note(why, itf_note if status == "ok" else ""), grader=grader, raw=raw)

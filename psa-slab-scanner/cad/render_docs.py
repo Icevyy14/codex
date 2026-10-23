@@ -247,12 +247,71 @@ def carry_closeup(dest: Path) -> None:
     out.save(dest)
 
 
+XSW_PARTS = ("x_beam", "upright_L", "x_bumper_L", "x_switch_mount", "x_home_switch", "fx_xsw", "x_bracket", "x_rail")
+ZSW_PARTS = ("z_spine", "z_rail", "z_motor_mount", "z_switch_mount", "z_top_switch", "fc_zsw", "z_plate", "z_carriage", "fc_mount_tab")
+
+
+def switch_closeups(dest: Path) -> None:
+    """The X home switch and the Z top switch at their trip points (cup X = X_HOME_SWITCH, c = Z_SWITCH_C), each on its printed
+    mount, with the part that works it (the x_bracket's finger, the z_plate's chamfered back face). Big parts are cut down to
+    the corner that matters and drawn see-through."""
+    import subprocess
+
+    import cadquery as cq
+    import model as M
+    from PIL import Image, ImageDraw, ImageFont
+
+    x, c = L.X_HOME_SWITCH, L.Z_SWITCH_C
+    xclip = {"x_bracket": M.box(-60, 80, 330, 2, 100, 400), "x_beam": M.box(-75, 100, 375, 5, 150, 425), "upright_L": M.box(-75, 100, 300, 5, 150, 400),
+             "x_rail": M.box(-75, 90, 375, 5, 110, 425)}
+    zclip = {"z_spine": M.box(-45, 60, 560, 80, 100, 640), "z_rail": M.box(-45, 50, 560, 80, 100, 640), "z_plate": M.box(-45, 0, 560, 80, 60, 640),
+             "z_carriage": M.box(-45, 0, 560, 80, 100, 640)}
+    tiles = []
+    for tag, parts, keep, clip, ghost, cam, text in (
+            ("x", M.frame_parts(x) + M.carriage_parts(x, c), XSW_PARTS, xclip, {"x_beam": 0.25, "upright_L": 0.25, "x_rail": 0.4},
+             "-95,-140,300,-20,92,366", f"X home switch at cup X {x:g}: the x_bracket's finger has just pressed the lever"),
+            ("z", M.carriage_parts(0.0, c) + M.head_parts(0.0, c), ZSW_PARTS, zclip, {"z_spine": 0.3, "z_motor_mount": 0.25, "z_rail": 0.4},
+             "195,55,655,36,56,604", f"Z top switch at c = {c:g}: the z_plate's chamfer has just pressed the lever")):
+        d = build.OUT / "renders" / f"stl_switch_{tag}"
+        shutil.rmtree(d, ignore_errors=True)
+        d.mkdir(parents=True, exist_ok=True)
+        lines = []
+        for p in parts:
+            if not p.name.startswith(keep):
+                continue
+            shape = p.shape.intersect(clip[p.name]) if p.name in clip else p.shape
+            if not shape.vals() or shape.val().Volume() < 1e-3:
+                continue
+            cq.exporters.export(shape, str(d / f"{p.name}.stl"), tolerance=0.05, angularTolerance=0.1)
+            r, g, b, a = p.color
+            lines.append((ghost.get(p.name, a), f'color([{r},{g},{b},{ghost.get(p.name, a)}]) import("{p.name}.stl");'))
+        (d / "scene.scad").write_text("\n".join(ln for _, ln in sorted(lines, key=lambda t: -t[0])) + "\n")  # opaque first
+        png = d / "switch.png"
+        subprocess.run(["xvfb-run", "-a", "openscad", "-o", str(png), "--imgsize=900,900", f"--camera={cam}", "--projection=p",
+                        "--colorscheme=Tomorrow", "scene.scad"], check=True, cwd=d, capture_output=True, timeout=600)
+        tiles.append((Image.open(png).convert("RGB"), text))
+    w, h = tiles[0][0].size
+    bar = 60
+    out = Image.new("RGB", (2 * w, h + bar), (250, 250, 250))
+    dr = ImageDraw.Draw(out)
+    try:
+        font = ImageFont.truetype("DejaVuSans.ttf", 22)
+    except OSError:
+        font = ImageFont.load_default()
+    for i, (im, text) in enumerate(tiles):
+        out.paste(im, (i * w, 0))
+        dr.text((i * w + 18, h + 18), text, fill=(20, 20, 20), font=font)
+    out.save(dest)
+
+
 def main():
     DOCS.mkdir(parents=True, exist_ok=True)
     face_down_view(DOCS / "face_down_view.png")
     print(DOCS / "face_down_view.png")
     carry_closeup(DOCS / "carry_sensor.png")
     print(DOCS / "carry_sensor.png")
+    switch_closeups(DOCS / "home_switches.png")
+    print(DOCS / "home_switches.png")
     phase0_jig(DOCS / "phase0_jig.png")
     print(DOCS / "phase0_jig.png")
     probe_closeup(DOCS / "probe_closeup.png")

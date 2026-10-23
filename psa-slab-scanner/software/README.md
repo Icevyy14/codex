@@ -27,7 +27,7 @@ starts the web page at every boot.
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
-.venv/bin/python -m pytest -q tests        # 289 tests (1 skipped without SLABRAIL_REAL_IMAGES), about 13-17 minutes
+.venv/bin/python -m pytest -q tests        # 300 tests (1 skipped without SLABRAIL_REAL_IMAGES), about 16-21 minutes
 ```
 
 ## First-time order
@@ -42,14 +42,17 @@ Do these in order. Each step depends on the one before it.
 | 4 | `python -m slabscan mark` | **Before the rods go in.** Awl adapter on. For each pocket, the awl drops into the drill template's two dimples. You clamp the template and drill 8 rod holes. Pockets 0 and 12 come last, because one of their dimples is past the X travel: two 5/16 in dowel offcuts through the template into the neighbour's holes set them. `--only 0,12` continues after a break. |
 | 5 | Glue the rods, lay the pads | |
 | 6 | `python -m slabscan calibrate z` | Cup on, pocket 0 empty. Probes the bare pad 4 times and writes `pad_trigger_c`. It also checks that the contact sensor triggers when you push the cup up by hand. |
-| 7 | `python -m slabscan calibrate x` | Awl on. Centre it over pocket 0, then over pocket 12: first by eye at the safe height, then low over the pad. Writes `offset_x` and prints the scale error across the row. |
+| 7 | `python -m slabscan calibrate x` | Awl on. First mark the centres of pockets 0 and 12 with a tape cross on each pad (BUILD_GUIDE 12.2). Centre the awl over pocket 0, then over pocket 12: first by eye at the safe height, then low over the tape cross. Writes `offset_x` and prints the scale error across the row. |
 | 8 | `python -m slabscan focus head` | One slab face-down in pocket 0, pocket 12 empty. It first checks the camera's aim over pocket 12 (`camera aim: OK` or `FAIL`, picture in `focus/focus_head_empty.jpg`). Then the cup rests on the slab: turn the M12 lens until the score peaks, then lock the lens nut. |
 | 9 | `python -m slabscan focus station --save` | One slab in pocket 0. The machine picks it up and holds it over the station camera. It sweeps `LensPosition`, saves the sharpest value that decodes, then puts the slab back. |
 | 10 | `python -m slabscan run --name test` | First real batch, on junk slabs, with you watching. |
 
 Calibration values go to `config/calibration.toml`. That file overrides any key in
 `machine.toml`, and `gen_config` never overwrites it. Put your own settings there too, for example
-`serial_port`, `cam_head`, `custom_regex`, `front_photo` or `lid_switch = true`.
+`serial_port`, `cam_head`, `custom_regex`, `front_photo` or `lid_switch = true`. Two of them change
+what can be `ok`: `custom_regex` types every ITF by your pattern, so the 8-digit ITF rule never
+fires and every pre-2016 PSA slab is `needs_review`; and `psa_cert_digits` (lengths without
+leading zeros) must include 7 if you have pre-2016 slabs, or every 7-digit cert is `needs_review`.
 
 **Exposure.** The LED rings switch on just before each photo. After switching on, the software
 waits `light_settle_s` (0.3 s, **[Guessing]**) so auto exposure can settle. If the first photo of
@@ -74,7 +77,7 @@ All commands are `python -m slabscan <command>`. Add `--sim` to use the simulato
 | `resume BATCH_DIR [--accept-heights] [--face-down-ok]` | Continues a stopped batch (below). `--face-down-ok`: you checked the slab the face-down check stopped on. It is refused unless the last stop was that face-down stop, and it confirms that one slab only. |
 | `sim [--slabs N] [--mix MIX] [--eras E] [--face-down-check] [--jp-rate R] [--sim-head cad\|cad_r2\|open\|none] [--sim-head-tilt DEG]` | Full simulated batch. Prints the summary and a time estimate. `--mix` sets the label mix per grader and era, e.g. `psa:current=0.6,psa:2017+=0.2,cgc:2023+=0.2` (kinds: `psa:current\|2017+\|2016\|old`, `cgc:2023+\|og\|authentic`, `bgs:`, `sgc:`; default: mostly PSA, some CGC, a few BGS); `--eras` is a PSA-only override. `--face-down-check` keeps the check on and counts the slabs it would stop at (a simulated operator confirms each). `--jp-rate` gives that share of cards the Japanese back. `--sim-head`: `cad` (the default) is today's head (lens 5 mm toward the label, card window clear), `cad_r2` the round-2 head whose foot hides the card window, `open` a hypothetical narrow head. `--sim-head-tilt DEG` tilts the simulated head camera toward the cup (a mis-aimed camera; it works with every command that takes `--sim`). |
 | `web [--port 8080]` | Phone page (below). |
-| `phase0 [--sim N] [--out DIR] [--face-up N] [--save]` | The Phase 0 camera test (same as `python -m tools.phase0`): reads 30-50 of your slabs in the Phase 0 jig before you buy any motion parts. The read-rate report is written as soon as you type `q`. The face-up pass is off unless you ask for it (`--face-up` defaults to 0); a GO for the learned face-down check needs 15 face-up slabs. `--save` writes its threshold on a GO. |
+| `phase0 [--sim N] [--out DIR] [--face-up N] [--save] [--force]` | The Phase 0 camera test (same as `python -m tools.phase0`): reads 30-50 of your slabs in the Phase 0 jig before you buy any motion parts. The read-rate report is written as soon as you type `q`. The face-up pass is off unless you ask for it (`--face-up` defaults to 0); a GO for the learned face-down check needs 15 face-up slabs. `--save` writes its threshold on a GO. Each run needs its own `--out` folder: one that already holds a `phase0.csv` is refused, and nothing in it changes (`--force` overwrites it). |
 | `refs [--drop CERT \| --drop-operator]` | Lists the learned face-down check's card-back references, with the batch, position and cert each came from. `--drop CERT` deletes one slab's reference, for example after a wrong confirmation; `--drop-operator` deletes every reference you confirmed and keeps the back-QR ones. |
 
 **Jog safety rules** (enforced in software):
@@ -124,6 +127,11 @@ confirm it with `resume --face-down-ok`.
     the cup pad and the foot in there. Then the learned check accepts nothing and learns nothing that
     run, and the start line, every stop, the summary and `selftest` say to re-aim the camera
     (BUILD_GUIDE §7.7). `focus head` looks over the empty pocket 12 first and says the same.
+    A verdict counts only for the run that took it. A resume looks again over an empty pocket at its
+    survey. If no pocket is empty, the learned check accepts nothing and learns nothing until the
+    run empties its first source pocket and looks over that one. So a camera knocked while the run
+    was stopped is seen. [Certain, sim, round-3 card window: a camera knocked 1° while stopped is
+    caught, with and without an empty pocket at the resume.]
     [Certain, sim, round-3 card window: a square camera passes, 0.5° toward the cup is caught; the
     camera-locked check alone let 0.6–1.0° through: only 0–2% of the window was camera-locked.
     With today's smaller window a head part enters at about 1.3°, and the check fires from about
@@ -152,7 +160,12 @@ Afterwards each stack sits **one pocket to the left, in reverse order**. Pocket 
 to check by hand: unreadable ones, numbers read only by OCR (no grader), conflicts, or graders other
 than PSA and CGC. Only a `needs_review` row of PSA or CGC may stay in the output stack. A grader
 guessed from a barcode's length counts, so another grader's slab whose barcode has a PSA or CGC
-format can end up there as `needs_review` too.
+format can end up there as `needs_review` too. The same holds for an `ok` from an 8-digit ITF:
+another grader's slab with an 8-digit ITF whose printed number OCR reads would come out `ok PSA`
+[Guessing that none exists: none was seen in the real set, which has 1 BGS and 1 SGC slab; BGS and
+SGC are reported to print some code on some holders, type unknown]. Put any non-PSA slabs you own
+through Phase 0 (`python -m tools.real_eval --phase0`) before trusting `ok PSA` on slabs with no
+QR.
 
 **What makes an `ok`** (`slabscan/certs.py`):
 - A QR carries its own error correction. A barcode (ITF, Code128) needs a second printed code
@@ -164,10 +177,18 @@ format can end up there as `needs_review` too.
   phantom) is dropped only when a different code or OCR confirms the other number, and then from
   every frame of that barcode. Only the thin read can be dropped. If the confirmed number is the
   thin one, the slab is a `conflict`.
-- The grader must come from a code that names it (a cert URL), or from two printed codes in its
-  format. A bare number gets its grader from its length only, and OCR confirms digits, never a
-  grader. So a slab whose only code is one front barcode is `needs_review` even when OCR agrees:
-  every pre-2016 PSA slab (front ITF only) [Certain, real set: 7 of 61 at machine scale].
+- The grader must come from a code that names it (a cert URL), from two printed codes in its
+  format, or from an 8-digit ITF whose digits OCR confirms. That last rule names PSA: in the real
+  set only PSA labels carry ITF (CGC uses Code128; its 1 BGS and 1 SGC slab showed no code). It is what makes a
+  pre-2016 PSA slab (front ITF only) `ok`, with the note "barcode confirmed by OCR; grader PSA
+  from its 8-digit ITF". An ITF alone, or OCR alone, is never `ok`; an ITF of any other length is
+  a misread. A code in no grader's format (a QR or other code with a bare number) never confirms
+  a grader, not even beside an ITF. Any other bare number gets its grader from its length
+  only, and OCR confirms its digits, not its grader: a slab whose only code is one front Code128
+  is `needs_review` even when OCR agrees.
+- A PSA Code128 is 8 or 9 digits, and a 10-digit CGC Code128 never starts with 0 (every real one).
+  A Code128 outside those formats (a 7-digit number, a BGS cert like 0019865140) is not read as a
+  cert; it is listed as unparsed.
 
 **Carry-height sensor (Z stall guard).** Before every sideways move the head must read "at carry
 height" on GPIO 6 (and "below it" at every grip, which catches a dark sensor). A Z stall that left
@@ -204,6 +225,10 @@ It tells you which stack to put the slab back on.
 - The state is rebuilt from `journal.jsonl` and `certs.csv`.
 - Every pocket is probed again and compared with what the journal predicts.
 - You may empty the exception pocket before resuming. Counting there restarts from what is left.
+  An empty pocket also lets the resume check the camera's aim at once. With no empty pocket, the
+  learned face-down check accepts nothing until the run empties its first source pocket: every slab
+  without a back-label code stops for you until then (the stop says "the head camera's aim is not
+  checked this run yet").
 - Any other change of more than 4.5 mm (under one slab) stops the resume and lists the pockets. A
   missing or extra slab must be put back first.
 - If it looks like one slab moved without being recorded (a power cut mid-move), the message says
@@ -218,7 +243,7 @@ It tells you which stack to put the slab back on.
 | `certs.csv` | One row per slab: cert, grader, status (`ok`, `needs_review`, `no_read`, `conflict`, `other_grader`), which pocket it came from and where it is now (`out_pocket`, `out_index` counted from the bottom), image paths, and `face_down`: how it was proven face-down (`qr` a PSA or CGC back QR, `code` the CGC 2020-23 back barcode, `operator`, `learned(0.93)` or `off`). Written row by row, so a crash loses nothing. |
 | `certs.txt` | Only the `ok` certs, one per line, in machine order. Paste it into a spreadsheet or Card Dealer Pro. |
 | `report.html` | Every slab with its label photo and a Face-down column (learned rows in bold: check their photos). Opens on a phone. |
-| `summary.json` | Counts, duplicates, the per-stack slab count check, `itf_mode` (always `zero_pad`: the ITF is the cert padded to 8 digits) and `itf_evidence` (slabs where QR and ITF agreed), mean cycle time, and `face_down` (mode, counts, every learned row, the references, and in learned mode `camera_aim`). A failed aim check also prints a `CAMERA AIM:` summary line. |
+| `summary.json` | Counts, duplicates, the per-stack slab count check, `itf_mode` (always `zero_pad`: the ITF is the cert padded to 8 digits) and `itf_evidence` (slabs where QR and ITF agreed), mean cycle time, and `face_down` (mode, counts, every learned row, the references, and in learned mode `camera_aim`: `ok`, the failed check's message, or "not checked this run …" after a resume that never looked over an empty pocket). A failed aim check also prints a `CAMERA AIM:` summary line. |
 | `journal.jsonl` | Machine log used by resume, including the face-down events (`face_down_stop` on the stop line, `face_down_confirmed`, `face_down_reference`, `face_down_learned`, `face_down_baseline` with its camera-aim verdict `aim`, `face_down_ok_unused`). |
 | `images/` | Back photo of every slab, plus a front photo when the station camera was used. In learned mode also `face_down_window.jpg` (the run's first slab with the card window drawn) and `face_down_empty.jpg` (the view over an empty pocket). |
 | `stop.json` | Why the last run stopped (deleted when a run finishes). |
@@ -260,12 +285,17 @@ How it behaves:
 `python -m slabscan sim --slabs 330` runs a full load in about 5 minutes on a PC. It prints:
 - the survey time,
 - the seconds per slab,
-- the total for a full load. The 23 Oct 2026 run (seed 7, default mix, `--face-down-check`) gave 75 s of homing and survey,
-  then 14.2 s per slab: about 79 min for 330 slabs; `ok` 304, `needs_review` 26: 20 pre-2016 PSA slabs whose only code is
-  the front ITF (OCR agrees, the grader is not confirmed; they stay in the output stack), 5 BGS slabs read only by OCR (in
-  pocket 12), and one PSA barcode that OCR read differently. Face-down: 287 by back QR, 41 by the learned card-back match, 2 confirmed
-  (the first slabs, before 5 references existed); with back-label codes only, 43 would have stopped. Without
-  `--face-down-check` the check is off and the summary says how many slabs would have stopped.
+- the total for a full load. The 23 Oct 2026 run (seed 7, default mix, `--face-down-check`, after the 8-digit ITF rule
+  and the card position per grader) gave 75 s of homing and survey, then 14.2 s per slab: about 79 min for 330 slabs;
+  `ok` 324, `needs_review` 6: 5 BGS slabs read only by OCR (in pocket 12) and one pre-2016 PSA slab whose OCR read
+  other digits (in the output stack). The other 20 pre-2016 PSA slabs are `ok` from their front ITF and OCR. No `ok`
+  has a wrong cert or grader [Certain, sim: checked against the simulated slabs]. Face-down: 287 by back QR, 41 by the
+  learned card-back match (lowest score 0.76), 2 confirmed (the first slabs, before 5 references existed); with
+  back-label codes only, 43 would have stopped. Without `--face-down-check` the check is off and the summary says how
+  many slabs would have stopped.
+- The simulated card sits where it does in real holders, per grader (`sim.HOLDERS`, from the CAD's `layout.HOLDERS`):
+  a PSA card top 34.8–38.3 mm from the label-end edge, a CGC one 37.7–40.1 mm from the edge of its shorter holder,
+  so about 3.4 mm nearer the cup. Other graders use PSA's [Guessing].
 
 Motion uses a trapezoid acceleration model. Camera frame times and the Pi's decode speed are
 **[Guessing]** values, listed at the top of `slabscan/cli.py`. Phase 0 measures the real ones.

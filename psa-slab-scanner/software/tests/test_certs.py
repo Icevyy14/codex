@@ -106,12 +106,14 @@ def test_consensus_empty():
 def test_single_1d_read_needs_confirmation():
     raw = "26275088"
     assert consensus([_itf(raw)]).status == "needs_review"
-    # OCR of the printed digits agrees: the digits are confirmed, the grader (from the ITF's length) is not
+    # OCR of the printed digits agrees: the digits are confirmed, and an 8-digit ITF so confirmed names PSA
     v = consensus([_itf(raw), _r("26275088", "ocr", "OCR", grader="unknown")])
-    assert v.status == "needs_review" and v.grader == "PSA" and "barcode confirmed by OCR" in v.note and "grader PSA not confirmed" in v.note
+    assert v.status == "ok" and v.grader == "PSA" and "barcode confirmed by OCR" in v.note and "grader PSA from its 8-digit ITF" in v.note
     assert consensus([_itf(raw), _itf(raw, "back_barcode")]).status == "ok"
-    # the same for Code128, PSA or CGC
+    # the same for Code128, PSA or CGC, except that OCR confirms only a Code128's digits, never its grader
     assert consensus([_r("148069831", "back_barcode", "Code128")]).status == "needs_review"
+    v = consensus([_r("148069831", "front_barcode", "Code128"), _r("148069831", "ocr", "OCR", grader="unknown")])
+    assert v.status == "needs_review" and "grader PSA not confirmed" in v.note
     assert consensus([_r("148069831", "back_barcode", "Code128"), _r("148069831", "front_barcode", "Code128")]).status == "ok"
     v = consensus([_r("6003997046", "front_barcode", "Code128", grader="CGC")])
     assert v.status == "needs_review" and v.grader == "CGC"  # a single CGC barcode is never 'ok' alone
@@ -191,9 +193,9 @@ def test_a_grader_from_one_barcodes_length_is_never_ok():
     ocr = _r("19865140", "ocr", "OCR", raw="0019865140", grader="unknown")
     v = consensus([bgs_like, ocr])
     assert v.status == "needs_review" and v.cert == "19865140" and "grader CGC not confirmed" in v.note
-    # a real pre-2016 PSA front: ITF + OCR -> the cert is right, the grader is only the ITF's format
-    v = consensus([_itf("02074012"), _r("2074012", "ocr", "OCR", raw="2074012", grader="unknown")])
-    assert v.status == "needs_review" and v.cert == "2074012" and v.grader == "PSA"
+    # the one exception (round 5): a real pre-2016 PSA front, an 8-digit ITF whose digits OCR confirms -> ok PSA
+    v = consensus([_itf("02074012"), _r("2074012", "ocr", "OCR", raw="02074012", grader="unknown")])
+    assert v.status == "ok" and v.cert == "2074012" and v.grader == "PSA"
     # a QR with a bare number confirms the digits of a Code128, not its grader
     v = consensus([_r("148069831", "back_qr", "QRCode", raw="148069831", grader="unknown"), _r("148069831", "front_barcode", "Code128")])
     assert v.status == "needs_review" and "grader PSA not confirmed" in v.note
@@ -204,11 +206,12 @@ def test_a_grader_from_one_barcodes_length_is_never_ok():
 
 
 def test_no_verdict_is_ok_on_a_grader_guessed_from_one_barcode():
-    """Every combination of the reads one slab can give: an 'ok' always has a code naming its grader, or two printed
-    symbols in its format; a grader-unknown verdict is never 'ok'."""
+    """Every combination of the reads one slab can give: an 'ok' always has a code naming its grader, two printed
+    symbols in its format, or an 8-digit ITF whose digits OCR confirms (PSA only); a grader-unknown verdict is never
+    'ok'."""
     from itertools import combinations
 
-    from slabscan.certs import names_grader
+    from slabscan.certs import names_grader, psa_itf_confirmed
 
     c = "26275088"
     pool = [_itf(c, "back_barcode"), _itf(c), _r(c, "front_barcode", "Code128"), _r(c, "back_barcode", "Code128"),
@@ -223,5 +226,69 @@ def test_no_verdict_is_ok_on_a_grader_guessed_from_one_barcode():
             n_ok += 1
             machine = [r for r in reads if r.source != "ocr" and r.grader == v.grader]
             assert v.grader != "unknown"
-            assert any(names_grader(r) for r in machine) or len({r.source for r in machine}) >= 2, [r.raw for r in reads]
+            itf_rule = v.grader == "PSA" and psa_itf_confirmed(list(reads), c)
+            assert any(names_grader(r) for r in machine) or len({r.source for r in machine}) >= 2 or itf_rule, [r.raw for r in reads]
+            if itf_rule and not any(names_grader(r) for r in machine) and len({r.source for r in machine}) < 2:
+                # the ITF rule alone: an ITF-8 plus OCR of its digits, never the ITF by itself, and never a code in no
+                # grader's format (a bare-number QR, a Code39) in place of the OCR
+                itf = [r for r in machine if r.symbology == "ITF"]
+                assert itf and any(r.source == "ocr" and r.cert == c for r in reads), [r.raw for r in reads]
     assert n_ok > 0
+
+
+def _ocr(digits):
+    return CodeRead(digits.lstrip("0"), "ocr", "OCR", digits, "front", "unknown", kind="ocr")
+
+
+def test_an_8_digit_itf_names_psa_only_once_ocr_confirms_its_digits():
+    """Round 5: in the real set ITF is printed only on PSA labels (CGC uses Code128; BGS and SGC print no code), and a
+    pre-2016 PSA label's only code is its front ITF. So an 8-digit ITF names grader PSA once OCR of the printed number
+    confirms its digits. A second printed symbol in no grader's format does not: no PSA label carries one. Everything
+    else keeps the round-4 rule."""
+    from slabscan.certs import psa_itf_confirmed
+
+    old = _itf("02074012")  # a real pre-2016 front ITF: the 7-digit cert zero-padded to 8
+    # ITF-8 + OCR of the same printed number: ok PSA, and the note says why
+    v = consensus([old, old, _ocr("02074012")])
+    assert (v.status, v.cert, v.grader, v.sources) == ("ok", "2074012", "PSA", ("front_barcode", "ocr"))
+    assert "barcode confirmed by OCR" in v.note and "grader PSA from its 8-digit ITF" in v.note
+    # ITF-8 alone, however often it is read: needs_review (one printed barcode, its digits unconfirmed)
+    for reads in ([old], [old, old, old]):
+        v = consensus(reads)
+        assert v.status == "needs_review" and v.grader == "PSA" and "one printed barcode only" in v.note
+        assert not psa_itf_confirmed(reads, "2074012")
+    # ... even if the batch asked for one source only: the ITF rule wants its digits confirmed, not a count
+    assert consensus([old], min_sources=1).status == "needs_review"
+    # OCR that reads other digits: needs_review; OCR alone: needs_review, grader unknown (the exception pocket)
+    v = consensus([old, _ocr("02074013")])
+    assert v.status == "needs_review" and "OCR read 2074013" in v.note
+    v = consensus([_ocr("02074012")])
+    assert v.status == "needs_review" and v.grader == "unknown"
+    # a second printed symbol in no grader's format does NOT confirm it: a bare-number QR, a Code39, an EAN-8, a
+    # Codabar or a keyed 'Cert #' QR of the same cert is on no PSA label (the same rule as a bare-number QR beside a
+    # Code128). A PSA-format second symbol is two printed symbols (below); another grader's is a conflict (last line).
+    for second in (_r("2074012", "back_qr", raw="2074012", grader="unknown"), _r("2074012", "back_barcode", "Code39", raw="2074012", grader="unknown"),
+                   _r("2074012", "back_barcode", "EAN8", raw="02074012", grader="unknown"), _r("2074012", "back_barcode", "Codabar", raw="02074012", grader="unknown"),
+                   _r("2074012", "back_qr", raw="Cert #02074012", grader="unknown"), _r("2074012", "back_qr", "DataMatrix", raw="02074012", grader="unknown")):
+        v = consensus([old, second])
+        assert v.status == "needs_review" and v.grader == "PSA" and "grader PSA not confirmed" in v.note, second
+        assert not psa_itf_confirmed([old, second], "2074012"), second
+        # ... and with OCR agreeing as well it is the ITF + OCR rule, as without the second symbol
+        v = consensus([old, second, _ocr("02074012")])
+        assert v.status == "ok" and v.grader == "PSA" and "grader PSA from its 8-digit ITF" in v.note, second
+    # ... and two ITFs (a 2016 label, back + front) were already two printed symbols in PSA's format
+    v = consensus([_itf("25656882", "back_barcode"), _itf("25656882")])
+    assert v.status == "ok" and "8-digit ITF" not in v.note
+    # an ITF of any other length is a misread: it never parses, so it confirms nothing and names nothing
+    for raw in ("2074012", "289412", "123456789", "0148069831", "00000000"):
+        assert parse_payload(raw, "ITF") is None, raw
+    # a read typed PSA some other way (not the ITF-8 rule) gets nothing from it: here a 7-digit ITF built by hand
+    odd = CodeRead("2074012", "front_barcode", "ITF", "2074012", "front", "PSA")
+    v = consensus([odd, _ocr("02074012")])
+    assert v.status == "needs_review" and "grader PSA not confirmed" in v.note
+    # the rule is ITF's only: one Code128 with OCR agreeing stays needs_review, PSA or CGC
+    for c128 in (_r("100423658", "front_barcode", "Code128"), _r("6003997046", "front_barcode", "Code128", grader="CGC")):
+        v = consensus([c128, _ocr(c128.cert)])
+        assert v.status == "needs_review" and f"grader {c128.grader} not confirmed" in v.note
+    # a CGC code beside the ITF with the same number is two graders: a conflict, as before
+    assert consensus([old, _r("2074012", "back_qr", raw="https://www.cgccards.com/certlookup/2074012/", grader="CGC"), _ocr("02074012")]).status == "conflict"

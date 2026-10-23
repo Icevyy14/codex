@@ -1,8 +1,8 @@
 """SlabRail parametric model (CadQuery).
 
 Everything is built from layout.py:
-  * static: base, bed, guide rods, read station, uprights, X beam + rail, X motor/idler, X end bumpers
-  * carriage (moves in X): X carriage, X bracket + belt clamps, Z spine + rail + end cap, Z motor
+  * static: base, bed, guide rods, read station, uprights, X beam + rail, X motor/idler, X end bumpers, X home switch
+  * carriage (moves in X): X carriage, X bracket + belt clamps, Z spine + rail + end cap, Z motor, Z top switch
   * head (moves in Z): Z carriage, Z plate, drop arm, cup + spring buffer, contact sensor + probe flag + its guide,
     camera; the buffer's moving parts take the buffer travel as a parameter (head_parts(compression=...))
   * printed parts (exported individually as STL/STEP in print orientation)
@@ -15,6 +15,7 @@ where they interface with something, not cosmetically detailed.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 import cadquery as cq
@@ -163,7 +164,8 @@ def cut_list() -> list[tuple[str, str, float, int]]:
 # --------------------------------------------------------------------------- static
 
 
-def frame_parts() -> list[Part]:
+def frame_parts(cup_x: float | None = None) -> list[Part]:
+    """``cup_x``: where the X carriage is, for the X home switch's lever (None = lever free)."""
     parts: list[Part] = []
     for i, y in enumerate(BASE_RAIL_YS):
         parts.append(Part(f"base_rail_{i}", box(BED_X0, y - 20, Z_BASE_BOT, BED_X1, y + 20, Z_BASE_TOP), ALU, "purchased", "static"))
@@ -178,6 +180,7 @@ def frame_parts() -> list[Part]:
         bed = bed.cut(box(x - 20.5, BEAM_Y0 - 0.5, Z_BED_BOT - 1, x + 20.5, BEAM_Y1 + 0.5, Z_BED_TOP + 1))
     parts.append(Part("bed_plywood", bed, WOOD, "wood", "static", note="18 mm plywood, 41x41 mm notches at the upright positions"))
     parts += x_drive_parts()
+    parts += x_switch_parts(cup_x)
     parts.append(Part("light_roof", box(BED_X0, BED_Y0 - 40, ROOF_Z, BED_X1, BED_Y1 + 20, ROOF_Z + 5), (0.05, 0.05, 0.06, 0.35), "purchased", "static", note="black foam board light roof"))
     return parts
 
@@ -371,7 +374,8 @@ def mgn12h(cx, rail_face, zc, along: str) -> cq.Workplane:
     return blk.cut(box(cx - rw, rail_face, zc - 1, cx + rw, y1 + 1, zc + ln + 1))
 
 
-def carriage_parts(cup_x: float) -> list[Part]:
+def carriage_parts(cup_x: float, c: float | None = None) -> list[Part]:
+    """``c``: the cup height, for the Z top switch's lever (None = lever free)."""
     yb = BEAM_Y0
     yc0 = yb - L.MGN12_H  # X carriage front face = x_bracket local Y origin
     parts: list[Part] = []
@@ -404,6 +408,7 @@ def carriage_parts(cup_x: float) -> list[Part]:
             parts.append(head(f"fc_zmot_{dx:+.0f}{dy:+.0f}", (mx + dx, my + dy, ztop + M3_CBORE[1]), (0, 0, -1), M3_HEAD, "carriage"))
     parts.append(head("fc_mount_tab", (cup_x + ZMM_TAB_BOLT[0], ZMM_TAB_Y[0], ztop + ZMM_TAB_BOLT[1]), (0, -1, 0), M5_HEAD, "carriage"))
     parts += carry_sensor_parts(cup_x)
+    parts += z_switch_parts(cup_x, c)
     return parts
 
 
@@ -417,7 +422,8 @@ def x_bracket() -> cq.Workplane:
     """Plate in the XZ plane: X carriage (MGN12H) on its back, Z spine (2040) on its front.
     Local origin: X = cup axis, Y = X-carriage front face (plate grows toward -Y), Z = machine Z.
     The top tab reaches back over the beam to clamp both ends of the upper X-belt strand: a GT2 rack on its
-    floor, a printed belt_clamp cap on top, 2 x M3 + nut per belt end."""
+    floor, a printed belt_clamp cap on top, 2 x M3 + nut per belt end. A finger off its left edge, under the beam, works the
+    X home switch (x_finger())."""
     t = L.X_BRACKET_T
     zb = L.X_RAIL_Z
     zf = CLAMP_FLOOR_Z
@@ -435,7 +441,7 @@ def x_bracket() -> cq.Workplane:
         tab = holes_z(tab, [(s * CLAMP_X, y) for y in CLAMP_SCREW_Y], M3_CLR)
         for y in CLAMP_SCREW_Y:  # M3 nut traps on the underside
             tab = tab.cut(hexagon(s * CLAMP_X, y, zf - 8.7 - 1, 5.8, 1 + 2.6))
-    return plate.union(tab)
+    return plate.union(tab).union(x_finger())
 
 
 def belt_clamp() -> cq.Workplane:
@@ -504,6 +510,17 @@ LENS_WINDOW_D = 25.0  # passes a 16 mm square M12 holder (22.6 mm diagonal)
 # back. MEASURE yours (BUILD_GUIDE 3.3). Head: 40 mm (a 60 mm ring would cut into the drop arm). Station: one "60 mm" COB
 # listing measures ~63 x 47 mm [Likely, sourcing notes], so the station seat takes a 60 or a 63 mm ring.
 HEAD_RING = (40.0, 30.0, 5.0)  # OD, ID, thickness
+# The head seat takes any ring from HEAD_RING_OD[0] to [1]: a 42.8 mm bore, three ribs that centre the ring (printed to fit
+# HEAD_RING[0] line to line, so they grip it; shave each by half of (ring OD - HEAD_RING[0]) for a bigger ring, or set HEAD_RING to
+# the ring you measured and re-export; a smaller one sits loose by up to 0.25 mm: centre it by eye and glue), and a lip that holds
+# the band of the smallest. checks.py runs the ring checks at both ends of the range.
+HEAD_RING_OD = (39.5, 42.5)
+HEAD_RING_RANGE = ((HEAD_RING_OD[0], HEAD_RING_OD[0] - 10.0, 5.0), (HEAD_RING_OD[1], HEAD_RING_OD[1] - 10.0, 5.0))  # [Guessing] ID = OD - 10
+HEAD_SEAT_BORE = HEAD_RING_OD[1] + 0.3  # 42.8
+HEAD_LIP_ID = 33.0  # lip under the ring's back face: 3.25 mm of a 39.5 mm ring's band, clear of the 16 mm lens holder (22.6 diagonal)
+SEAT_RIB_W = 1.2  # centring rib width (tangential)
+HEAD_RIB_DEG = (7.5, 127.5, 247.5)  # 60 deg either side of the lead notch, and opposite it
+HEAD_NOTCH_R0 = 14.0  # the lead notch runs from here out: the pads of every ring in the range (mid-band, [Guessing]) pass it
 STATION_RING = (63.0, 47.0, 5.0)  # the larger case; STATION_RING_ALT is a true 60 mm ring
 STATION_RING_ALT = (60.0, 46.0, 5.0)  # [Guessing] ID and thickness
 RING_PAD = (7.0, 3.0, 1.5)  # solder pads + joints on the back face: along the ring, across the band, height
@@ -664,11 +681,11 @@ def occluder_boxes(compression: float = 0.0) -> list[tuple[str, tuple[float, flo
     return [(n, tuple(round(v, 2) for v in b), g) for n, b, g in out]
 
 
-def head_ring_parts(x: float, y: float, lens_z: float, prefix: str, group: str = "head") -> list[Part]:
+def head_ring_parts(x: float, y: float, lens_z: float, prefix: str, group: str = "head", ring=HEAD_RING) -> list[Part]:
     """The head LED ring (LEDs down) and its leads in their seat, for a lens front at (x, y, lens_z)."""
     face = (x, y, lens_z + HEAD_RING_FACE_DZ)
-    return [Part(f"{prefix}head_led_ring", led_ring(HEAD_RING).translate(face), RING, "purchased", group, note=f"{HEAD_RING[0]:.0f} mm COB ring, 12 V, LEDs down"),
-            Part(f"{prefix}head_ring_leads", ring_leads(HEAD_RING).translate(face), LEAD, "purchased", group, note="solder pads + the leads' first mm")]
+    return [Part(f"{prefix}head_led_ring", led_ring(ring).translate(face), RING, "purchased", group, note=f"{ring[0]:.1f} mm COB ring, 12 V, LEDs down"),
+            Part(f"{prefix}head_ring_leads", ring_leads(ring).translate(face), LEAD, "purchased", group, note="solder pads + the leads' first mm")]
 
 
 def vac_fitting() -> cq.Workplane:
@@ -679,7 +696,8 @@ def vac_fitting() -> cq.Workplane:
     return cyl((0, 0, 0), d, h).union(cyl((0, 0, az), ad, reach, (0, 1, 0)))
 
 
-def head_parts(cup_x: float, c: float, compression: float = L.CUP_HANG) -> list[Part]:
+def head_parts(cup_x: float, c: float, compression: float = L.CUP_HANG, ring=HEAD_RING) -> list[Part]:
+    """``ring``: the head LED ring fitted (OD, ID, thickness); the seat's ribs are shaved to it."""
     cup_y = L.Y_ROW
     parts: list[Part] = []
     zc_bottom = c + L.Z_CARRIAGE_ABOVE_CUP
@@ -688,12 +706,12 @@ def head_parts(cup_x: float, c: float, compression: float = L.CUP_HANG) -> list[
     arm_y1 = Z_CAR_FRONT - L.Z_PLATE_T
     parts.append(Part("drop_arm", box(cup_x - 10, arm_y1 - 20, c + ARM_Z[0], cup_x + 10, arm_y1, c + ARM_Z[1]), ALU, "purchased", "head", note="2020"))
     off = arm_y1 - 10 - cup_y  # = ARM_TO_CUP
-    parts.append(Part("camera_bracket", camera_bracket(off).translate((cup_x, cup_y, c)), PETG, "printed", "head"))
+    parts.append(Part("camera_bracket", camera_bracket(off, rib_d=max(ring[0], HEAD_RING[0])).translate((cup_x, cup_y, c)), PETG, "printed", "head"))
     parts += occluder_parts(cup_x, cup_y, c, compression)
     zl, zs, ly = c + CAM_Z, c + CAM_Z + HEAD_LENS_PROJ, cup_y + CAM_DY
     cam = cbox(cup_x, ly, zs + 5, 38, 38, 10).union(cbox(cup_x, ly, (zl + 6 + zs) / 2, 16, 16, zs - zl - 6)).union(cyl((cup_x, ly, zl), 14, 6))
     parts.append(Part("head_camera", cam, GREEN, "purchased", "head", note=f"USB 8MP IMX179, M12 3.6 mm; lens {-CAM_DY:.0f} mm toward the label from the cup axis"))
-    parts += head_ring_parts(cup_x, ly, zl, "")
+    parts += head_ring_parts(cup_x, ly, zl, "", ring=ring)
     parts += carry_flag_parts(cup_x, c)
     for dx in (-10, 10):
         for dz in (-10, 10):  # MGN12H screws in counterbores on the arm side
@@ -705,9 +723,13 @@ def head_parts(cup_x: float, c: float, compression: float = L.CUP_HANG) -> list[
 
 def z_plate() -> cq.Workplane:
     """Printed Z carriage plate. Local origin: X = cup axis, Y = Z-carriage front face, Z = carriage bottom.
-    Its top edge (Z_PLATE_TOP) is the top hard stop against z_motor_mount."""
+    Its top edge (Z_PLATE_TOP) is the top hard stop against z_motor_mount. Its back face at the right end, with a 45-deg chamfer
+    along the top edge there (ZP_CHAMFER_X, ZP_CHAMFER deep), works the Z top switch."""
     t = L.Z_PLATE_T
-    plate = box(-30, -t, -5, 40, 0, L.Z_PLATE_TOP)
+    plate = box(-30, -t, -5, ZP_X1, 0, L.Z_PLATE_TOP)
+    ch, zt = ZP_CHAMFER, L.Z_PLATE_TOP
+    wedge = cq.Workplane("YZ").polyline([(0.01, zt - ch), (0.01, zt + 0.01), (-ch, zt + 0.01)]).close().extrude(ZP_X1 + 1 - ZP_CHAMFER_X)
+    plate = plate.cut(wedge.translate((ZP_CHAMFER_X, 0, 0)))
     plate = plate.union(box(-14, -t, -20, 14, 0, -4.99))  # extension below the carriage for the lower arm bolt
     car = [(dx, 22.7 + dz) for dx in (-10, 10) for dz in (-10, 10)]  # MGN12H
     plate = holes_y(plate, car, M3_CLR)
@@ -821,18 +843,27 @@ def ring_leads(ring=HEAD_RING, deg: float = HEAD_RING_LEAD_DEG, leds_up: bool = 
     return s.mirror("XY") if leds_up else s
 
 
-def ring_seat(face_z: float, z_top: float, ring=HEAD_RING, deg: float = HEAD_RING_LEAD_DEG) -> cq.Workplane:
-    """LED-ring seat round a downward lens: a 3 mm tube whose bore takes the ring with 0.5 mm of radial play, the ring pushed
-    up against an inner lip (LEDs down, LED face at face_z, three dots of glue keep it there). A notch in the lip at `deg`
-    lets the solder pads and the leads out of the back. Hung from z_top on four legs at 0/90/180/270 deg, so the board's
-    45-deg screw nuts stay clear."""
-    od, id_, t = ring
-    rid = od + 1.0
+def _seat_ribs(face_z: float, back: float, rib_d: float) -> cq.Workplane:
+    """The three centring ribs of the head ring seat, from the bore wall in to rib_d, face_z - 1 up to the lip (back)."""
+    rib = box(rib_d / 2, -SEAT_RIB_W / 2, face_z - 1.0, HEAD_SEAT_BORE / 2 + 0.5, SEAT_RIB_W / 2, back + 0.01)
+    out = _at_angle(rib, HEAD_RIB_DEG[0])
+    for d in HEAD_RIB_DEG[1:]:
+        out = out.union(_at_angle(rib, d))
+    return out
+
+
+def ring_seat(face_z: float, z_top: float, deg: float = HEAD_RING_LEAD_DEG, rib_d: float = HEAD_RING[0]) -> cq.Workplane:
+    """LED-ring seat round a downward lens: a 3 mm tube whose HEAD_SEAT_BORE takes any ring of HEAD_RING_OD, three ribs (to rib_d)
+    that centre it, and an inner lip (HEAD_LIP_ID) the ring is pushed up against (LEDs down, LED face at face_z, three dots of glue
+    keep it there). A notch in the lip at `deg` lets the solder pads and the leads out of the back. Hung from z_top on four legs at
+    0/90/180/270 deg, so the board's 45-deg screw nuts stay clear."""
+    t = HEAD_RING[2]
+    rid = HEAD_SEAT_BORE
     back = face_z + t  # the ring's back face = the lip's underside
     tube = cyl((0, 0, face_z - 1.0), rid + 6, t + 3.0).cut(cyl((0, 0, face_z - 2.0), rid, t + 5.0))
-    tube = tube.union(cyl((0, 0, back), rid + 0.5, 2).cut(cyl((0, 0, back - 1), id_ + 3.0, 4)))
-    rm = (od + id_) / 4
-    tube = tube.cut(_at_angle(box(rm - RING_PAD[1] / 2 - 1.5, -RING_PAD[0] / 2 - 0.5, back - 0.01, rid / 2 + 0.3, RING_PAD[0] / 2 + 0.5, back + 2.01), deg))
+    tube = tube.union(cyl((0, 0, back), rid + 0.5, 2).cut(cyl((0, 0, back - 1), HEAD_LIP_ID, 4)))
+    tube = tube.union(_seat_ribs(face_z, back, rib_d))
+    tube = tube.cut(_at_angle(box(HEAD_NOTCH_R0, -RING_PAD[0] / 2 - 0.5, back - 0.01, rid / 2 + 0.3, RING_PAD[0] / 2 + 0.5, back + 2.01), deg))
     if z_top > back + 2:
         r = rid / 2 + 1.5
         for x, y in ((r, 0), (-r, 0), (0, r), (0, -r)):
@@ -841,13 +872,14 @@ def ring_seat(face_z: float, z_top: float, ring=HEAD_RING, deg: float = HEAD_RIN
     return tube
 
 
-def ring_pocket(face_z: float, z_top: float, ring=HEAD_RING, deg: float = HEAD_RING_LEAD_DEG) -> cq.Workplane:
-    """Cutter for the same seat sunk into a plate's underside (phase0_top): the bore up to the ring's back face (the plate is
-    the lip), and a slot from there through the plate to z_top for the solder pads and the leads."""
-    od, id_, t = ring
-    rm = (od + id_) / 4
-    bore = cyl((0, 0, face_z - 5.0), od + 1.0, t + 5.0)
-    slot = box(rm - RING_PAD[1] / 2 - 0.5, -RING_PAD[0] / 2 - 0.5, face_z + t - 0.01, rm + RING_PAD[1] / 2 + 0.5, RING_PAD[0] / 2 + 0.5, z_top + 1.0)
+def ring_pocket(face_z: float, z_top: float, deg: float = HEAD_RING_LEAD_DEG, rib_d: float = HEAD_RING[0]) -> cq.Workplane:
+    """Cutter for the same seat sunk into a plate's underside (phase0_top): the bore up to the ring's back face (the plate is the
+    lip) less the three ribs, and a slot from there through the plate to z_top for the solder pads and the leads."""
+    t = HEAD_RING[2]
+    back = face_z + t
+    bore = cyl((0, 0, face_z - 5.0), HEAD_SEAT_BORE, t + 5.0).cut(_seat_ribs(face_z - 5.0, back + 1.0, rib_d))
+    r1 = max((r[0] + r[1]) / 4 for r in HEAD_RING_RANGE) + RING_PAD[1] / 2 + 0.5  # the biggest ring's pads
+    slot = box(HEAD_NOTCH_R0, -RING_PAD[0] / 2 - 0.5, back - 0.01, r1, RING_PAD[0] / 2 + 0.5, z_top + 1.0)
     return bore.union(_at_angle(slot, deg))
 
 
@@ -866,7 +898,7 @@ def station_ring_seat() -> cq.Workplane:
     return body.cut(_at_angle(slot, STATION_RING_LEAD_DEG))
 
 
-def camera_bracket(arm_offset: float) -> cq.Workplane:
+def camera_bracket(arm_offset: float, rib_d: float = HEAD_RING[0]) -> cq.Workplane:
     """Clamps the drop arm; holds the head camera board level, lens CAM_Z above the cup face and CAM_DY from the cup axis
     (toward the label end). The board sits on the shelf, HEAD_LENS_PROJ above the lens front; the LED ring hangs around
     the lens. Print in matte black, shelf face down."""
@@ -875,7 +907,7 @@ def camera_bracket(arm_offset: float) -> cq.Workplane:
     shelf = box(-24, ly - 24, zs - 4, 24, arm_offset - 10, zs)
     shelf = shelf.cut(cyl((0, ly, zs - 10), LENS_WINDOW_D, 20))  # lens holder window
     shelf = holes_z(shelf, [(dx, ly + dy) for dx in (-16, 16) for dy in (-16, 16)], 2.2)  # 32 mm board holes, M2 + nuts
-    seat = ring_seat(z0 + HEAD_RING_FACE_DZ, zs - 4).translate((0, ly, 0))
+    seat = ring_seat(z0 + HEAD_RING_FACE_DZ, zs - 4, rib_d=rib_d).translate((0, ly, 0))
     clamp = box(-12, arm_offset - 12, z0 - 6, 12, arm_offset + 12, zs)
     body = shelf.union(seat).union(clamp)
     body = body.cut(box(-10.2, arm_offset - 10.2, z0 - 7, 10.2, arm_offset + 10.2, zs + 1))  # arm bore, cut last
@@ -884,7 +916,7 @@ def camera_bracket(arm_offset: float) -> cq.Workplane:
 
 
 # --------------------------------------------------------------------------- carry-height sensor (Z stall guard)
-# The spare TCST2103 endstop board (the BOM's sensors come as a 3-pack) on the Z spine's -X face, in carry_sensor_mount
+# The spare TCST2103 endstop board (the BOM's sensors come as two 2-packs) on the Z spine's -X face, in carry_sensor_mount
 # (2 x M5x10 button heads into slot-6 T-nuts in the spine's -X slot: slide it along the slot to set the trip). Same board
 # orientation as the probe: arms toward -X, hole line along Y, so its slot runs along Z. A flag cut from the 1 mm aluminium
 # sheet, on carry_flag_arm (screwed to the z_plate's front face), rises into the slot from below: its top edge crosses the
@@ -983,6 +1015,291 @@ def carry_flag_parts(cup_x: float, c: float) -> list[Part]:
     return parts
 
 
+# --------------------------------------------------------------------------- homing switches (X home, Z top)
+# Bare SPDT hinge-lever microswitches, the common 20 x 6 mm size (BOM 'Homing switches'). [Certain, Omron SS-5GL datasheet, SS
+# series] body 19.8 x 10.2 x 6.4 mm; two 2.35 mm mounting holes 9.5 +/- 0.1 mm apart (M2 or M2.3 screws), the first 5.1 from the
+# hinge end, their centres 2.9 above the terminal face; operating position OP 8.8 +/- 0.8 and free position FP max 13.6, both
+# above the hole line at the lever's operating point (14.5 from the first hole); overtravel OT min 1.2 mm; lever 3.6 wide;
+# terminals C, NO, NC 1.6, 10.4 and 17.7 from the hinge end. [Likely] the BOM's generic 10-pack has this body and 9.5 mm holes.
+# [Guessing] the lever pivot (read off the drawing), the body's lower top from 9.4 mm out, and the 4.5 mm terminals.
+# Switch frame (u, w, v): u along the body from the hinge end, w across it (centred), v up from the hole line (the lever side).
+# Each switch is worked by a 45-deg lead-in that slides ACROSS the lever (the axis moves along the lever's pivot axis), then a
+# flat that holds the operating point SW_DWELL_OT past OP however far the axis runs on: the hard stops are 4 mm past the trip,
+# the lever's overtravel only 1.2 mm, so a striker pushing the lever head-on would make the switch the stop (or break it).
+SW_L, SW_T = 19.8, 6.4  # body length (u), thickness (w)
+SW_TOP, SW_STEP, SW_BOTTOM = 7.3, (9.4, 6.6), -2.9  # body top over the pivot half; from u 9.4 on it is 6.6; terminal face (v)
+SW_HOLES_U, SW_HOLE_D = (5.1, 14.6), 2.35
+SW_TABS_U, SW_TAB = (1.6, 10.4, 17.7), (0.5, 3.2, 4.5)  # C, NO, NC; each tab: along u, across w, length out of the terminal face
+SW_PIVOT = (3.25, 6.4)  # lever pivot (u, v)
+SW_LEVER = (3.6, 0.3, 20.0)  # width (w), thickness, end (u)
+SW_OP_U = SW_HOLES_U[0] + 14.5  # 19.6: the operating point, where OP and FP are measured
+SW_OP, SW_OP_TOL, SW_FP, SW_OT = 8.8, 0.8, 13.6, 1.2
+SW_E = SW_OP - SW_PIVOT[1]  # lever top face above its pivot: the lever lies flat (angle 0) at the nominal OP
+SW_DWELL_OT = 0.6  # the striker's flat holds the operating point this far past OP: on for sure, and 0.6 mm short of OT min
+SW_U0 = 12.0  # each striker covers the lever from here to past its end, never the pivot end (the lever stands highest there)
+SW_CHAMFER = 6.5  # the X finger's 45-deg lead-in: deeper than the free lever (FP max) stands above the flat (5.3) + SW_SLOT
+SW_SLOT = 1.0  # the M2 slots let a switch move +/- this toward its striker (covers OP +/- 0.8)
+# Longest lever (end from the hinge end, u) fitted as is: 3.2 mm past the body end. [Guessing] which lever the BOM's generic pack
+# has: long hinge levers end 25-28 mm out. A longer lever is cut back to SW_LEVER[2] (flush with the body end) before fitting.
+# checks.py reports the longest each switch takes (X: the carry flag's screws; Z: the z_plate's lead-in).
+SW_LEVER_MAX = 23.0
+M2_HEAD, M2_NUT = (3.8, 2.0), (4.6, 1.6)  # M2 socket head (dia, height); M2 nut (across corners, thickness)
+M2_SLOT_W = 2.4
+
+
+def sw_lever_v(u: float, ang: float) -> float:
+    """Height (v) of the lever's top face at the lever point that lies at u when the lever is flat, the lever at ang (rad)."""
+    pu, pv = SW_PIVOT
+    return pv + (u - pu) * math.sin(ang) + SW_E * math.cos(ang)
+
+
+def sw_lever_u(u: float, ang: float) -> float:
+    """Where along the body (u) that lever point lies at ang."""
+    pu, _ = SW_PIVOT
+    return pu + (u - pu) * math.cos(ang) - SW_E * math.sin(ang)
+
+
+def sw_angle(v_op: float) -> float:
+    """Lever angle (rad) that puts the operating point at height v_op."""
+    lo, hi = -0.6, 0.6
+    for _ in range(50):
+        mid = (lo + hi) / 2
+        lo, hi = (mid, hi) if sw_lever_v(SW_OP_U, mid) < v_op else (lo, mid)
+    return (lo + hi) / 2
+
+
+SW_FREE = sw_angle(SW_FP)  # free lever (FP max: the furthest it can stand out)
+SW_DWELL_V = sw_lever_v(SW_U0, sw_angle(SW_OP - SW_DWELL_OT))  # 8.48: the striker's flat above the hole line
+
+
+def sw_lever_angle(striker, end: float | None = None) -> float:
+    """Lever angle (rad) with a striker on it: the highest angle, up to free, at which no point of the lever's top face (from
+    the pivot to the end, both edges and the middle) stands above striker(u, w), the striker face's height (v) over the body
+    point (u, w), None where it does not reach. Points are passed where they lie at that angle, so the lever's swing counts.
+    ``end``: the lever's end (u; None = SW_LEVER's)."""
+    pu = SW_PIVOT[0]
+    end = SW_LEVER[2] if end is None else end
+    pts = [(pu + 0.25 * k, w) for k in range(int((end - pu) / 0.25) + 1) for w in (-SW_LEVER[0] / 2, 0.0, SW_LEVER[0] / 2)]
+
+    def fits(a):
+        for u, w in pts:
+            s = striker(sw_lever_u(u, a), w)
+            if s is not None and sw_lever_v(u, a) > s + 1e-6:
+                return False
+        return True
+    if fits(SW_FREE):
+        return SW_FREE
+    lo, hi = sw_angle(SW_OP - 4.0), SW_FREE
+    for _ in range(40):
+        mid = (lo + hi) / 2
+        lo, hi = (mid, hi) if fits(mid) else (lo, mid)
+    return lo
+
+
+def sw_body() -> cq.Workplane:
+    """Switch body with its mounting holes and terminals, switch frame (x = u, y = w, z = v)."""
+    hw = SW_T / 2
+    body = box(0, -hw, SW_BOTTOM, SW_L, hw, SW_TOP).cut(box(SW_STEP[0], -hw - 1, SW_STEP[1], SW_L + 1, hw + 1, SW_TOP + 1))
+    body = holes_y(body, [(u, 0.0) for u in SW_HOLES_U], SW_HOLE_D)
+    for u in SW_TABS_U:
+        body = body.union(box(u, -SW_TAB[1] / 2, SW_BOTTOM - SW_TAB[2], u + SW_TAB[0], SW_TAB[1] / 2, SW_BOTTOM + 0.01))
+    return body
+
+
+def sw_lever(ang: float, end: float | None = None) -> cq.Workplane:
+    """The lever at ang (0 = flat at OP, + = up), switch frame. ``end``: the lever's end (u; None = SW_LEVER's)."""
+    w, t, e = SW_LEVER
+    end = e if end is None else end
+    pu, pv = SW_PIVOT
+    lev = box(pu - 1.0, -w / 2, SW_OP - t, end, w / 2, SW_OP)
+    return lev.rotate((pu, 0, pv), (pu, 1, pv), -math.degrees(ang))
+
+
+def sw_m2(u: float, w0: float, v: float, nut_side: float) -> tuple[cq.Workplane, cq.Workplane]:
+    """(head, nut + tip) of an M2x12 through a mounting hole at u, switch frame: the head sits at w0 (outside the mount), the nut
+    on the switch's face at w = nut_side * SW_T / 2."""
+    s = 1 if nut_side > 0 else -1
+    head = cyl((u, w0, v), M2_HEAD[0], M2_HEAD[1], (0, -s, 0))
+    nf = s * SW_T / 2
+    tip = w0 + s * 12.0
+    nut = cyl((u, nf, v), M2_NUT[0], M2_NUT[1], (0, s, 0))
+    if s * (tip - (nf + s * M2_NUT[1])) > 0.01:
+        nut = nut.union(cyl((u, nf + s * M2_NUT[1], v), 2.0, s * (tip - nf) - M2_NUT[1], (0, s, 0)))
+    return head, nut
+
+
+# X home switch: under the beam's left end, in front of the left upright, on x_switch_mount (2 x M5x10 button heads into T-nuts in
+# the beam's lower front slot, left of x_bumper_L: slide it to set the click). Lever up, pivot end toward the back, worked by a
+# finger off the x_bracket's left edge (x_finger(), Y 86-94): its underside's lead-in presses the lever as the carriage moves
+# left and its flat holds it to the hard stop. Everything stays behind Y 84: in front of that, the carry flag and its arm (on the
+# z_plate's left end) sweep the whole Z travel at the left end of X. Machine frame: X = XS_X + w, Y = XS_Y0 - u, Z = XS_ZH + v.
+XF_Y = (BEAM_Y0 - L.MGN12_H - L.X_BRACKET_T, BEAM_Y0 - L.MGN12_H)  # (86, 94): the finger has the x_bracket plate's thickness
+XF_Z = (369.5, 378.5)  # finger underside (the flat) and top: under x_bumper_L (Z 380) by 1.5
+XS_X = -24.0  # switch centre (w = 0); its nut side ends 4.2 mm left of the x_bracket at the left hard stop
+XS_Y0 = XF_Y[1] + SW_U0  # 106: pivot end, so the finger covers the lever from u = SW_U0 on
+XS_ZH = XF_Z[0] - SW_DWELL_V  # 361.0: hole line
+# finger length off the x_bracket's left edge: at cup X = X_HOME_SWITCH its lead-in stands SW_OP above the hole line over the
+# lever's right edge (where it is lowest), so the lever, flat there, is at OP
+XF_LEN = L.X_HOME_SWITCH - XB_HALF - (XS_X + SW_LEVER[0] / 2) + SW_DWELL_V + SW_CHAMFER - SW_OP  # 17.4
+XSM_T, XSM_FRONT_T = 4.0, 5.0  # side plate (holds the switch, M2 slots) and front plate (on the beam + upright front faces)
+XSM_X0 = -55.0  # front plate's left end
+XSM_TOP_X1 = L.X_HARD_STOP[0] - XB_HALF - 12.0 - 4.0  # -31: the part above the beam bottom stays 4 mm left of x_bumper_L
+XSM_Z = (353.0, 400.0)
+XSM_M5_X = (-48.5, -37.0)  # M5 screws, beam's lower front slot (Z = X_BEAM_Z - 10)
+
+
+def x_finger() -> cq.Workplane:
+    """The x_bracket's finger, x_bracket local coordinates (X from the cup axis, Y from the X carriage's front face): a bar off
+    the plate's left edge at Z XF_Z, with a 45-deg lead-in on the underside of its left end."""
+    x1, x0 = -XB_HALF, -XB_HALF - XF_LEN
+    yb = XF_Y[0] - (BEAM_Y0 - L.MGN12_H)  # -8
+    bar = box(x0, yb, XF_Z[0], x1 + 0.01, 0, XF_Z[1])
+    ch = SW_CHAMFER
+    wedge = cq.Workplane("XZ").polyline([(x0 - 0.01, XF_Z[0] - 0.01), (x0 + ch, XF_Z[0] - 0.01), (x0 - 0.01, XF_Z[0] + ch)]).close().extrude(-20)
+    return bar.cut(wedge.translate((0, yb - 5, 0)))
+
+
+def x_finger_striker(cup_x: float):
+    """striker(u, w) for sw_lever_angle: the finger's underside over the X switch's lever, the carriage at cup_x."""
+    x_end = cup_x - XB_HALF - XF_LEN
+
+    def s(u, w):
+        X, Y = XS_X + w, XS_Y0 - u
+        if not XF_Y[0] <= Y <= XF_Y[1] or not x_end <= X <= cup_x + XB_HALF:
+            return None
+        return XF_Z[0] + max(0.0, SW_CHAMFER - (X - x_end)) - XS_ZH
+    return s
+
+
+def _place_x(shape: cq.Workplane) -> cq.Workplane:
+    return shape.rotate((0, 0, 0), (0, 0, 1), -90).translate((XS_X, XS_Y0, XS_ZH))
+
+
+def x_switch_mount() -> cq.Workplane:
+    """Printed bracket for the X home switch, machine coordinates (as fitted). A front plate on the beam's and the left upright's
+    front faces (Y = BEAM_Y0), 2 x M5x10 button heads into T-nuts in the beam's lower front slot: slide it along the slot to set
+    the click. A side plate along the switch's left face carries it on 2 x M2x12 in slots that let it move +/- SW_SLOT up or
+    down (toward or away from the finger)."""
+    xs = XS_X - SW_T / 2  # switch's left face
+    yf = BEAM_Y0
+    side = box(xs - XSM_T, XS_Y0 - SW_L - 2.0, XSM_Z[0], xs, yf - XSM_FRONT_T + 1.0, XF_Z[0] - 2.5)
+    front = box(XSM_X0, yf - XSM_FRONT_T, XSM_Z[0], xs, yf, Z_BEAM_BOT).union(box(XSM_X0, yf - XSM_FRONT_T, Z_BEAM_BOT - 0.01, XSM_TOP_X1, yf, XSM_Z[1]))
+    body = side.union(front)
+    for u in SW_HOLES_U:  # M2 slots along Z, and room for the heads where the front plate meets the side plate
+        y = XS_Y0 - u
+        body = body.cut(box(xs - XSM_T - 1, y - M2_SLOT_W / 2, XS_ZH - SW_SLOT, xs + 1, y + M2_SLOT_W / 2, XS_ZH + SW_SLOT))
+        body = holes_x(body, [(y, XS_ZH - SW_SLOT), (y, XS_ZH + SW_SLOT)], M2_SLOT_W, x0=xs - XSM_T - 1, h=XSM_T + 2)
+        r = M2_HEAD[0] / 2 + 0.7
+        body = body.cut(box(xs - XSM_T - M2_HEAD[1] - 2.0, y - r, XS_ZH - SW_SLOT - r, xs - XSM_T, y + r, XS_ZH + SW_SLOT + r))
+    return holes_y(body, [(x, L.X_BEAM_Z - 10) for x in XSM_M5_X], M5_CLR)
+
+
+def x_switch_parts(cup_x: float | None = None) -> list[Part]:
+    """Static: the mount, the switch with its lever posed for the carriage at cup_x (None = free), and the screw heads and nuts."""
+    ang = SW_FREE if cup_x is None else sw_lever_angle(x_finger_striker(cup_x))
+    parts = [Part("x_switch_mount", x_switch_mount(), PETG, "printed", "static"),
+             Part("x_home_switch", _place_x(sw_body().union(sw_lever(ang))), BLACK, "purchased", "static",
+                  note="SPDT hinge-lever microswitch, C + NC wired", meta={"lever_deg": math.degrees(ang)})]
+    for u in SW_HOLES_U:
+        hd, nut = sw_m2(u, -SW_T / 2 - XSM_T, 0.0, 1)  # head on the side plate's outer face (w < 0 = -X), nut on the switch's right face
+        parts += [Part(f"fx_xsw_m2_{u:.0f}", _place_x(hd), STEEL, "fastener", "static"),
+                  Part(f"fx_xsw_nut_{u:.0f}", _place_x(nut), STEEL, "fastener", "static")]
+    for x in XSM_M5_X:
+        parts.append(head(f"fx_xsw_m5_{x:.0f}", (x, BEAM_Y0 - XSM_FRONT_T, L.X_BEAM_Z - 10), (0, -1, 0), M5_BUTTON, "static"))
+    return parts
+
+
+def x_switch_cable() -> cq.Workplane:
+    """Envelope of the X switch's 2-core lead (W52): down from the terminals, back under the beam below the corner brackets
+    (they reach ~40 mm down the upright from the beam), and up behind the beam to its rear lower slot. Static; not a part."""
+    x0, x1 = XS_X - SW_TAB[1] / 2 - 0.5, XS_X + SW_TAB[1] / 2 + 0.5
+    zl = XS_ZH + SW_BOTTOM - SW_TAB[2]
+    z0 = Z_BEAM_BOT - 50.0
+    drop = box(x0, XS_Y0 - SW_L, z0, x1, XS_Y0, zl)
+    run = box(x0, XS_Y0 - SW_L, z0, x1, BEAM_Y1 + 5, z0 + 4)
+    rise = box(x0, BEAM_Y1 + 1, z0, x1, BEAM_Y1 + 5, L.X_BEAM_Z - 7)
+    return drop.union(run).union(rise)
+
+
+# Z top switch: on the Z spine's right (+X) face near the top, on z_switch_mount (2 x M5x10 button heads into T-nuts in that face's
+# slot: slide it along the slot to set the click), fixed to the X carriage. Lever toward the z_plate (-Y), pivot end to the right of
+# the z_plate's right end: as the head rises, the chamfer along the z_plate's top-back edge (ZP_CHAMFER_X) presses the lever and its
+# back face holds it to the top hard stop. Machine frame: X = cup + ZS_X0 - u, Y = ZS_YH - v, Z = ZS_Z - w.
+ZP_X1 = 40.0  # z_plate's right end, X from the cup axis
+# The chamfer runs from ZP_CHAMFER_X to the right end: a lever under the plate's square top would be hit edge-on, so it covers any
+# lever ending up to u = ZS_X0 - ZP_CHAMFER_X = 32 (the CAD's lever is under the plate from X 32). It is ZP_CHAMFER deep (45 deg),
+# 0.5 short of the 8 mm plate: a free lever stands into the plate's path up to that far (+ SW_SLOT) and is still caught.
+ZP_CHAMFER_X, ZP_CHAMFER = 20.0, 7.5
+ZS_X0 = ZP_X1 + SW_U0  # 52: pivot end, X from the cup axis
+ZS_YH = Z_CAR_FRONT + SW_DWELL_V  # 61.5: hole line (Y)
+# switch centre (w = 0): at c = Z_SWITCH_C the chamfer stands SW_OP above the hole line over the lever's lower edge
+ZS_Z = L.Z_SWITCH_C + L.Z_CARRIAGE_ABOVE_CUP + L.Z_PLATE_TOP - (SW_DWELL_V + ZP_CHAMFER - SW_OP) + SW_LEVER[0] / 2  # 605.6
+ZSM_T, ZSM_SHELF_T = 5.0, 3.0  # spine plate (M5 wall), shelf under the switch (M2 slots)
+ZSM_SHELF = (15.0, 54.0, Z_CAR_FRONT + 2.0, 70.0)  # x0, x1 (from the cup axis), y0, y1: 2 mm behind the z_plate, clear of the Z carriage
+ZSM_M5_Z = (582.0, 594.0)
+
+
+def z_plate_striker(c: float):
+    """striker(u, w) for sw_lever_angle: the z_plate's back face and top chamfer under the Z switch's lever, the cup at c."""
+    zb = c + L.Z_CARRIAGE_ABOVE_CUP
+    z_top = zb + L.Z_PLATE_TOP
+
+    def s(u, w):
+        X, Z = ZS_X0 - u, ZS_Z - w
+        if not -30.0 <= X <= ZP_X1 or not zb - 5.0 <= Z <= z_top:
+            return None
+        y = Z_CAR_FRONT - (max(0.0, ZP_CHAMFER - (z_top - Z)) if X >= ZP_CHAMFER_X else 0.0)
+        return ZS_YH - y
+    return s
+
+
+def _place_z(shape: cq.Workplane, cup_x: float) -> cq.Workplane:
+    return shape.rotate((0, 0, 0), (1, 0, 0), 90).rotate((0, 0, 0), (0, 1, 0), 180).translate((cup_x + ZS_X0, ZS_YH, ZS_Z))
+
+
+def z_switch_mount() -> cq.Workplane:
+    """Printed bracket for the Z top switch. Local origin: X = cup axis, Y = machine Y, Z = machine Z. A plate on the spine's right
+    face (2 x M5x10 button heads into T-nuts in its slot), a shelf under the switch (2 x M2x12 from below, in slots that let it
+    move +/- SW_SLOT toward or away from the z_plate) and a rib under the shelf's back edge."""
+    x0 = L.Z_SPINE_OFFSET_X + 20  # spine's right face
+    zt = ZS_Z - SW_T / 2  # shelf top = switch's lower face
+    sx0, sx1, sy0, sy1 = ZSM_SHELF
+    plate = box(x0, Z_SPINE_Y[0], ZSM_M5_Z[0] - 6.0, x0 + ZSM_T, Z_SPINE_Y[1], zt)
+    shelf = box(sx0 - 0.01, sy0, zt - ZSM_SHELF_T, sx1, sy1, zt)
+    rib = box(sx0 - 0.01, Z_SPINE_Y[0], zt - ZSM_SHELF_T - 6.0, sx1 - 4.0, sy1, zt - ZSM_SHELF_T + 0.01)
+    body = plate.union(shelf).union(rib)
+    for u in SW_HOLES_U:  # M2 slots along Y
+        x = ZS_X0 - u
+        body = body.cut(box(x - M2_SLOT_W / 2, ZS_YH - SW_SLOT, zt - 10, x + M2_SLOT_W / 2, ZS_YH + SW_SLOT, zt + 1))
+        body = holes_z(body, [(x, ZS_YH - SW_SLOT), (x, ZS_YH + SW_SLOT)], M2_SLOT_W, z0=zt - 10, h=11)
+    return holes_x(body, [(sum(Z_SPINE_Y) / 2, z) for z in ZSM_M5_Z], M5_CLR, x0=x0 - 1, h=ZSM_T + 2)
+
+
+def z_switch_parts(cup_x: float, c: float | None = None) -> list[Part]:
+    """Fixed to the X carriage: the mount, the switch with its lever posed for the cup at c (None = free), screw heads and nuts."""
+    ang = SW_FREE if c is None else sw_lever_angle(z_plate_striker(c))
+    parts = [Part("z_switch_mount", z_switch_mount().translate((cup_x, 0, 0)), PETG, "printed", "carriage"),
+             Part("z_top_switch", _place_z(sw_body().union(sw_lever(ang)), cup_x), BLACK, "purchased", "carriage",
+                  note="SPDT hinge-lever microswitch, C + NC wired", meta={"lever_deg": math.degrees(ang)})]
+    for u in SW_HOLES_U:
+        hd, nut = sw_m2(u, SW_T / 2 + ZSM_SHELF_T, 0.0, -1)  # head under the shelf (w > 0 = down), nut on the switch's top face
+        parts += [Part(f"fc_zsw_m2_{u:.0f}", _place_z(hd, cup_x), STEEL, "fastener", "carriage"),
+                  Part(f"fc_zsw_nut_{u:.0f}", _place_z(nut, cup_x), STEEL, "fastener", "carriage")]
+    for z in ZSM_M5_Z:
+        parts.append(head(f"fc_zsw_m5_{z:.0f}", (cup_x + L.Z_SPINE_OFFSET_X + 20 + ZSM_T, sum(Z_SPINE_Y) / 2, z), (1, 0, 0), M5_BUTTON, "carriage"))
+    return parts
+
+
+def z_switch_cable(cup_x: float = 0.0) -> cq.Workplane:
+    """Envelope of the Z switch's two cores (8-core cores 4 and 5): back from the terminals past the spine's back face, then up
+    behind the z_motor_mount to the spine top, where the 8-core's jacket is opened (WIRING.md sec. 11). Fixed to the carriage."""
+    x0, x1 = cup_x + ZS_X0 - SW_L - 0.5, cup_x + ZS_X0 + 0.5
+    z0, z1 = ZS_Z - SW_TAB[1] / 2 - 0.5, ZS_Z + SW_TAB[1] / 2 + 0.5
+    back = box(x0, ZS_YH - SW_BOTTOM + SW_TAB[2], z0, x1, Z_SPINE_Y[1] + 5, z1)
+    rise = box(x0, Z_SPINE_Y[1] + 1, z0, x1, Z_SPINE_Y[1] + 5, L.Z_SPINE_TOP + L.Z_MOTOR_MOUNT_T + 10)
+    return back.union(rise)
+
+
 # --------------------------------------------------------------------------- build tools (printed)
 
 
@@ -1032,11 +1349,15 @@ def fill_gauge() -> cq.Workplane:
 
 P0_POST = 312.0  # 2020 posts (BOM length)
 P0_SOCKET_FLOOR = 2.0  # phase0_base socket floor height
-P0_BAR_T, P0_BAR_SOCKET = 8.0, 5.0  # phase0_top thickness, blind socket depth
+# phase0_top: the head ring's pocket comes within 0.33 mm (in plan) of each M2 standoff hole (the board's 32 mm pattern, 22.6 mm
+# from the lens axis), so the 4 mm blind holes must stop 2 mm above the pocket's top (the ring's back face, 4.6 above the
+# underside): 10.6 thick (was 8, which left 1.23 mm). The bar's underside and the ring stay where they were, relative to the lens.
+P0_BAR_T, P0_BAR_SOCKET = 10.6, 5.0  # phase0_top thickness, blind socket depth
+P0_M2_DEPTH = 4.0  # blind M2 holes for the standoffs (an M2 standoff's male thread is ~3 mm [Likely])
 P0_SLAB_Z = L.STATION_LENS_Z + L.CAM_TO_SLAB  # slab front (bottom face) height = tray ledge top
 P0_TOP_Z = P0_SLAB_Z + SLAB_T + L.CAM_TO_SLAB  # head lens front height
 P0_BAR_Z0 = P0_SOCKET_FLOOR + P0_POST - P0_BAR_SOCKET  # 309: bridge underside, fixed by the posts
-P0_BAR_TOP = P0_BAR_Z0 + P0_BAR_T  # 317
+P0_BAR_TOP = P0_BAR_Z0 + P0_BAR_T  # 319.6
 P0_TRAY_PLAY = 1.0  # total slab play in the tray recess. Set dims.SLAB_W/H to your LARGEST measured slab (sec. 1.2)
 P0_LEDGE = 2.6  # ledge under each slab edge (centred slab); >= 2.1 mm even when shifted by the full play
 # The occluder (head_foot + buffer + cup + probe on a 2020 arm stub) hangs under the head camera exactly as on the
@@ -1104,6 +1425,9 @@ def phase0_tray() -> cq.Workplane:
     return frame
 
 
+P0_M2_HOLES = [(dx, CAM_DY + dy) for dx in (-16, 16) for dy in (-16, 16)]  # head camera board, 32 mm square round the lens
+
+
 def phase0_top() -> cq.Workplane:
     """Bridge resting on the post tops (blind sockets), carrying the head camera board on M2 standoffs
     (height p0_board_spacer()) and the head LED ring, sunk into its underside so it sits where it does on the machine relative
@@ -1116,7 +1440,7 @@ def phase0_top() -> cq.Workplane:
     for sx in (-1, 1):
         bar = bar.cut(cbox(sx * span / 2, 0, P0_BAR_SOCKET / 2, 20.4, 20.4, P0_BAR_SOCKET))  # blind sockets
     body = bar.cut(ring_pocket(P0_TOP_Z + HEAD_RING_FACE_DZ - P0_BAR_Z0, P0_BAR_T).translate((0, ly, 0)))  # ring as on the machine, rel. to the lens
-    return holes_z(body, [(dx, ly + dy) for dx in (-16, 16) for dy in (-16, 16)], 1.8, z0=P0_BAR_T - 6, h=10)  # blind, for M2 standoffs
+    return holes_z(body, P0_M2_HOLES, 1.8, z0=P0_BAR_T - P0_M2_DEPTH, h=10)  # blind, for M2 standoffs
 
 
 def phase0_base() -> cq.Workplane:
@@ -1195,7 +1519,7 @@ def stacks(fill: dict[int, int] | None = None) -> list[Part]:
 def machine(cup_x: float, c: float, held_slab: bool = False, fill: dict[int, int] | None = None, with_slabs: bool = True, roof: bool = False, fasteners: bool = True,
             seated: bool = False) -> list[Part]:
     """``seated``: the held slab rests on something (probe tripped, buffer compressed); otherwise the free cup hangs CUP_HANG below c."""
-    parts = frame_parts() + bed_parts() + carriage_parts(cup_x) + head_parts(cup_x, c)
+    parts = frame_parts(cup_x) + bed_parts() + carriage_parts(cup_x, c) + head_parts(cup_x, c)
     if not roof:
         parts = [p for p in parts if p.name != "light_roof"]
     if not fasteners:
@@ -1222,11 +1546,11 @@ def printed_catalog() -> list[tuple[str, cq.Workplane, int, str]]:
         ("x_bumper_L", _flip_x(x_bumper(), -90), 1, "PETG, beam face down (as exported), 4 walls, 40% infill"),
         ("x_idler_mount", x_idler_mount(), 1, "PETG, foot down, 5 walls, 40% infill"),
         ("x_idler_slider", x_idler_slider(), 1, "PETG, as exported, 5 walls, 50% infill"),
-        ("x_bracket", _flip_x(x_bracket(), 90), 1, "PETG, print flat on its spine face (as exported), 6 walls, 50% infill"),
+        ("x_bracket", _flip_x(x_bracket(), 90), 1, "PETG, print flat on its spine face (as exported), 6 walls, 50% infill; the finger off its left edge works the X home switch"),
         ("belt_clamp", belt_clamp(), 2, "PETG, flat, 100% infill"),
         ("z_motor_mount", _flip_x(z_motor_mount(), 180), 1, "PETG, motor face down, tab up, 5 walls, 40% infill"),
         ("z_end_cap", z_end_cap(), 1, "PETG, as exported (lips up), 5 walls, 50% infill"),
-        ("z_plate", _flip_x(z_plate(), -90), 1, "PETG, carriage face down, nut shelf up, 6 walls, 50% infill"),
+        ("z_plate", _flip_x(z_plate(), -90), 1, "PETG, carriage face down, nut shelf up, 6 walls, 50% infill; the switch chamfer at the top right starts at the bed (45 deg)"),
         ("head_foot", head_foot(off), 1, "PETG, foot down (as exported), 5 walls, 40% infill; clear the 1.9 mm flag slot and the board slots with a hacksaw blade"),
         ("camera_bracket", _flip_x(camera_bracket(off), 180), 1, "PETG matte black, shelf face down (as exported); the ring seat bridges ~30 mm between its 4 legs (tree supports there if your printer sags)"),
         ("gate_post_L", gate_post("L"), 1, "PETG, upright on its foot (as exported), 10 mm brim, 4 walls; needs 230 mm Z height, else print lying on its side with supports"),
@@ -1238,6 +1562,8 @@ def printed_catalog() -> list[tuple[str, cq.Workplane, int, str]]:
         ("phase0_occluder_mount", phase0_occluder_mount(), 1, "PLA/PETG (Phase 0 test jig), flat on its beam (as exported), 4 walls, 30% infill"),
         ("carry_sensor_mount", carry_sensor_mount().rotate((0, 0, 0), (0, 1, 0), 90), 1, "PETG, flat on its spine face (as exported), 4 walls, 40% infill"),
         ("carry_flag_arm", carry_flag_arm(), 1, "PETG, standing on its bottom face (as exported), 4 walls, 40% infill"),
+        ("x_switch_mount", _flip_x(x_switch_mount(), -90), 1, "PETG, front plate down (as exported), 4 walls, 40% infill; X home switch on 2 x M2x12, 2 x M5x10 button heads"),
+        ("z_switch_mount", z_switch_mount().rotate((0, 0, 0), (0, 1, 0), -90), 1, "PETG, spine plate down (as exported), 4 walls, 40% infill; Z top switch on 2 x M2x12, 2 x M5x10 button heads"),
         ("awl_adapter", awl_adapter(), 1, "PETG (build tool) + M5 heat-set insert + 3 mm steel pin"),
         ("fill_gauge", _flip_x(fill_gauge(), 90), 2, "PLA, flat (as exported) (loading tool)"),
     ]

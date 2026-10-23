@@ -485,7 +485,9 @@ report's own warning, implemented in `runner._carry_check`]
 
 ## 7. Limit switches (NC)
 
-**Use bare SPDT lever microswitches with C / NO / NC solder tabs.**
+**Use bare SPDT hinge-lever microswitches with C / NO / NC solder tabs** (the Omron SS-5GL size:
+19.8 × 10.2 × 6.4 mm body, holes 9.5 mm apart). The printed mounts take a flat lever that ends at
+most 23 mm from the hinge end; cut a longer one back to 20 mm (BUILD_GUIDE §6.8).
 - Solder the cable to **C** and **NC**: closed at rest, open when pressed.
 - C goes to the connector's GND pin and NC to its signal pin. Leave V-Lim empty.
 
@@ -500,15 +502,30 @@ a pressed switch. [Likely: forum reports]
 - Pressed, or a wire broken: open → HIGH → triggered. Outside homing that is ALARM:1, so a broken
   switch wire stops the machine instead of letting it crash.
 
-**Where the switches go**
-- **X home switch:** on the left end of the beam. It must click when the cup axis is at layout
-  X ≈ 19 mm, which is about 23 mm left of pocket 0's centre, **± 2 mm**.
-  - The printed `x_bumper_L` (in the CAD) is the hard stop at cup X 15, so the switch must trip at
-    least 2 mm before the `x_bracket` reaches it. The carriage still has 2.3 mm of rail there.
-- **Z top switch:** at the top of the Z spine, hit by the Z plate. It must click at c ≈ 258 mm
-  (the cup face 258 mm above the pad top), ± 2 mm. That is 4 mm before the `z_plate` meets the
-  `z_motor_mount` (the top hard stop at c = 262).
-- Exact positions are checked in FIRMWARE.md Step 6.
+**Where the switches go** [Certain, CAD `x_switch_mount`, `z_switch_mount`, `checks.txt`]
+- **X home switch:** on the printed `x_switch_mount`, under the beam's left end, on the front faces
+  of the beam and the left upright (2 × M5×10 button heads into T-nuts in the beam's lower front
+  slot, left of `x_bumper_L`). Lever up, hinge end toward the back. A finger on the `x_bracket`'s
+  left edge slides across the lever (a 45° lead-in, then a flat). It must click when the cup axis
+  is at layout X ≈ 19 mm, about 23 mm left of pocket 0's centre, **± 2 mm**.
+  - The printed `x_bumper_L` is the hard stop at cup X 15, so the switch must trip at least 2 mm
+    before the `x_bracket` reaches it. The carriage still has 2.3 mm of rail there. The finger's
+    flat holds the lever 0.6 mm past its click point (at the lever tip) all the way to the bumper.
+  - **Lead (W52):** from the terminals straight down to about 50 mm below the beam (below the
+    corner brackets), back under the beam, then up behind it into the beam's **lower rear** slot,
+    and along that slot to the middle (§11). At the left joint, keep the flat joining plate's beam
+    leg on the upper rear slot so it does not cover the spot where the lead enters (BUILD_GUIDE
+    §4.3). [Certain, CAD lead path; Guessing on the brackets and plate, which are not in the CAD]
+- **Z top switch:** on the printed `z_switch_mount`, on the Z spine's right (+X) face near the top
+  (2 × M5×10 button heads into T-nuts in that face's slot), fixed to the X carriage. The switch
+  lies on the mount's shelf, lever toward the `z_plate`. A 45° chamfer along the `z_plate`'s top
+  back edge slides across the lever, and the plate's back face then holds it. It must click at
+  c ≈ 258 mm (the cup face 258 mm above the pad top), ± 2 mm. That is 4 mm before the `z_plate`
+  meets the `z_motor_mount` (the top hard stop at c = 262).
+  - **Lead:** cores 4 and 5 of the 8-core (§11), back past the spine, then up behind the
+    `z_motor_mount` to the spine top, where the 8-core's jacket is opened.
+- Setting each click point (the switch in its M2 slots, the mount in its M5 slot) is in BUILD_GUIDE
+  §6.8 and §7.4. Exact positions are checked in FIRMWARE.md Step 6.
 
 **Lid switch (optional, GPIO25):** use **C and NO**, closed when the lid presses it, so a shut lid
 reads LOW (`Button.is_pressed`). A cut wire then reads "lid open", which is safe.
@@ -570,8 +587,9 @@ with the room lights on.
 ## 9. LED rings
 
 **Parts (BOM):** two 12 V COB "angel eye" white rings: **40 mm** for the head (a 60 mm ring would
-cut into the drop arm; the seat in `camera_bracket` and `phase0_top` is a 41 mm bore with a 33 mm
-lip, for a ring up to 5 mm thick) and 60 or 63 mm for the station (a 64 mm bore on a shelf in
+cut into the drop arm; the seat in `camera_bracket` and `phase0_top` is a 42.8 mm bore with three
+centring ribs and a 33 mm lip: it takes a ring of 39.5–42.5 mm OD, up to 5 mm thick, and the ribs
+are shaved for a ring over 40 mm) and 60 or 63 mm for the station (a 64 mm bore on a shelf in
 `station_mount` and `phase0_base`). Measure OD, ID and thickness before printing the ring seats
 (BUILD_GUIDE §3.3). If no 40 mm COB ring can be found, a 40 mm 12-SMD ring that fits the seat is
 the fallback. **Leads:** the head ring's pads and leads leave through the notch in its seat's lip;
@@ -661,7 +679,8 @@ Don't tie anything inside the chain.
 - Tie it every 100 mm to the rear brace or to printed clips.
 - Keep it more than 100 mm behind the head's path.
 - The static X motor cable (W50) and X switch cable (W52) run in the beam's back slot from their
-  ends to the middle, then join this bundle.
+  ends to the middle, then join this bundle. The X switch lead comes up into the lower back slot
+  just right of the left upright (§7).
 
 ### Z service loop (head moves 263 mm relative to the carriage)
 
@@ -827,6 +846,7 @@ Do this with everything wired, **mains unplugged**, and the E-stop released.
 
 **Resolved:** the BOM now lists Adafruit #5648 modules, bare microswitches, the 1/3/5 A fuses,
 the mains box, a Class 2 laser and a two-block E-stop used on this page, and the 8-core's spare
-core now carries the carry-height sensor (§6a). The CAD has printed hard
+core now carries the carry-height sensor (§6a). Both limit switches have printed mounts with
+their lead paths in the CAD (§7). The CAD has printed hard
 stops that keep both carriages on their rails (CONTRACT), so the old Z-rail margin issue is
 closed.

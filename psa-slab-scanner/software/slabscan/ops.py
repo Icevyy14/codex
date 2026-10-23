@@ -438,8 +438,9 @@ def calibrate_x(cfg: Config, hw, con: Console, cal_path: Path, rods: bool = True
     """Operator centres the awl on pocket 0 and pocket 12 -> offset_x and a scale check."""
     m = hw.motion
     con.say("calibrate x: fit the AWL adapter in place of the cup. You will centre the awl point over pocket 0, then over pocket 12.\n"
+            "First mark both pocket centres: a tape cross on each pad, halfway between the rod rows both ways (BUILD_GUIDE 12.2).\n"
             "Each pocket: first centre it by eye at the safe height (X moves only), type ok; then lower it to just above the pad\n"
-            "(z -10, z -1 ...; a downward move stops if the point touches), centre it exactly on the pocket centre mark, type ok.")
+            "(z -10, z -1 ...; a downward move stops if the point touches), centre it exactly on the tape cross, type ok.")
     m.home()
     jog = Jogger(cfg, m, con, rods=rods)
     p0, p12 = cfg.pocket(0), cfg.exceptions

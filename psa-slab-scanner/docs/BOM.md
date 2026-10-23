@@ -11,12 +11,12 @@ Confidence tags: **[Certain]** = primary source (for a price: the product page i
 
 - **The full list costs about $2,182 with a 15% allowance.** [Likely ±10%] You have said
   $2,500–3,000 is fine if the machine works properly, so there is about $300–800 of headroom.
-- **The total did not change this round.** Two lines moved between orders: the push fittings
-  kit to order 2 (Phase 0B never uses it) and the PTFE tape, split out of the reservoir set, to
-  order 1b (Phase 0B seals the elbow's thread with it). The 11 confidence tags that differed
-  between the CSV and the shopping list now agree, each set by what the line's price evidence
-  says. The round before, the list went up $209 ($182 of parts plus the allowance), almost all of
-  it real product-page prices replacing estimates (below).
+- **The total did not change this round.** The two homing switches now have printed mounts. They
+  need 4 more M5×10 button heads, 4 more M5 T-nuts and 4 × M2×12 with nuts, all from packs
+  already in the list, and about 33 cm³ more filament. The switch line now says to buy the short
+  hinge lever. In round 4 two lines moved between orders and the confidence tags were aligned;
+  in round 3 the list went up $209 ($182 of parts plus the allowance), almost all of it real
+  product-page prices replacing estimates (below).
 - **$1,383 of the $1,897 subtotal is a price seen on the product page** [Certain, 22 Oct 2026],
   $175 is [Likely] and $339 is [Guessing] (mostly the Misumi extrusions, which block scripts: get
   that quote first, and Amazon lines whose price was not visible). The allowance covers shipping
@@ -64,7 +64,7 @@ per line, is in [SHOPPING_LIST.md](SHOPPING_LIST.md).
 |---|---|---|
 | **1a — Phase 0A, camera test** | Pi 5 with PSU, microSD and cooler, both cameras, the 3 m USB extension, both LED rings, a 12 V wall adapter, M2 screws and standoffs, two 2020 jig posts and the 66 mm arm stub, the optical endstop boards, the flag sheet, hookup wire, heat shrink, filament. Rows marked "PHASE 0A" in the CSV. **Plus, from school stock:** a handful of M5/M3 screws (6 × M5×10, 6 M5 washers, 6 M5 T-nuts or plain M5 nuts, 1 × M5×30 + nylock, 2 × M3×16 + 4 washers + 2 nuts) and a strip of microfiber with spray adhesive or double-sided tape for the tray ledges: their packs are order-2 lines. | **≈ $470**; ≈ $281 with a borrowed school Pi; ≈ $202 if the school also supplies filament, wire, heat shrink and the flag sheet |
 | **1b — Phase 0B, cup bench test** | Two SMC cups and buffers (one is the spare), spare pads, the M5 barb elbows, PU tube (with its fittings kit), PTFE tape, IPA, a hand vacuum pump with gauge. No mains wiring, no electronics. Rows marked "PHASE 0B". Buy after 0A passes, or order the two cups and the two elbows with 0A: Proax shows the cups back-ordered with no lead time, and cup, buffer and elbow are the jig's real occluder. | **≈ $155** |
-| **2 — Machine** | Extrusions, rails and a spare block, motors, belt, brackets, fasteners, bed, dowels, Rodent, valves, pump, reservoir and its push fittings, vacuum sensor and ADC, 24 V PSU, mains inlet and mains box, MOSFET modules, fuses, I/O board, limit switches, laser gate, drag chain, flex cables, E-stop, and the carry-height sensor's screws (its board is already in the 0A endstop packs). Add the light-roof lines only if Phase 0 showed glare, the HT1 cups only if the urethane cup marked, and an upgrade line only when its test failed. | **≈ $1,556** (+ ≈ $190 for the Pi set if you borrowed one for Phase 0) |
+| **2 — Machine** | Extrusions, rails and a spare block, motors, belt, brackets, fasteners, bed, dowels, Rodent, valves, pump, reservoir and its push fittings, vacuum sensor and ADC, 24 V PSU, mains inlet and mains box, MOSFET modules, fuses, I/O board, limit switches (short hinge lever), laser gate, drag chain, flex cables, E-stop, and the screws for the carry-height sensor and the two switch mounts (the sensor's board is already in the 0A endstop packs; the switches' M2 screws in the 0A M2 kit). Add the light-roof lines only if Phase 0 showed glare, the HT1 cups only if the urethane cup marked, and an upgrade line only when its test failed. | **≈ $1,556** (+ ≈ $190 for the Pi set if you borrowed one for Phase 0) |
 
 **If Phase 0A fails, you have spent at most ≈ $470 (≈ $281 with a borrowed Pi). If Phase 0B fails,
 ≈ $626.** The first fix to try would be the HT1 cup (+ ≈ $41), but it needs an M10×1-to-G1/8
@@ -94,6 +94,22 @@ Nothing from order 2 has been bought at that point. [Certain, by construction of
 | Lean swap (generic valves), with school stock | | | **≈ $1,787** |
 
 **What changed in this round ($0.00):**
+- **Homing switches:** the CAD now has printed mounts (`x_switch_mount`, `z_switch_mount`), so the
+  2020 corner brackets no longer carry the switches. The line now asks for the short hinge lever
+  (Omron SS-5GL size, a lever ending at the body's end): the mounts take a lever up to 23 mm from
+  the hinge end, and a longer one is cut back to 20 mm (BUILD_GUIDE §6.8).
+- **M5×10 button heads:** 6 needed, not 2 (2 per switch mount). Same pack, same price
+  [Guessing, a small pack of 10 or more].
+- **M5 T-nuts:** about 130 needed, not 126 (2 per switch mount). The 150-pack still covers them
+  and the 6 for the Phase 0 jig.
+- **M2 kit:** 4 × M2×12 and 4 nuts more, for the switches. No price change.
+- **M2 standoffs:** the jig's bridge is now 10.6 mm thick, so a standoff is the board-to-lens
+  length minus 10.0 mm, with 2.0 mm of plastic around each hole.
+- **Head LED ring:** the seat is now a 42.8 mm bore with three centring ribs: it takes a ring of
+  39.5–42.5 mm OD.
+- **Filament:** 801 cm³ in 27 prints (was 768 in 25). The 2 kg still cover it.
+
+**What changed in round 4 ($0.00):**
 - **Push fittings kit** ($11.99) from order 1b to order 2: its 1/8 NPT fittings go only into the
   reservoir cap. Phase 0B uses the tube and the barb elbow.
 - **PTFE tape** ($2.36) split out of the reservoir set ($19.93 → $17.57) into its own order-1b
@@ -219,7 +235,7 @@ The 15% allowance ($285) is bigger than any single part.
   ($130–150). Only do it if the school saw cuts square. Misumi's free cut to ±0.5 mm saves an
   afternoon of squaring.
 - **Fasteners.** One large M5 T-nut and screw kit plus one M3 kit can replace the separate packs.
-  Count first: about 126 M5 T-nuts (plus 6 for the Phase 0 jig) and 69 M3×10 are needed, and the kit
+  Count first: about 130 M5 T-nuts (plus 6 for the Phase 0 jig) and 69 M3×10 are needed, and the kit
   must contain M5×10/12/16/20/25/30, M5×12 and M5×10 button heads and M3×8/10/12/16/20 (BOM.csv
   notes say where each goes). AFT charges a small-order fee under $75.
 - **Small shop items.** The flag sheet ($11.99 + $13.49 delivery for a 12 × 12 in sheet) and the
@@ -274,10 +290,10 @@ doesn't have one.
 | **Depth-stop collar, 5/16 in** | All rod holes the same 15 mm deep | $5 | **Buy** |
 | Drill guide (Milescraft DrillBlock type) or a drill press with long-table support | Holes square to the bed. The printed `drill_template` sets the position, not the angle. | $15–40 | Likely |
 | Metric hex keys, 1.5–10 mm, ball end | All socket screws. The probe board's front M3 screw needs the **2.5 mm ball end**, tilted about 20° (BUILD_GUIDE §7.6). | $15 | Likely |
-| Digital calipers, 150 mm | Measuring 5 of your slabs (`dims.py`), dowels, ring OD/ID, camera board holes | $20 | Likely |
+| Digital calipers, 150 mm | Measuring 5 of your slabs (`dims.py`), dowels, ring OD/ID, camera board holes, the switch levers; setting each switch 0.3 mm past its click (§6.8) | $20 | Likely |
 | Ferrule crimper (self-adjusting) | Screw-terminal wire ends | $25 | Maybe |
 | JST/Dupont crimper (IWISS SN-28B or SN-2549) | Sensor and GPIO connectors | $25 | Maybe |
-| Wire stripper, flush cutters | Wiring | $20 | Likely |
+| Wire stripper, flush cutters | Wiring; cutting a long switch lever back to 20 mm (BUILD_GUIDE §6.8) | $20 | Likely |
 | Multimeter | Wiring checks, sensor voltages, beam receiver level, setting the carry-sensor trip | $30 | Likely |
 | Temperature-controlled soldering iron | Diodes, divider resistors, LED ring leads | $30–100 | Likely |
 | **Heat-set insert tips** (ruthex set fits 900M/T18 irons; TS100-style tips for a Pinecil) | M5 insert in `awl_adapter`, spares | $10–16 | **Buy** unless the shop has them |
@@ -321,18 +337,19 @@ total would be about $2,640** ($2,182 + about $460), so use the school's where y
 - **M3 rail screws.** MGN12 rails have holes at 25 mm pitch: 1300 mm needs 52 and 330 mm needs 13.
   The carriages take 4 × M3 each on a 20 × 20 mm pattern. [Certain] The carry sensor adds 4 × M3×10
   and 2 × M3×8.
-- **M5 T-nuts, about 126.** That covers:
+- **M5 T-nuts, about 130.** That covers:
   - brackets and joining plates (about 80–90 nuts);
-  - 16 for the printed mounts on the extrusions: x_motor_mount 4, x_idler_mount 2, x_bracket 4
-    (the spine), z_plate 2 (the drop arm), x_bumper_L 1, z_motor_mount tab 1, carry_sensor_mount 2.
+  - 20 for the printed mounts on the extrusions: x_motor_mount 4, x_idler_mount 2, x_bracket 4
+    (the spine), z_plate 2 (the drop arm), x_bumper_L 1, z_motor_mount tab 1, carry_sensor_mount 2,
+    x_switch_mount 2, z_switch_mount 2.
     The z_motor_mount and z_end_cap screw into the spine's tapped end bores instead;
   - 16 bed bolts;
   - 6 feet (both base rails at each end and at midspan; the OpenBuilds feet bring their own).
 - **Wood screws.** station_mount 4, gate posts 4 and the electronics panel.
-- **Filament.** `print_list.json` totals 768 cm³ of solid parts in 25 prints from 23 STL files,
-  including the Phase 0 jig and its occluder mount, the drill template, two fill gauges and the two
-  carry-sensor parts. That is about 980 g of PETG if printed solid, or about 690 g at the listed
-  walls and infill. Add a Pi case, electronics trays, cable clips and reprints, and it comes to about
+- **Filament.** `print_list.json` totals 801 cm³ of solid parts in 27 prints from 25 STL files,
+  including the Phase 0 jig and its occluder mount, the drill template, two fill gauges, the two
+  carry-sensor parts and the two switch mounts. That is about 1020 g of PETG if printed solid, or
+  about 720 g at the listed walls and infill. Add a Pi case, electronics trays, cable clips and reprints, and it comes to about
   1.0–1.3 kg, so the list has 2 kg. [Likely]
 
 ## Design gaps found while pricing (for the CAD and wiring owners)
@@ -356,14 +373,19 @@ These are not BOM problems, but they decide what gets bought.
   sits 5 mm toward the label from the cup axis and the foot was trimmed. Nothing to buy; the
   `camera_bracket` and `phase0_top` STLs changed, so print the current ones.
 - **Both LED rings are in the CAD** [Certain, `cad/out/checks.txt`; Likely for the ring sizes]. The
-  head ring (modelled 40 × 30 × 5 mm) sits in a 41 mm bore against a 33 mm lip, its LED face 1 mm
-  under the lens front, and the barb elbow clears it by 3.75 mm at the full 20 mm stroke. The
+  head ring (modelled 40 × 30 × 5 mm) sits in a 42.8 mm bore with three centring ribs, against a
+  33 mm lip, its LED face 1 mm under the lens front, and the barb elbow clears it by 3.75 mm at the
+  full 20 mm stroke. The seat takes rings of 39.5–42.5 mm OD (shave the ribs for one over 40). The
   station seat is a 64 mm bore on a shelf that takes a 60 or a 63 mm ring. `station_mount`,
   `camera_bracket`, `phase0_base` and `phase0_top` changed: print the current ones.
 - **The fastener margins are closed in the CAD**: the probe board takes M3×16 with a washer under
   the head and under the nut, and every Phase 0 jig wall an M5×10 passes through is 4 mm (one washer
   per screw).
 - **The Z stall guard is designed** (carry-height sensor, above).
+- **The homing switches have printed mounts** (`x_switch_mount`, `z_switch_mount`) [Certain,
+  `cad/out/checks.txt`]: a finger on `x_bracket` and a chamfer on `z_plate` slide across each
+  lever and hold it 0.6 mm past its click point to the hard stop. Nothing new to buy but the
+  screws above (was open gap 7).
 
 **Still open:**
 1. **[Certain, CAD] There are only 18 mm between each rail end and the upright's inner face.** Use
@@ -371,8 +393,9 @@ These are not BOM problems, but they decide what gets bought.
 2. **[Likely] The laser receiver module is a 5 V board.** Divide its output before GPIO 5. It is
    also non-modulated, so room light can hold it HIGH. Test it with the room lights on.
 3. **[Likely] Angel-eye LED rings are 12 V parts, sold by OD only.** Measure the ring OD, ID and
-   thickness before printing the ring seats. Head: OD 41.0 mm or less (41 mm bore), ID up to 37 mm
-   (33 mm lip), 5 mm thick or less (each mm thicker takes 1 mm off the 3.75 mm barb clearance).
+   thickness before printing the ring seats. Head: OD 39.5–42.5 mm (42.8 mm bore with ribs), ID
+   about 24 mm up to OD − 3 (33 mm lip), 5 mm thick or less (each mm thicker takes 1 mm off the
+   3.75 mm barb clearance).
    Station: OD 59–63.5 mm (64 mm bore; some "60 mm" rings are 63 mm). No 40 mm COB listing is live:
    a 40 mm 12-SMD ring that fits is the fallback (check it for glare in Phase 0A).
 4. **[Guessing] Some mounting patterns in the CAD are not verified.**
@@ -389,9 +412,10 @@ These are not BOM problems, but they decide what gets bought.
 6. **[Certain, forum report] BTT has shipped Rodents with an old FluidNC build.** Reflash the
    current FluidNC release before loading `firmware/fluidnc/config.yaml`. Also check the Rodent's
    limit and motor connector types (XH or other) before buying crimp housings.
-7. **[Certain, CAD] The X home switch and the Z top switch have no mount** in the CAD or in
-   `cad/out/printed/`. BUILD_GUIDE §6.8 and §7.4 give a method: the switch on a 2020 corner bracket
-   from the 20-pack, in a T-nut, slid along the slot to set the click point.
+7. **[Guessing] Which lever the homing switch 10-pack has.** The switch mounts are now in the
+   CAD (resolved above), drawn for the Omron SS-5GL size with a short hinge lever. A lever that
+   ends more than 23 mm from the hinge end must be cut back to 20 mm (BUILD_GUIDE §6.8); a roller
+   lever does not fit. The listing was not opened: check the photos, or measure on arrival.
 
 ## Main sources
 

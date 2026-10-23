@@ -72,9 +72,37 @@ def test_the_13_digit_cgc_cert_is_never_cut_to_12():
     ("QRCode", "cgccomics.com"),
     ("QRCode", "https://www.psacard.com/cert/012345678901/"),  # too long: rejected, not cut
     ("Code128", "12345678901"),  # 11 digits: no grader's format
+    ("Code128", "1234567"),  # 7 digits: every real PSA Code128 is 8 or 9 (SGC certs are 7 digits)
+    ("Code128", "0019865140"),  # a real BGS cert as a 10-digit Code128: no real CGC cert starts with 0
+    ("Code128", "0123456789"),
 ])
 def test_payloads_that_are_not_a_cert(sym, payload):
     assert parse_payload(payload, sym) is None
+
+
+def test_code128_formats_are_typed_by_exact_length():
+    """Round-4 verifier narrowings: a PSA Code128 is 8 or 9 digits (a 7-digit one is not trusted as PSA), and a CGC
+    10-digit Code128 never starts with 0. Every real payload still parses (REAL above)."""
+    assert (parse_payload("27435764", "Code128").grader, parse_payload("100423658", "Code128").grader) == ("PSA", "PSA")
+    assert parse_payload("4123456001", "Code128").grader == "CGC" and parse_payload("1401012893129", "Code128").grader == "CGC"
+    for payload in ("1234567", "0019865140", "0123456789", "123456"):
+        assert parse_payload(payload, "Code128") is None, payload
+        assert label_side("Code128", payload) is None  # and it proves no label side: '0019865140' used to read 'CGC front'
+
+
+def test_two_7_digit_code128s_never_make_an_ok(monkeypatch):
+    """Round 4 left this open: the same 7-digit Code128 on the back and the front label was two printed symbols in
+    PSA's format, so 'ok PSA'. Now neither parses: they are listed as unparsed, and the slab is no_read."""
+    monkeypatch.setattr(decode.zxingcpp, "read_barcodes", lambda gray: [_zx("1234567", [(240, 486), (633, 486), (633, 547), (240, 547)])])
+    reads, unparsed = [], []
+    for camera in ("back", "front"):
+        r, u = decode.decode_frame(np.full((600, 900), 128, np.uint8), camera, allow_ocr=False)
+        reads, unparsed = reads + r, unparsed + u
+    assert reads == [] and "Code128:1234567" in unparsed
+    assert consensus(reads).status == "no_read"
+    # with OCR of the printed number agreeing, it is an OCR-only number: needs_review, grader unknown (exception pocket)
+    v = consensus(reads + [CodeRead("1234567", "ocr", "OCR", "01234567", "front", "unknown", kind="ocr")])
+    assert v.status == "needs_review" and v.grader == "unknown"
 
 
 def test_a_cgc_qr_without_a_cert_is_a_hint_never_a_proof():

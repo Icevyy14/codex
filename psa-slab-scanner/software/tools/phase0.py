@@ -23,6 +23,7 @@ and face_down_threshold_sig (the card window it was measured for) to config/cali
 
 Run on the Pi:   python -m tools.phase0 --out phase0_results --face-up 15 --save
 Without cameras (demo with synthetic labels):   python -m tools.phase0 --sim 10
+Each run needs its own --out folder: a folder that already holds a phase0.csv is refused (--force overwrites it).
 """
 
 from __future__ import annotations
@@ -154,8 +155,13 @@ def main(argv=None) -> int:
     ap.add_argument("--lens-position", type=float, default=7.1, help="Camera Module 3 dioptres; 1/0.14 m = 7.1")
     ap.add_argument("--frames", type=int, default=2)
     ap.add_argument("--sim", type=int, default=0, help="run N synthetic slabs instead of real cameras")
+    ap.add_argument("--force", action="store_true", help="overwrite the phase0.csv, report and images of an earlier run in --out")
     a = ap.parse_args(argv)
     out = Path(a.out)
+    if (out / "phase0.csv").exists() and not a.force:
+        print(f"{out / 'phase0.csv'} is already there, from an earlier run: this run would overwrite it and its report. Nothing was "
+              f"changed. Give this run a new folder (for example --out {out.name}_2), or add --force to overwrite it.")
+        return 2
     (out / "images").mkdir(parents=True, exist_ok=True)
     cfg = load_machine_config(a.config)
     head, station = open_cameras(a)
