@@ -6,6 +6,7 @@ Run from cad/:  python render_docs.py
 from __future__ import annotations
 
 import shutil
+import textwrap
 from pathlib import Path
 
 import build
@@ -134,25 +135,28 @@ def probe_closeup(dest: Path) -> None:
 def face_down_view(dest: Path, px: float = 8.0) -> None:
     """What the head camera sees of the top slab at hover (free cup 7 mm above it, lens 147 mm above it, CAM_DY toward the
     label): every head part below the lens projected from the lens onto the slab plane (tessellated CAD solids), over the slab,
-    the measured card position, the label band and the face-down card window. +Y (the arm) is up, the label end down."""
+    the measured card position, the label band and the face-down card window. +Y (the arm) is up, the label end down.
+    Dashed: the nearest the cup a PSA and a CGC card top can come (layout.card_top_worst); yellow: where the camera sees its
+    LED ring mirrored in the slab back (glare)."""
     import model as M
     from PIL import Image, ImageDraw, ImageFont
     from dims import SLAB_H, SLAB_W
 
     lz, ly, plane = M.CAM_Z, M.CAM_DY, -(L.CUP_HANG + 5.0)
-    xr, yr, foot = (-52.0, 52.0), (-74.0, 74.0), 120
+    xr, yr, foot = (-52.0, 52.0), (-74.0, 74.0), 224
     W, H = int((xr[1] - xr[0]) * px), int((yr[1] - yr[0]) * px)
     P_ = lambda x, y: ((x - xr[0]) * px, (yr[1] - y) * px)  # noqa: E731  image y down = slab -Y down
     im = Image.new("RGB", (W, H + foot), (250, 250, 250))
     d = ImageDraw.Draw(im, "RGBA")
     edge = -SLAB_H / 2
     d.rectangle([P_(-SLAB_W / 2, SLAB_H / 2), P_(SLAB_W / 2, edge)], fill=(225, 232, 240), outline=(60, 60, 60))
-    d.rectangle([P_(-L.CARD_W / 2, edge + L.CARD_TOP_FROM_EDGE[1] + 88.9), P_(L.CARD_W / 2, edge + L.CARD_TOP_FROM_EDGE[1])], fill=(70, 95, 170))
+    d.rounded_rectangle([P_(-L.CARD_W / 2, edge + L.CARD_TOP_FROM_EDGE[1] + L.CARD_L), P_(L.CARD_W / 2, edge + L.CARD_TOP_FROM_EDGE[1])],
+                        radius=L.CARD_CORNER_R * px, fill=(70, 95, 170))
     d.rectangle([P_(-37, edge + 26.0), P_(37, edge + 5.0)], fill=(245, 245, 245), outline=(120, 120, 120))  # label insert
     for p in M.head_parts(0.0, 0.0, compression=0.0):
         sh = p.shape.val()
         bb = sh.BoundingBox()
-        if p.name == "head_camera" or bb.zmin >= lz - 0.01:
+        if p.name in ("head_camera", "head_led_ring", "head_ring_leads") or bb.zmin >= lz - 0.01:  # the ring sits round the lens, out of view
             continue
         verts, tris = sh.tessellate(0.1, 0.3)
         v = [(q.x, q.y, min(q.z, lz - 0.05)) for q in verts]
@@ -167,20 +171,30 @@ def face_down_view(dest: Path, px: float = 8.0) -> None:
                 s = (lz - plane) / (lz - z)
                 pts.append(P_(x * s, ly + (y - ly) * s))
             d.polygon(pts, fill=col)
+    h = lz - plane  # glare: the ring mirrored in the slab back, a band round the lens axis
+    r_in, r_out = (M.HEAD_RING[k] / 2 * h / (2 * h + M.HEAD_RING_FACE_DZ) for k in (1, 0))
+    for r, w in ((r_out, 6), (r_in, 6)):
+        d.ellipse([P_(-r, ly + r), P_(r, ly - r)], outline=(235, 190, 20, 255), width=w)
+    for g, col in (("PSA", (40, 40, 40)), ("CGC", (150, 30, 150))):
+        y = L.card_top_worst(g)
+        for x in range(int(xr[0]), int(xr[1]), 4):
+            d.line([P_(x, y), P_(x + 2, y)], fill=col, width=3)
+        d.text(P_(xr[0] + 1, y + 3.2), f"{g} card top, worst case", fill=col)
     for x0, y0, x1, y1 in L.FACE_DOWN_WINDOW_MM:
         d.rectangle([P_(x0, y1), P_(x1, y0)], outline=(230, 30, 30), width=4)
     d.line([P_(-3, 0), P_(3, 0)], fill=(0, 0, 0), width=2)
     d.line([P_(0, -3), P_(0, 3)], fill=(0, 0, 0), width=2)
     d.ellipse([P_(-1.5, ly + 1.5), P_(1.5, ly - 1.5)], outline=(0, 140, 0), width=3)
     try:
-        font = ImageFont.truetype("DejaVuSans.ttf", 22)
+        font = ImageFont.truetype("DejaVuSans.ttf", 20)
     except OSError:
         font = ImageFont.load_default()
     a = L.window_area()
-    for k, text in enumerate((f"Head camera at hover: lens {lz + 7:.0f} mm above the slab, {-ly:.0f} mm toward the label",
-                              "(green circle; + = cup axis). Red: the face-down card window,",
-                              f"{a:.0f} mm2, clear of every head part. Blue: the card, label at the bottom.")):
-        d.text((16, H + 8 + 34 * k), text, fill=(20, 20, 20), font=font)
+    text = (f"Head camera at hover: lens {lz + 7:.0f} mm above the slab, {-ly:.0f} mm toward the label (green circle; + = cup axis). "
+            f"Red: the face-down card window, {a:.0f} mm2, clear of every head part. Blue: the median PSA card, label at the bottom. "
+            "Dashed: worst-case card tops (PSA, CGC). Yellow: where the camera sees its ring light mirrored in the slab (glare).")
+    for k, line in enumerate(textwrap.wrap(text, 66)):
+        d.text((16, H + 8 + 29 * k), line, fill=(20, 20, 20), font=font)
     im.save(dest)
 
 

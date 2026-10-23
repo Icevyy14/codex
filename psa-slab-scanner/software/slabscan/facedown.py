@@ -45,6 +45,18 @@ Safety rules (``CardBackRefs``, ``learned_ready`` and ``learned_match``):
     baseline by the frame's common exposure ratio on (almost) every proven slab moves with the camera, so it is not
     the slab. If more than STATIC_MAX of the window is like that, the mode is not active. (Only inside the window:
     the margin holds the card's flat border and the slab's clear plastic, which do that too, harmlessly.)
+  * The camera's aim, on that same view over an empty pocket (``aim_problem``): only the pad far below may show in the
+    middle of the card window and just beyond its cup-side edge. A tilt toward the cup brings the cup pad and the foot
+    in there (each mm of clearance is about 0.39 deg of tilt). With an edge there the mode is not active and nothing is
+    learned, until a run's view over an empty pocket is clear again. Its limits [Certain, sim and geometry]:
+      - A part as dark as the pad shows no edge, and nothing catches it while it covers a strip of the window. The
+        camera-locked check above does not: at 1 px per mm the strip's pixels are part and card mixed, so they do not
+        follow the empty view's levels (a foot at the pad's grey over 9-26 % of the window read 0.3-0.9 % camera-locked).
+      - Only a tilt TOWARD the cup is checked. A tilt away from it, or a roll along the row, moves the window toward the
+        card top or off the card's side, and nothing here sees that.
+      - AIM_EDGE and AIM_MAX_MM2 were set on the simulator's flat, noiseless empty view. Lint, dust specks of about
+        1 mm, glue blotches or a sharp shadow on a real pad can make it fire. That is safe (the learned check stays off,
+        every slab without a back code stops) but needs a real empty-pocket frame to tune.
   * The mode is active only with a measured threshold (``face_down_threshold``, from Phase 0, at least
     THRESHOLD_FLOOR) that was measured for this card window (``face_down_threshold_sig`` = ``threshold_tag``), at
     least ``face_down_min_refs`` references, and the head's view checked on STATIC_REFS proven slabs on this machine.
@@ -82,6 +94,15 @@ STATIC_USE = 12
 STATIC_VOTE = 0.8  # a pixel moves with the camera if it does so on this fraction of those slabs
 STATIC_LOG_TOL = 0.08  # +/-8 % around the frame's common exposure ratio
 OPERATOR_PROTO_MIN = 3  # a back design known only from operator confirmations is matched once this many confirm it
+# Camera aim, checked on the view over an empty pocket (``aim_problem``). A tilt toward the cup slides the card window (fixed
+# in the image) toward the cup pad and the foot: each mm of clearance is ~0.39 deg (cad/checks.py check_camera_aim). Over an
+# empty pocket at the travel height (pad ~388 mm under the lens) the window also reaches this pocket's own rods (their
+# feet project 15.9-18.9 mm from the axis along the row) and, beyond them, the neighbouring pockets: only the middle of the
+# window shows nothing but this pocket's pad there [Certain, CAD rod and pocket positions].
+AIM_HALF_ROW_MM = 12.0  # the part of the window checked: up to this far from the camera axis along the row ...
+AIM_BAND_MM = 1.0  # ... over its whole height, plus this much beyond its cup-side edge (where a tilt brings the head in)
+AIM_EDGE = 4.0  # grey levels of the high-passed thumbnail: a part's edge against the pad (a smooth shadow or fall-off is not)
+AIM_MAX_MM2 = 2.0  # more than this many mm2 of such edges = a head part (or dirt on the pad) where only pad should show
 MATCH_K = 2  # a match needs this many references (different slabs) of one back design at the threshold [Certain, real slabs at the
 # machine's scale, 332 face-up frames with and without glare: k=1 accepted 3 at 0.55 (max 0.62), k=2 none (max 0.44); backs of other
 # slabs accepted 223 of 252 instead of 239]
@@ -160,10 +181,11 @@ def _glare_ok(gray: np.ndarray) -> np.ndarray:
     return glare == 0
 
 
-def _highpass(gray: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def _highpass(gray: np.ndarray, region: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
     """(high-passed thumbnail, mask of the pixels that are not glare). The blur is a normalised convolution over the
-    unmasked pixels, so a glare spot neither shows as pattern nor drags its neighbours' local mean up."""
-    ok = _glare_ok(gray)
+    unmasked pixels, so a glare spot neither shows as pattern nor drags its neighbours' local mean up. ``region``: only
+    these pixels count at all (aim_problem)."""
+    ok = _glare_ok(gray) if region is None else (_glare_ok(gray) & region)
     w = ok.astype(np.float32)
     g = np.minimum(gray, 250.0)
     s = HIGHPASS_SIGMA_MM * WINDOW_PX_PER_MM
@@ -271,6 +293,45 @@ def _camera_locked(level: np.ndarray, base: np.ndarray) -> np.ndarray:
     h, edges = np.histogram(q[ok], bins=np.arange(-6.0, 6.0 + 1e-6, 0.05))
     k = int(np.argmax(h))
     return ok & (np.abs(q - 0.5 * (edges[k] + edges[k + 1])) <= STATIC_LOG_TOL)
+
+
+def aim_problem(base: Descriptor | None, rects_img_mm, slab_axis: str = "y") -> str:
+    """Is the card window clear of the head on the view over an empty pocket (``base``, described with the same
+    ``rects_img_mm``)? "" = clear, else why not. ``slab_axis``: the image axis along the slab ("y" when row_axis is "x").
+
+    Checked: the middle of each window rectangle along the row (AIM_HALF_ROW_MM), over its whole height and AIM_BAND_MM
+    beyond its edge nearer the camera axis (the cup side). There only this pocket's pad, out of focus far below, may
+    show: smooth, so its high-passed thumbnail (the descriptor's own term) stays near zero. A head part has an edge
+    against the pad, darker or brighter. A part that matches the pad's grey level shows no edge, and is not seen. Only
+    the cup side is checked: a tilt away from the cup or a roll along the row is not (module docstring)."""
+    if base is None or not base.levels:
+        return "the card window is not inside the head camera's view over an empty pocket (check cam_head and face_down_window_mm)"
+    n = 0
+    worst = 0.0
+    for (a, b, c, d), lv in zip(rects_img_mm, base.levels):
+        h, w = lv.shape
+        xs = (a - SEARCH_MM) + (np.arange(w) + 0.5) * (c - a + 2 * SEARCH_MM) / w  # pixel centres, mm (image axes)
+        ys = (b - SEARCH_MM) + (np.arange(h) + 0.5) * (d - b + 2 * SEARCH_MM) / h
+        row, slab = (xs[None, :], ys[:, None]) if slab_axis == "y" else (ys[:, None], xs[None, :])
+        r0, r1, s0, s1 = (a, c, b, d) if slab_axis == "y" else (b, d, a, c)
+        if abs(s1) <= abs(s0):  # the window lies on the label side of the axis: its cup-side edge is the one nearer 0
+            s1 += AIM_BAND_MM
+        else:
+            s0 -= AIM_BAND_MM
+        region = (np.abs(row) <= AIM_HALF_ROW_MM) & (row >= r0) & (row <= r1) & (slab >= s0) & (slab <= s1)
+        if region.sum() < 4:
+            continue
+        hp, ok = _highpass(lv, region)
+        edges = np.abs(hp[ok])
+        n += int((edges >= AIM_EDGE).sum())
+        worst = max(worst, float(edges.max()) if edges.size else 0.0)
+    mm2 = n / WINDOW_PX_PER_MM ** 2
+    if mm2 <= AIM_MAX_MM2:
+        return ""
+    return (f"over an empty pocket the head camera sees edges where only the pad should show, in the card window or within "
+            f"{AIM_BAND_MM:g} mm of its cup side ({mm2:.0f} mm2, up to {worst:.0f} grey levels): a part of the head is in the window, "
+            "or about to be. The head camera is tilted toward the cup, or something lies on the pad there (lint, dust, a tag): "
+            "look at the picture first")
 
 
 def signature(rects) -> str:
@@ -395,6 +456,8 @@ class CardBackRefs:
             why = "glare on the card window"
         elif self.baseline is not None and self.baseline_score(d) >= BASELINE_MAX:
             why = "card window looks like the empty-pocket view (the head hides it)"
+        elif self.baseline is not None and self.baseline_meta.get("aim"):
+            why = "the head camera's aim puts a part of the head in the card window"
         if why:
             self.rejected[why] = self.rejected.get(why, 0) + 1
             return None, why
@@ -497,6 +560,16 @@ def _threshold_problem(threshold: float | None, rects, tag: str | None) -> str:
     return ""
 
 
+def _aim_refusal(refs: CardBackRefs) -> str:
+    """The aim check's verdict on the stored view over an empty pocket (Runner._take_baseline runs aim_problem on it):
+    a head part in the window makes every frame alike, so nothing may be accepted."""
+    aim = refs.baseline_meta.get("aim") if refs.baseline is not None else None
+    if not aim:
+        return ""
+    return (f"learned check not active: {aim}. Re-aim the head camera (BUILD_GUIDE 7.7), then compare images/face_down_empty.jpg "
+            f"(pocket {refs.baseline_meta.get('pocket', '?')}) with images/face_down_window.jpg. Dirt on that pocket's pad looks the same: clean it")
+
+
 def learned_ready(refs: CardBackRefs, threshold: float | None, min_refs: int, rects, tag: str | None = None) -> str:
     """Why the learned check cannot accept anything yet ("" = it can). ``tag``: face_down_threshold_sig."""
     why = _threshold_problem(threshold, rects, tag)
@@ -504,6 +577,9 @@ def learned_ready(refs: CardBackRefs, threshold: float | None, min_refs: int, re
         return why
     if refs.baseline is None:
         return "learned check not active yet: no view over an empty pocket to compare with"
+    why = _aim_refusal(refs)
+    if why:
+        return why
     if refs.n_refs < min_refs:
         extra = ""
         if refs.rejected:
@@ -523,7 +599,7 @@ def learned_ready(refs: CardBackRefs, threshold: float | None, min_refs: int, re
 def learned_match(refs: CardBackRefs, d: Descriptor | None, threshold: float | None, min_refs: int, rects,
                   tag: str | None = None) -> tuple[bool, str, Match]:
     """The learned decision for a slab without a back QR. Returns (accept, reason if not, best match)."""
-    why = _threshold_problem(threshold, rects, tag)
+    why = _threshold_problem(threshold, rects, tag) or _aim_refusal(refs)
     if why:
         return False, why, Match()
     if d is None:

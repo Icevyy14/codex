@@ -222,16 +222,18 @@ def sim_stacks(cfg: Config, slabs: int, seed: int = 7, eras=None, clingy_rate: f
     return stacks
 
 
-def sim_hardware(cfg: Config, slabs: int = 22, seed: int = 7, world=None, stacks=None, head: str = "cad", **batch_kw) -> Hardware:
+def sim_hardware(cfg: Config, slabs: int = 22, seed: int = 7, world=None, stacks=None, head: str = "cad", head_tilt_deg: float = 0.0,
+                 **batch_kw) -> Hardware:
     """Simulated machine. Calibration offsets in cfg become the simulator's built-in offsets, so a
     calibrated config drives the simulated machine exactly as it would drive the real one. ``head``: the head
-    parts the head camera looks past (sim.HEADS; "cad" = today's CAD head)."""
+    parts the head camera looks past (sim.HEADS; "cad" = today's CAD head). ``head_tilt_deg``: a head camera
+    mis-aimed toward the cup by that much (SimWorld.head_tilt_deg)."""
     from .simworld import SimCamera, SimCarry, SimGate, SimLights, SimMotion, SimVacuum, SimWorld
 
     if world is None:
         if stacks is None:
             stacks = sim_stacks(cfg, slabs, seed, **batch_kw)
-        world = SimWorld(cfg, stacks={k: list(v) for k, v in stacks.items()}, head=head)
+        world = SimWorld(cfg, stacks={k: list(v) for k, v in stacks.items()}, head=head, head_tilt_deg=head_tilt_deg)
     return Hardware(
         cfg=cfg,
         motion=SimMotion(world, x_offset=cfg.offset_x, z_offset=cfg.pad_trigger_c),

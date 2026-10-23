@@ -13,6 +13,10 @@ Builds the machine at every critical pose and measures exact minimum distances
   * the head camera's view of the face-down card window (layout.FACE_DOWN_WINDOW_MM): nothing in it at hover over a low,
     half and full stack or with the slab held at travel height, the window on the card, clear of the label, and how far
     the head camera may be off its nominal aim before that stops being true,
+  * the card window on the card for PSA AND CGC slabs anywhere in their pockets (card positions measured on real backs),
+    seen where the camera meets the card: its width, rounded corners and depth under the slab back (refraction),
+  * both LED rings in their seats: seated, clear of the arm, camera and moving head parts, out of every camera view above,
+    the seat's fit for the ring sizes sold, where each camera sees its ring mirrored in the slab (glare), and the Phase 0 copies,
   * the carry-height sensor (Z stall guard): trip height, beam clear below / blocked up to the hard top stop, the highest
     Z stall it cannot see (a double pick there still over the rods), flag and arm clear of the carriage over the whole Z
     travel, and a path for its lead,
@@ -23,9 +27,10 @@ Builds the machine at every critical pose and measures exact minimum distances
     hex-key access to the board screws, and the moving parts out of the head camera's label view,
   * every printed part is ONE solid, and the Phase 0 jig (ledge overlap, line of sight, fit, its occluder against
     the machine's: same parts at the same place under the lens, same blocked view, and the face-up lift).
-What is NOT checked: flexible parts (belt slack, cables, vacuum tube), real purchased-part shapes beyond the
-envelopes in model.py (the buffer's neck and rod, the barb elbow's arm and the endstop board are read off drawings or
-guessed), print tolerances, the flag's bend accuracy, and anything under load.
+What is NOT checked: flexible parts (belt slack, cables, vacuum tube, the LED rings' leads past their first 6 mm), real
+purchased-part shapes beyond the envelopes in model.py (the buffer's neck and rod, the barb elbow's arm, the endstop board and
+the LED rings' ID, thickness and lead exit are read off drawings or guessed), print tolerances, the flag's bend accuracy, the
+card's depth in the holder and the holder plastic's index (guessed; an all-air bound is reported), and anything under load.
 Exit code 1 if any check fails. Run:  python checks.py
 """
 
@@ -338,12 +343,104 @@ def _window_view(parts, lens, plane_z: float, skip: tuple) -> tuple[float, float
     return vol, gap[0], gap[1]
 
 
+HOLDER_SHARE_MAX = 2.0  # %: most of the window that may land on the holder, slab in a pocket corner. 0 cannot be had with
+# 300 mm2 (x +/-27.0 alone leaves 297). [Likely, real CGC fronts vs code-proven backs at the machine's scale, every slab at
+# the cup end of its play, facedown.compare] holder in the window lifts a CGC front's 2nd-best score against backs: highest
+# 0.47 with the card in the back plane, 0.51 with its depth in plastic (this check's model), 0.54 all air (floor 0.55); PSA
+# fronts stay at 0.50-0.51. The old window (y0 -27.5) that let CGC fronts through had 23 % (median CGC card) to 36 % (the
+# worst) on the holder in that pose.
+
+
+def _on_card_plane(px, py, lens_h: float, n: float = L.SLAB_N, depth: float = L.CARD_DEPTH):
+    """Where the ray from the head lens (lens_h above the slab back, on the camera axis) through slab-back point(s) (px, py)
+    (cup-axis mm, floats or arrays) meets the card's back, depth under the slab back: refracted at the flat back (Snell)."""
+    import numpy as np
+
+    dx, dy = np.asarray(px, float), np.asarray(py, float) - L.HEAD_CAM_DY
+    r = np.maximum(np.hypot(dx, dy), 1e-9)
+    s = r / np.hypot(r, lens_h) / n  # sine of the ray's angle in the plastic
+    k = 1.0 + depth * s / np.sqrt(1.0 - s * s) / r
+    return dx * k, L.HEAD_CAM_DY + dy * k
+
+
+def _card_margin(x, y, top: float, cx: float, r: float = L.CARD_CORNER_R):
+    """Signed distance (mm, + = on the card) from card-plane point(s) to the edge of a CARD_W card with corner radius r, its
+    centre line at x = cx and its top edge (label end) at y = top. Its far end is ~88 mm away and never near the window."""
+    import numpy as np
+
+    qx, qy = np.abs(x - cx) - (L.CARD_W / 2 - r), top + r - y
+    return r - np.hypot(np.maximum(qx, 0.0), np.maximum(qy, 0.0)) - np.minimum(np.maximum(qx, qy), 0.0)
+
+
+def _card_outline(top: float, cx: float, r: float = L.CARD_CORNER_R, seg: int = 32) -> list[tuple[float, float]]:
+    """The card's outline on the card plane, counter-clockwise (x along the row, y toward the cup): top edge (label end) at
+    y = top with corners of radius r, square far end CARD_L on (it is never near the window)."""
+    h, out = L.CARD_W / 2, []
+    for ox, a0 in ((cx + h - r, -90.0), (None, None), (cx - h + r, 180.0)):
+        if ox is None:
+            out += [(cx + h, top + L.CARD_L), (cx - h, top + L.CARD_L)]
+            continue
+        out += [(ox + r * math.cos(math.radians(a0 + 90.0 * i / seg)), top + r + r * math.sin(math.radians(a0 + 90.0 * i / seg))) for i in range(seg + 1)]
+    return out
+
+
+def _clipped_area(poly, clip) -> tuple[float, float]:
+    """(area of the polygon poly, area of poly inside the convex counter-clockwise polygon clip): Sutherland-Hodgman."""
+    def area(p):
+        return 0.5 * abs(sum(p[i - 1][0] * p[i][1] - p[i][0] * p[i - 1][1] for i in range(len(p))))
+    out = list(poly)
+    for i in range(len(clip)):
+        (ax, ay), (bx, by) = clip[i - 1], clip[i]
+        side = [(bx - ax) * (y - ay) - (by - ay) * (x - ax) for x, y in out]  # >= 0: inside
+        nxt = []
+        for j in range(len(out)):
+            p, q, sp, sq = out[j - 1], out[j], side[j - 1], side[j]
+            if (sp >= 0) != (sq >= 0):
+                t = sp / (sp - sq)
+                nxt.append((p[0] + t * (q[0] - p[0]), p[1] + t * (q[1] - p[1])))
+            if sq >= 0:
+                nxt.append(q)
+        out = nxt
+        if not out:
+            break
+    return area(poly), (area(out) if len(out) > 2 else 0.0)
+
+
+def _window_on_card(top: float, cx: float, turn=None, ds: float = 0.5, **plane) -> tuple[float, float, float, float]:
+    """FACE_DOWN_WINDOW_MM as the head camera sees it on the card at hover (the software maps it in pixels on the slab back,
+    CAM_Z + HOVER_GAP from the lens), the camera off its aim by turn = (axis, deg): (% of the window on the holder, worst
+    point's margin to the card edge, worst margin to the top edge and to the side edge run straight on; mm, + = on the card).
+    Each rectangle's outline, a point every ds mm, mapped point by point and clipped by the card's outline (exact for the
+    area to well under 0.01 %; the worst point of a convex card lies on the outline). plane = _on_card_plane's n and depth."""
+    import numpy as np
+
+    dist = M.CAM_Z + HOVER_GAP
+    tot = inside = 0.0
+    m = mt = ms = 1e9
+    card = _card_outline(top, cx)
+    for x0, y0, x1, y1 in L.face_down_window_cam():
+        ring = [((x0, y0), (x1, y0)), ((x1, y0), (x1, y1)), ((x1, y1), (x0, y1)), ((x0, y1), (x0, y0))]  # counter-clockwise
+        t = [np.linspace(0, 1, max(2, int(math.hypot(b[0] - a[0], b[1] - a[1]) / ds)) + 1)[:-1] for a, b in ring]
+        x = np.concatenate([a[0] + (b[0] - a[0]) * u for (a, b), u in zip(ring, t)])
+        y = np.concatenate([a[1] + (b[1] - a[1]) * u for (a, b), u in zip(ring, t)])
+        if turn and turn[1]:
+            vx, vy, vz = _aim_turn((x, y, -dist), *turn)
+            x, y = vx * dist / -vz, vy * dist / -vz
+        px, py = _on_card_plane(x, y + L.HEAD_CAM_DY, dist, **plane)
+        a, b = _clipped_area(list(zip(px.tolist(), py.tolist())), card)
+        tot, inside = tot + a, inside + b
+        m = min(m, float(_card_margin(px, py, top, cx).min()))
+        mt, ms = min(mt, float((py - top).min())), min(ms, float((L.CARD_W / 2 - np.abs(px - cx)).min()))
+    return 100.0 * (1.0 - inside / tot), m, mt, ms
+
+
 def check_face_down_window() -> None:
     """The software's face-down check compares the card back seen through FACE_DOWN_WINDOW_MM (layout.py) with earlier
     face-down slabs: the head camera must see all of it, and only card. Exact frustums from the lens (CAM_DY toward the label
     from the cup axis) to each rectangle, against every part except the camera and the slab looked at, at hover (free cup
     HOVER_GAP above the top slab, over a stack of 1, 15 and 30) and with the slab held (it hangs CUP_HANG below c) at travel
-    height. Then where the window lies on the slab: area, card top, card sides, label band."""
+    height. Then where the window lies: area, on the card (seen on the card plane: the card's width, rounded corners and
+    depth under the slab back), label band."""
     p = P[4]
     worst = (-1.0, 1e9, "", "")
     for n in (1, 15, L.STACK_MAX):
@@ -363,21 +460,36 @@ def check_face_down_window() -> None:
         record(f"face-down window, slab held at c={c:.1f} (hanging {L.CUP_HANG:.0f} mm under the cup): parts in view (mm3)", vol, 0.01, who if vol else "",
                larger_is_better=False)
         record(f"face-down window, slab held at c={c:.1f}: nearest part to the view (clearance mm)", gap, 0.5, who)
-    # where it lies on the slab (mm from the cup axis; the slab may lie WINDOW_PLACE_TOL off it)
+    # where it lies on the card, per grader: the card top nearest the far edge measured on real backs (layout.HOLDERS) with
+    # the slab at the cup end of its Y play, and the card nearest a side with the slab at the end of its X play (a pocket
+    # corner), seen on the card plane: rays through the window's edge meet the card CARD_DEPTH down, further out
     edge = -SLAB_H / 2
-    card_top = edge + L.CARD_TOP_FROM_EDGE[2] + L.WINDOW_PLACE_TOL
-    side = L.CARD_W / 2 - 1.85 - L.XY_CAL_RESIDUAL - 1.0
     w = L.FACE_DOWN_WINDOW_MM
+    y0 = min(r[1] for r in w)
     record(f"face-down window area: {len(w)} rectangle(s) (mm2, software needs 300)", L.window_area(), 300.0)
-    record("face-down window inside the card's top edge, latest card top measured (37.8 mm) and the slab at the end of its play (mm)",
-           min(r[1] for r in w) - card_top, 0.0, f"median card top: {min(r[1] for r in w) - (edge + L.CARD_TOP_FROM_EDGE[1]):.1f} mm inside, slab centred")
-    record("face-down window inside the card's side edges, slab at the end of its X play (mm)", side - max(max(abs(r[0]), abs(r[2])) for r in w), 0.0)
-    record("face-down window clear of the label band, slab at the end of its play (mm)", min(r[1] for r in w) - (edge + L.LABEL_BAND + L.WINDOW_PLACE_TOL), 3.0)
+    for g, h in L.HOLDERS.items():
+        top, sx = L.card_top_worst(g), L.card_x_shift(g)
+
+        def worst(**pl):  # both pocket corners: the largest share, the smallest margins
+            r = list(zip(*(_window_on_card(top, s * sx, **pl) for s in (1, -1))))
+            return max(r[0]), min(r[1]), min(r[2]), min(r[3])
+        pct, m, mt, ms = worst()
+        pa, ma, _, _ = worst(n=1.0)
+        _, mf, _, _ = worst(depth=0.0)
+        mid = _window_on_card(h["length"] / 2 - h["top_to_far"][1], 0.0)[1]
+        record(f"face-down window on the card, {g} slab in a pocket corner ({h['n']} real backs: card top >= {h['top_to_far'][0]} mm from the far edge; "
+               f"the end of its {(L.POCKET_L - h['length']) / 2:.2f} mm Y and {(L.POCKET_W - h['width']) / 2:.2f} mm X play): share on the holder (%)",
+               pct, HOLDER_SHARE_MAX, f"edges {mt:+.2f} top, {ms:+.2f} side, {m:+.2f} worst point (mm; card {L.CARD_W:.1f} mm, {L.CARD_CORNER_R} mm corners, "
+               f"{L.CARD_DEPTH} mm under the back, n {L.SLAB_N}); all air: {pa:.1f} %, {ma:+.2f}; card in the back plane: {mf:+.2f}; "
+               f"median card, slab centred: {mid:+.2f}", larger_is_better=False)
+    record("face-down window clear of the label band, slab at the end of its play (mm)", y0 - (edge + L.LABEL_BAND + L.WINDOW_PLACE_TOL), 3.0)
 
 
 AIM_SEARCH = 4.0  # deg: aim errors searched. [Guessing] an M12 lens off its board's sensor centre plus a printed bracket: 0.5-2 deg
 AIM_FLOOR = 0.5  # deg: a floor that keeps head or window changes from eating the margin. A real camera can be further off, so
 # the software has to find where the head parts and the card top fall in its own frames; this is no build tolerance.
+AIM_HEAD_FLOOR = 1.25  # deg: the same for the head parts. The window's y1 was moved 2 mm off the cup pad's shadow for 1.34 deg;
+# 1.5 deg needs y1 = -18.5, which leaves 275 mm2 with the CGC card top, under the software's 300.
 AIM_DIRS = {"toward the cup (+Y)": ((1, 0, 0), 1), "toward the label (-Y)": ((1, 0, 0), -1), "+X": ((0, 1, 0), -1), "-X": ((0, 1, 0), 1)}
 
 
@@ -393,8 +505,9 @@ def check_camera_aim() -> None:
     places the window in pixels from a nominal camera (image centre on the optical axis, square to the slab, mapped at the
     hover distance), so an aim error turns every ray of the window about the lens. Head parts: the exact frustums of
     check_face_down_window turned about the lens, nearest-part test, bisection (the head's own parts sit at fixed angles from
-    the lens, so one hover pose holds for every stack and for a held slab). Card edges: the window's corners turned the
-    same way onto the slab plane, for a median card on a centred slab and for the worst-case slab (as above)."""
+    the lens, so one hover pose holds for every stack and for a held slab). Card edges: the window turned the same way onto
+    the card plane (_window_on_card), for a median card on a centred slab (until it leaves the card) and for the worst-case
+    slab of check_face_down_window (already at ~0 margin there: until more than HOLDER_SHARE_MAX of it is on the holder)."""
     p, n = P[4], 15
     top = n * SLAB_T
     c = top + HOVER_GAP
@@ -422,24 +535,22 @@ def check_camera_aim() -> None:
         head[k] = (d, hit(axis, sg * (d + 0.01)))  # the part that comes into view first
     k = min(head, key=lambda j: head[j][0])
     record(f"head camera aim error before a head part is in the face-down window, worst direction (deg; searched to {AIM_SEARCH:.0f})", round(head[k][0], 2),
-           AIM_FLOOR, f"{head[k][1]} first; " + ", ".join(f"{j} {v[0]:.2f}" + ("" if v[1] else "+") for j, v in head.items()))
-    dist = M.CAM_Z + HOVER_GAP
-    edge = -SLAB_H / 2
-    slabs = {"median card, slab centred": (edge + L.CARD_TOP_FROM_EDGE[1], L.CARD_W / 2, AIM_FLOOR),
-             "worst-case slab (latest card top, end of its play)": (edge + L.CARD_TOP_FROM_EDGE[2] + L.WINDOW_PLACE_TOL, L.CARD_W / 2 - 1.85 - L.XY_CAL_RESIDUAL - 1.0, 0.0)}
-    for name, (card_top, side, floor) in slabs.items():
-        def on_card(axis, deg: float) -> bool:
-            for x0, y0, x1, y1 in win:
-                for x, y in ((x0, y0), (x1, y0), (x1, y1), (x0, y1)):
-                    vx, vy, vz = _aim_turn((x, y, -dist), axis, deg)
-                    px, py = vx * dist / -vz, vy * dist / -vz + L.HEAD_CAM_DY  # on the slab plane, from the cup axis
-                    if py < card_top or abs(px) > side:
-                        return False
-            return True
-        tol = {k: (_bisect(lambda d: not on_card(axis, sg * d), 0.0, AIM_SEARCH, 16) if not on_card(axis, sg * AIM_SEARCH) else AIM_SEARCH)
+           AIM_HEAD_FLOOR, f"{head[k][1]} first; " + ", ".join(f"{j} {v[0]:.2f}" + ("" if v[1] else "+") for j, v in head.items()))
+    slabs = {}
+    for g, h in L.HOLDERS.items():
+        slabs[f"before the face-down window leaves the card, median {g} card, slab centred"] = (h["length"] / 2 - h["top_to_far"][1], (0.0,), AIM_FLOOR, False)
+        sx = L.card_x_shift(g)
+        slabs[f"before more than {HOLDER_SHARE_MAX:.0f} % of the face-down window is on the holder, worst-case {g} slab (pocket corner, as above)"] = (
+            L.card_top_worst(g), (sx, -sx), 0.0, True)
+    for name, (card_top, cxs, floor, share) in slabs.items():
+        def off(axis, deg: float) -> bool:
+            r = [_window_on_card(card_top, cx, (axis, deg)) for cx in cxs]
+            return max(q[0] for q in r) > HOLDER_SHARE_MAX if share else min(q[1] for q in r) < 0.0
+        at0 = off((1, 0, 0), 0.0)  # over the limit at nominal aim: -1 (check_face_down_window shows by how much)
+        tol = {k: -1.0 if at0 else (_bisect(lambda d: off(axis, sg * d), 0.0, AIM_SEARCH, 16) if off(axis, sg * AIM_SEARCH) else AIM_SEARCH)
                for k, (axis, sg) in AIM_DIRS.items()}
         k = min(tol, key=tol.get)
-        record(f"head camera aim error before the face-down window leaves the card, {name}, worst direction (deg)", round(tol[k], 2), floor,
+        record(f"head camera aim error {name}, worst direction (deg)", round(tol[k], 2), floor,
                f"{k}; " + ", ".join(f"{j} {v:.2f}" + ("+" if v >= AIM_SEARCH else "") for j, v in tol.items()))
 
 
@@ -796,6 +907,148 @@ def check_phase0() -> None:
     record("Phase 0: head board standoff for an 8 mm board-to-lens-front camera (mm, >= 0 = the posts work)", M.p0_board_spacer(8.0), 0.0)
 
 
+def _mirror_band(ring, ring_above_lens: float, lens_h: float) -> tuple[float, float]:
+    """Radii (mm, from the lens's foot point) of the band on a flat glossy slab face, lens_h from the lens, in which the camera
+    sees the ring's LED face mirrored. The ring's face is ring_above_lens beyond the lens front (negative = nearer the slab)."""
+    h = lens_h + ring_above_lens
+    return ring[1] / 2 * lens_h / (lens_h + h), ring[0] / 2 * lens_h / (lens_h + h)
+
+
+def _rect_gap(cx: float, cy: float, band: tuple[float, float], rects) -> float:
+    """Smallest gap (mm) between an annulus at (cx, cy) and axis-aligned rectangles; negative = they overlap."""
+    gap = 1e9
+    for x0, y0, x1, y1 in rects:
+        near = math.hypot(max(x0 - cx, 0, cx - x1), max(y0 - cy, 0, cy - y1))
+        far = max(math.hypot(x - cx, y - cy) for x in (x0, x1) for y in (y0, y1))
+        gap = min(gap, near - band[1] if near >= band[1] else (band[0] - far if far <= band[0] else -1.0))
+    return gap
+
+
+GLARE_HALO = 2.0  # = software facedown.GLARE_DILATE_MM: the glare mask grows this far round a saturated reflection
+GLARE_REF_MAX = 0.02  # = software facedown.GLARE_REF_MAX: a frame with more of the window under glare never becomes a reference
+
+
+def _glare_share(lens_h: float, rects, step: float = 0.2) -> float:
+    """Share of the window rectangles (cup-axis mm) under the software's glare mask from the head ring's mirror image in the
+    slab back: the mirrored LED band (_mirror_band) where the cup pad does not hide it (the pad's top rim projected from the
+    lens; other head parts ignored, which only adds glare), grown by GLARE_HALO. Raster of `step` mm."""
+    import numpy as np
+
+    fy = M.CAM_DY  # the lens's foot point is (0, CAM_DY)
+    r_in, r_out = _mirror_band(M.HEAD_RING, M.HEAD_RING_FACE_DZ, lens_h)
+    hp = lens_h - M.CAM_Z - L.CUP_HANG + M.PAD_Y  # free pad's top rim above the slab plane
+    k = lens_h / (lens_h - hp)
+    pc, pr = fy + (0.0 - fy) * k, M.PAD_B / 2 * k  # its shadow: centre (0, pc), radius pr
+    m = GLARE_HALO + step
+    x0, x1 = min(r[0] for r in rects) - m, max(r[2] for r in rects) + m
+    y0, y1 = min(r[1] for r in rects) - m, max(r[3] for r in rects) + m
+    xs, ys = np.meshgrid(np.arange(x0, x1, step), np.arange(y0, y1, step))
+    rr = np.hypot(xs, ys - fy)
+    vis = (rr >= r_in) & (rr <= r_out) & (np.hypot(xs, ys - pc) > pr)
+    win = np.zeros(xs.shape, bool)
+    for a, b, c, d in rects:
+        win |= (xs >= a) & (xs <= c) & (ys >= b) & (ys <= d)
+    if not vis.any():
+        return 0.0
+    vx, vy = xs[vis], ys[vis]
+    wx, wy = xs[win], ys[win]
+    hit = np.zeros(wx.shape, bool)
+    for i in range(0, len(vx), 512):
+        hit |= (np.hypot(wx[:, None] - vx[None, i:i + 512], wy[:, None] - vy[None, i:i + 512]) <= GLARE_HALO).any(axis=1)
+    return float(hit.mean())
+
+
+def check_led_rings() -> None:
+    """The head and station LED rings (model.py HEAD_RING / STATION_RING; ID, thickness and lead exit [Guessing]) in their seats:
+    on the seat, clear of the arm, the camera and everything that moves in the head, out of every camera view checked above,
+    the seat's fit for the sizes sold, where each camera sees the ring mirrored in the slab (glare), and the Phase 0 copies."""
+    hp = {p.name: p.shape.val() for p in M.head_parts(0.0, 0.0, compression=0.0)}
+    ring = [hp["head_led_ring"], hp["head_ring_leads"]]
+    record("head LED ring on its seat's lip: overlap with camera_bracket (mm3)", hp["head_led_ring"].intersect(hp["camera_bracket"]).Volume(), OVERLAP_TOL,
+           f"gap {hp['head_led_ring'].distance(hp['camera_bracket']):.2f} mm (touching = seated)", larger_is_better=False)
+    record("head LED ring: solder pads and leads through the lip notch vs camera_bracket (min clearance, mm)", hp["head_ring_leads"].distance(hp["camera_bracket"]), 0.3)
+    record("head LED ring + leads vs the drop arm (min clearance, mm)", min(r.distance(hp["drop_arm"]) for r in ring), 1.0)
+    record("head LED ring + leads vs the head camera's board, holder and lens (min clearance, mm)", min(r.distance(hp["head_camera"]) for r in ring), 0.5)
+    S = f"0..{L.BUFFER_STROKE:.0f} mm"
+    movers = ("cup", "buffer_rod", "buffer_stop", "probe_flag", "vac_fitting")
+    dm = min((min(_moved(hp[n], t).distance(r) for n in movers for r in ring), t) for t in STROKE)
+    record(f"head LED ring + leads vs the buffer's moving parts (cup, rod, stop, flag, elbow) over {S} (min clearance, mm)", dm[0], 1.0, f"at {dm[1]:.0f} mm")
+    od, id_, t = M.HEAD_RING
+    lip_ir = (id_ + 3.0) / 2
+    record(f"head ring seat: radial play of a {od:.0f} mm ring in its bore (mm)", (od + 1.0 - od) / 2, 0.25)
+    record(f"head ring seat: lip under the ring's band (mm; holds any ID up to {2 * (od / 2 - 1.5):.0f})", od / 2 - max(id_ / 2, lip_ir), 1.5)
+    # out of the views: the label frustum (check_head_camera) and the window frustums at hover and held, against the ring alone
+    p, c = P[4], L.C_SAFE_LOADED
+    mring = [q for q in M.head_parts(p.x, c, compression=0.0) if q.name in ("head_led_ring", "head_ring_leads")]
+    lens = (p.x, p.y + M.CAM_DY, c + M.CAM_Z)
+    label_y = p.y - SLAB_H / 2 + 5 + 10
+    fr = [frustum((lens[0], lens[1], lens[2] - 0.5), (p.x - 37, label_y - 12, c + 0.5), (p.x + 37, label_y + 12, c + 0.5))]
+    for lz in (c - L.CUP_HANG, c - HOVER_GAP):  # held slab back, and a slab back at hover with the cup at c
+        fr += [frustum((lens[0], lens[1], lens[2] - 0.5), (lens[0] + x0, lens[1] - M.CAM_DY + y0, lz + 0.5), (lens[0] + x1, lens[1] - M.CAM_DY + y1, lz + 0.5))
+               for x0, y0, x1, y1 in L.FACE_DOWN_WINDOW_MM]
+    vol = sum(blocked(f, mring)[0] for f in fr)
+    gap = min(f.distance(q.shape.val()) for f in fr for q in mring)
+    record("head LED ring + leads in the head camera's label view and face-down window frustums, hover and held (mm3)", vol, 0.01,
+           f"nearest {gap:.1f} mm (the LED face is {abs(M.HEAD_RING_FACE_DZ):.0f} mm {'below' if M.HEAD_RING_FACE_DZ < 0 else 'above'} the lens front)",
+           larger_is_better=False)
+    # glare: the slab back is a flat glossy face, so the camera sees the ring mirrored in it; the software masks glare plus a halo
+    for name, lh in (("hover", M.CAM_Z + HOVER_GAP), ("held", M.CAM_Z + L.CUP_HANG)):
+        band = _mirror_band(M.HEAD_RING, M.HEAD_RING_FACE_DZ, lh)
+        gap = _rect_gap(0.0, M.CAM_DY, band, L.FACE_DOWN_WINDOW_MM)
+        record(f"head LED ring mirrored in the slab back ({name}) + the software's {GLARE_HALO:.0f} mm glare halo: share of the face-down window it covers "
+               f"(software refuses a reference above {GLARE_REF_MAX})", _glare_share(lh, L.FACE_DOWN_WINDOW_MM), GLARE_REF_MAX,
+               f"[Likely] flat-mirror model: band r {band[0]:.1f}-{band[1]:.1f} mm round the lens axis, {gap:.2f} mm from the window, partly behind the cup pad",
+               larger_is_better=False)
+    # station ring
+    bp = {q.name: q for q in M.bed_parts()}
+    sr = [bp["station_led_ring"].shape.val(), bp["station_ring_leads"].shape.val()]
+    st, scam = bp["station"].shape.val(), bp["station_camera"].shape.val()
+    record("station LED ring on its seat's shelf: overlap with station_mount (mm3)", sr[0].intersect(st).Volume(), OVERLAP_TOL,
+           f"gap {sr[0].distance(st):.2f} mm (touching = seated)", larger_is_better=False)
+    record("station LED ring: solder pads and leads in the shelf slot vs station_mount (min clearance, mm)", sr[1].distance(st), 0.3)
+    record("station LED ring + leads vs the station camera (min clearance, mm)", min(r.distance(scam) for r in sr), 1.0)
+    sx, sy = L.station_xy()
+    cs = L.STATION_READ_C
+    label_y = sy - SLAB_H / 2 + 5 + 10
+    fs = frustum((sx, sy, L.STATION_LENS_Z), (sx - 37, label_y - 12, cs - L.CUP_HANG - SLAB_T - 0.5), (sx + 37, label_y + 12, cs - L.CUP_HANG - SLAB_T - 0.5))
+    vol, _ = blocked(fs, [bp["station_led_ring"], bp["station_ring_leads"]])
+    face_up = M.STATION_RING_Z + M.STATION_RING[2] - L.STATION_LENS_Z
+    record("station LED ring + leads in the station camera's label view (blocked mm3)", vol, 0.01,
+           f"nearest {min(fs.distance(r) for r in sr):.1f} mm; LED face {face_up:+.0f} mm from the lens front (it shines away from the lens)", larger_is_better=False)
+    bore, wall, depth, inner = M.STATION_SEAT
+    for rg in (M.STATION_RING, M.STATION_RING_ALT):
+        play = (bore - rg[0]) / 2
+        record(f"station ring seat: a {rg[0]:.0f} x {rg[1]:.0f} mm ring in the {bore:.0f} mm bore, radial play outside 0.25..2.5 mm (mm)",
+               max(0.25 - play, play - 2.5, 0.0), 0.0, f"play {play:.2f} mm", larger_is_better=False)
+        sides = [min(rg[0] / 2 + d, bore / 2) - max(rg[1] / 2 + d, inner / 2) for d in (play, -play)]  # band on the shelf, both sides
+        record(f"station ring seat: shelf under the band of a {rg[0]:.0f} x {rg[1]:.0f} mm ring pushed to one side (mm)", min(sides), 2.0)
+    band = _mirror_band(M.STATION_RING, face_up, L.CAM_TO_SLAB)
+    lab = [(-37.0, -SLAB_H / 2 + 5, 37.0, -SLAB_H / 2 + 25)]  # the label insert on the slab front, from the station axis
+    record(f"station LED ring mirrored in the held slab's front (r {band[0]:.1f}-{band[1]:.1f} mm) vs the front label (gap mm)",
+           _rect_gap(0.0, 0.0, band, lab), GLARE_HALO, "[Likely] flat-mirror model")
+    # Phase 0 copies: the same rings at the same place relative to each lens, clear of the occluder's moving parts
+    jp = {q.name: q.shape.val() for q in M.phase0_parts(compression=0.0)}
+    def rel(s, lens):
+        b = s.BoundingBox()
+        return [v - lens[i // 2] for i, v in enumerate((b.xmin, b.xmax, b.ymin, b.ymax, b.zmin, b.zmax))]
+    hl_m, hl_j = (0.0, M.CAM_DY, M.CAM_Z), (0.0, M.CAM_DY, M.P0_TOP_Z)
+    sl_m, sl_j = (sx, sy, L.STATION_LENS_Z), (0.0, 0.0, L.STATION_LENS_Z)
+    pairs = [(hp[n], jp["p0_" + n], hl_m, hl_j) for n in ("head_led_ring", "head_ring_leads")]
+    pairs += [(bp[n].shape.val(), jp["p0_" + n], sl_m, sl_j) for n in ("station_led_ring", "station_ring_leads")]
+    worst = max(max(abs(a - b) for a, b in zip(rel(m, lm), rel(j, lj))) for m, j, lm, lj in pairs)
+    record("Phase 0 vs machine: both LED rings and their leads relative to their lens (worst bounding-box offset, mm)", worst, 0.01, "", larger_is_better=False)
+    jring = [jp["p0_head_led_ring"], jp["p0_head_ring_leads"]]
+    occ = ("p0_cup", "p0_buffer_rod", "p0_buffer_stop", "p0_probe_flag", "p0_vac_fitting")
+    dj = min((min(_moved(jp[n], tt).distance(r) for n in occ for r in jring), tt) for tt in STROKE)
+    record(f"Phase 0: head LED ring + leads vs the occluder's moving parts over {S} (min clearance, mm)", dj[0], 1.0, f"at {dj[1]:.0f} mm")
+    # face-up pass (mount slid up): pushing the cup up 0..12 mm to change a slab keeps 1 mm; on to the buffer's end only no contact,
+    # as for the bridge and camera above
+    up = {q.name: q.shape.val() for q in M.phase0_parts(compression=0.0, lift=M.P0_FACE_UP_LIFT)}
+    du = min((min(_moved(up[n], tt).distance(r) for n in occ for r in jring) - (1.0 if tt <= 12.0 else 0.1), tt) for tt in STROKE)
+    record(f"Phase 0 face-up pass: head LED ring + leads vs the occluder pushed up {S}: worst margin over 1.0 mm (to 12 mm) / 0.1 mm (beyond) (mm)",
+           du[0], 0.0, f"at {du[1]:.0f} mm")
+
+
 def main() -> int:
     print("layout checks:", L.check() or "OK")
     check_pockets()
@@ -807,6 +1060,7 @@ def main() -> int:
     check_head_camera()
     check_face_down_window()
     check_camera_aim()
+    check_led_rings()
     check_probe()
     check_carry_sensor()
     check_extremes()

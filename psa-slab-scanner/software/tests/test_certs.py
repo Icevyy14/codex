@@ -106,7 +106,9 @@ def test_consensus_empty():
 def test_single_1d_read_needs_confirmation():
     raw = "26275088"
     assert consensus([_itf(raw)]).status == "needs_review"
-    assert consensus([_itf(raw), _r("26275088", "ocr", "OCR", grader="unknown")]).status == "ok"  # OCR of the printed digits agrees
+    # OCR of the printed digits agrees: the digits are confirmed, the grader (from the ITF's length) is not
+    v = consensus([_itf(raw), _r("26275088", "ocr", "OCR", grader="unknown")])
+    assert v.status == "needs_review" and v.grader == "PSA" and "barcode confirmed by OCR" in v.note and "grader PSA not confirmed" in v.note
     assert consensus([_itf(raw), _itf(raw, "back_barcode")]).status == "ok"
     # the same for Code128, PSA or CGC
     assert consensus([_r("148069831", "back_barcode", "Code128")]).status == "needs_review"
@@ -162,3 +164,64 @@ def test_custom_regex_is_validated(tmp_path):
     (tmp_path / "c.toml").write_text('custom_regex = "cert=\\\\d+"\n')
     with pytest.raises(ValueError, match="capture group"):
         load(tmp_path / "m.toml", tmp_path / "c.toml")
+
+
+def test_names_grader_only_for_a_cert_url():
+    from slabscan.certs import names_grader
+
+    def rd(sym, payload, camera="back"):
+        p = parse_payload(payload, sym)
+        return CodeRead(p.cert, "x", sym, payload, camera, p.grader, kind=p.kind)
+
+    assert names_grader(rd("QRCode", "https://www.psacard.com/cert/26275088/"))
+    assert names_grader(rd("QRCode", "https://www.cgccards.com/certlookup/6003997046/10_0/"))
+    assert names_grader(rd("Code128", "https://www.psacard.com/cert/26275088"))  # a URL in a 1D code names it too
+    for sym, payload in (("ITF", "26275088"), ("Code128", "100423658"), ("Code128", "6003997046"), ("Code128", "47140890000000003750599206"),
+                         ("QRCode", "148069831"), ("OCR", "148069831")):
+        assert not names_grader(rd(sym, payload)), (sym, payload)
+    # a read built without its kind is parsed again
+    assert not names_grader(CodeRead("6003997046", "front_barcode", "Code128", "6003997046", "front", "CGC"))
+    assert names_grader(CodeRead("26275088", "back_qr", "QRCode", "http://psacard.com/cert/26275088", "back", "PSA"))
+
+
+def test_a_grader_from_one_barcodes_length_is_never_ok():
+    """software (round 3): a bare number gets its grader from symbology and length only. A BGS cert as a 10-digit
+    Code128 on the front, with OCR agreeing, came out 'ok CGC'. OCR confirms the digits, never the grader."""
+    bgs_like = _r("19865140", "front_barcode", "Code128", raw="0019865140", grader="CGC")
+    ocr = _r("19865140", "ocr", "OCR", raw="0019865140", grader="unknown")
+    v = consensus([bgs_like, ocr])
+    assert v.status == "needs_review" and v.cert == "19865140" and "grader CGC not confirmed" in v.note
+    # a real pre-2016 PSA front: ITF + OCR -> the cert is right, the grader is only the ITF's format
+    v = consensus([_itf("02074012"), _r("2074012", "ocr", "OCR", raw="2074012", grader="unknown")])
+    assert v.status == "needs_review" and v.cert == "2074012" and v.grader == "PSA"
+    # a QR with a bare number confirms the digits of a Code128, not its grader
+    v = consensus([_r("148069831", "back_qr", "QRCode", raw="148069831", grader="unknown"), _r("148069831", "front_barcode", "Code128")])
+    assert v.status == "needs_review" and "grader PSA not confirmed" in v.note
+    # a code that names the grader, or a second printed symbol in its format, confirms it
+    cgc_qr = _r("6003997046", "back_qr", raw="https://www.cgccards.com/certlookup/6003997046/10_0/", grader="CGC")
+    assert consensus([cgc_qr, _r("6003997046", "front_barcode", "Code128", grader="CGC")]).status == "ok"
+    assert consensus([_itf("25656882", "back_barcode"), _itf("25656882")]).status == "ok"  # a 2016 label: back + front ITF
+
+
+def test_no_verdict_is_ok_on_a_grader_guessed_from_one_barcode():
+    """Every combination of the reads one slab can give: an 'ok' always has a code naming its grader, or two printed
+    symbols in its format; a grader-unknown verdict is never 'ok'."""
+    from itertools import combinations
+
+    from slabscan.certs import names_grader
+
+    c = "26275088"
+    pool = [_itf(c, "back_barcode"), _itf(c), _r(c, "front_barcode", "Code128"), _r(c, "back_barcode", "Code128"),
+            _r(c, "ocr", "OCR", grader="unknown"), _r(c, "back_qr", raw=c, grader="unknown"), _r(c, "back_barcode", "Code39", grader="unknown"),
+            _r(c, "back_qr", raw=f"https://www.psacard.com/cert/{c}/")]
+    n_ok = 0
+    for k in range(1, len(pool) + 1):
+        for reads in combinations(pool, k):
+            v = consensus(list(reads))
+            if v.status != "ok":
+                continue
+            n_ok += 1
+            machine = [r for r in reads if r.source != "ocr" and r.grader == v.grader]
+            assert v.grader != "unknown"
+            assert any(names_grader(r) for r in machine) or len({r.source for r in machine}) >= 2, [r.raw for r in reads]
+    assert n_ok > 0

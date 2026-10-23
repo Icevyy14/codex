@@ -8,6 +8,7 @@ read off 64 real PSA/CGC/BGS/SGC slabs). ``tools/real_eval.py`` runs the same pi
 
 from __future__ import annotations
 
+import math
 import zlib
 from dataclasses import dataclass
 from functools import lru_cache
@@ -429,22 +430,32 @@ def card_top_mm(cert: str) -> float:
     return lo + (hi - lo) * (_stable_seed("card_top", cert) % 1001) / 1000
 
 
+def aim_shift_mm(tilt_deg: float) -> float:
+    """How far a head camera tilted toward the cup by ``tilt_deg`` moves everything it sees toward the label end of the
+    image, in mm on the slab plane at the hover frame. A tilt turns every ray about the lens by the same angle, so the
+    slab and the head's own parts move together, and the card window (fixed in the image) slides toward the cup pad:
+    the CAD's 1.4 mm of clearance is gone at about 0.55 deg, the simulator's 1.2 mm at about 0.47 deg."""
+    return HOVER_MM * math.tan(math.radians(tilt_deg))
+
+
 def head_view(cert: str, side: str, deg: Degrade, era: str = "2017+", grader: str = "PSA", back: str = "pokemon_en",
-              head: str = "cad", seed: int | None = None, front: str = "art") -> np.ndarray:
+              head: str = "cad", seed: int | None = None, front: str = "art", tilt_deg: float = 0.0) -> np.ndarray:
     """What the head camera sees of one slab from above: HEAD_VIEW_MM of it. ``side`` is the slab side facing up:
     'back' (face-down: the back label with what it carries for this grader and era, none on old PSA labels, and the
     card BACK in the card window) or 'front' (face-up: the front label and the card's own front). The slab lies up to
     +/-2 mm off centre and up to 1 deg off square in its pocket, the exposure differs by up to 12 %, and about a third of
     the slabs carry a glare spot on the card window. The card sits card_top_mm(cert) from the slab's label-end edge.
     The head's own parts (``head``, see HEADS) are drawn in front of it, and the slab lies where that head's lens sees
-    it (lens_dy). ``front``: "art" (card_front) or "plain" (plain_front)."""
+    it (lens_dy). ``front``: "art" (card_front) or "plain" (plain_front). ``tilt_deg``: the camera tilted toward the cup
+    (aim_shift_mm)."""
     rng = np.random.default_rng(_stable_seed(cert, side, era, grader, back, head) if seed is None else seed)
     x0v, y0v, x1v, y1v = HEAD_VIEW_MM
     W, H = x1v - x0v, y1v - y0v
     dx, dy = rng.uniform(-2.0, 2.0, 2)
     canvas = np.full((int(round(H * PX_PER_MM_RENDER)), int(round(W * PX_PER_MM_RENDER))), 40, np.uint8)
     # slab corner on the canvas (mm): the cup axis (slab centre) is -lens_dy from the camera axis
-    sx, sy = -SLAB_W_MM / 2 - x0v + dx, -SLAB_H_MM / 2 - lens_dy(head) - y0v + dy
+    tilt = aim_shift_mm(tilt_deg)
+    sx, sy = -SLAB_W_MM / 2 - x0v + dx, -SLAB_H_MM / 2 - lens_dy(head) - y0v + dy - tilt
     cv2.rectangle(canvas, (int(sx * PX_PER_MM_RENDER), int(sy * PX_PER_MM_RENDER)), (int((sx + SLAB_W_MM) * PX_PER_MM_RENDER), canvas.shape[0]), 70, -1)
     cx, cy = sx + (SLAB_W_MM - CARD_W_MM) / 2, sy + card_top_mm(cert)
     card = card_back(back) if side == "back" else (plain_front(cert) if front == "plain" else card_front(cert))
@@ -459,14 +470,16 @@ def head_view(cert: str, side: str, deg: Degrade, era: str = "2017+", grader: st
     import dataclasses
 
     d = dataclasses.replace(deg, rotate_deg=deg.rotate_deg + rng.uniform(-1.0, 1.0))
-    occ = [(a - x0v, b - y0v, c - x0v, e - y0v, g) for a, b, c, e, g in head_shadow(head)]
+    occ = [(a - x0v, b - y0v - tilt, c - x0v, e - y0v - tilt, g) for a, b, c, e, g in head_shadow(head)]
     return _degrade(canvas.astype(np.float32) * gain, d, rng, spots, occ)
 
 
-def empty_head_view(deg: Degrade, head: str = "cad") -> np.ndarray:
-    """The head camera over an empty pocket: the dark pad far below, and the head's own parts."""
+def empty_head_view(deg: Degrade, head: str = "cad", tilt_deg: float = 0.0) -> np.ndarray:
+    """The head camera over an empty pocket: the dark pad far below, and the head's own parts (moved by a tilt toward
+    the cup, aim_shift_mm)."""
     x0v, y0v, x1v, y1v = HEAD_VIEW_MM
     px = 1.0 / deg.mm_per_px
+    tilt = aim_shift_mm(tilt_deg)
     out = np.full((int(round((y1v - y0v) * px)), int(round((x1v - x0v) * px))), 30, np.uint8)
-    occ = [(a - x0v, b - y0v, c - x0v, e - y0v, g) for a, b, c, e, g in head_shadow(head)]
+    occ = [(a - x0v, b - y0v - tilt, c - x0v, e - y0v - tilt, g) for a, b, c, e, g in head_shadow(head)]
     return _draw_occluders(out, occ, px)

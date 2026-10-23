@@ -18,7 +18,9 @@ there is nothing to learn about it, and an ITF read of any other length is a mis
 '289412' was read from 28941258). Payloads are typed by symbology AND length; a CGC cert keeps all its digits (13-digit
 CGC certs exist). ITF and Code128 reads are 1D: one printed symbol can be misread, so a 1D-only 'ok' needs two printed
 symbols (back + front label) or OCR of the printed digits to agree. A QR carries its own error correction. OCR finds a
-digit run, not a grader: an OCR-only number is never 'ok' and goes to the exception pocket.
+digit run, not a grader: an OCR-only number is never 'ok' and goes to the exception pocket. A bare number's grader is a
+guess from symbology and length (another grader's barcode of the same length would pass), so an 'ok' also needs a code
+that names the grader (a cert URL) or two printed symbols in its format; OCR agreeing confirms the digits only.
 Every decoded payload goes through ``parse_payload``.
 """
 
@@ -270,6 +272,7 @@ class CodeRead:
     grader: str = "PSA"
     frame: str = ""  # which frame it came from (the runner numbers them); "" = not known
     box: tuple | None = None  # (x0, y0, x1, y1) in the pixels of the image given to decode_frame
+    kind: str = ""  # the parse rule that matched (Parsed.kind); "" = not known (names_grader parses raw again)
 
 
 @dataclass(frozen=True)
@@ -304,28 +307,107 @@ class ItfModel:
 
 ACCEPTED_GRADERS = ("PSA", "CGC")  # read and stacked normally; others go to the exception pocket
 
+# Payloads that NAME their grader: a cert URL on the grader's own domain. Every other rule types a bare number by
+# symbology and length only (PSA ITF and Code128, CGC Code128): another grader's barcode of the same length would get
+# the same grader (a BGS cert like 0019865140 as Code128 reads as CGC). OCR digits name no grader at all.
+NAMED_KINDS = {"psa_qr", "psa_url", "cgc_qr", "cgc_qr_nograde", "cgc_auth_qr", "cgc_url", "bgs_url", "sgc_url", "tag_url"}
+
+
+def names_grader(r: CodeRead) -> bool:
+    """Does this read's payload itself name its grader (NAMED_KINDS)? A read without a kind is parsed again. One that
+    only the custom_regex types counts as naming it if it is a 2D code (as before), never if it is a 1D barcode."""
+    if r.source == "ocr":
+        return False
+    kind = r.kind
+    if not kind:
+        p = parse_payload(r.raw, r.symbology)
+        kind = p.kind if p is not None and p.grader == r.grader else "custom"
+    if kind == "custom":
+        return r.symbology in TWO_D
+    return kind in NAMED_KINDS
+
+
+def _inside(p: tuple, q: tuple) -> bool:
+    """Does the centre of box ``p`` lie in box ``q`` (with a small tolerance)?"""
+    tol = 3 + 0.03 * max(q[2] - q[0], q[3] - q[1])
+    cx, cy = (p[0] + p[2]) / 2, (p[1] + p[3]) / 2
+    return q[0] - tol <= cx <= q[2] + tol and q[1] - tol <= cy <= q[3] + tol
+
+
+def _one_symbol(a: CodeRead, b: CodeRead) -> bool:
+    """Can two 1D reads of one frame be ONE printed symbol? A phantom lies inside the real code (real: '09435764' at
+    y 522-534 px inside '27435764' at y 486-547, the same x span), so one read's centre lies in the other's box. Two
+    codes side by side are two printed symbols (another label in view), never a phantom. Without boxes: maybe."""
+    if a.box is None or b.box is None:
+        return True
+    return _inside(a.box, b.box) or _inside(b.box, a.box)
+
+
+THIN_SHARE = 0.5  # a read under half as thick as the other read of one symbol is the thin band (real phantom: 12 px in 61 px)
+
+
+def _thin_read(a: CodeRead, b: CodeRead) -> str | None:
+    """The cert of the read that is a thin band inside the other's box: of two reads of one symbol, only that one can be
+    a phantom. None when that cannot be told (no boxes, or two reads of about one thickness). Thickness is the box's
+    short side, so it does not matter how the label is turned in the frame."""
+    if a.box is None or b.box is None:
+        return None
+
+    def thick(r):
+        return min(r.box[2] - r.box[0], r.box[3] - r.box[1])
+
+    for p, q in ((a, b), (b, a)):
+        if thick(p) < THIN_SHARE * thick(q) and _inside(p.box, q.box):
+            return p.cert
+    return None
+
 
 def drop_phantoms(reads: list[CodeRead]) -> tuple[list[CodeRead], list[str]]:
-    """Two different numbers from ONE frame and ONE 1D symbology: zxing-cpp can return a thin band inside a real
+    """Two different numbers from ONE printed 1D symbol in ONE frame: zxing-cpp can return a thin band inside a real
     barcode as a second, wrong read (real: Code128 '09435764' inside '27435764'). decode.py drops those by position;
-    this is the second guard. When exactly one of the numbers is confirmed by a read from another frame or another
-    symbology, the others are dropped. Otherwise nothing is dropped, and consensus() says conflict."""
-    groups: dict[tuple[str, str], set[str]] = defaultdict(set)
+    this is the second guard.
+
+    It counts printed symbols, not frames. One symbol is one (source, symbology): the same label side's barcode in
+    every frame of every pose (hover and held frames of the head camera are one symbol; so are the station's frames).
+    A number is confirmed only by a DIFFERENT symbol: the QR on the same label, the other label side's code, or OCR of
+    the printed digits. Another frame of the same symbol never confirms anything: a phantom can come back in it while
+    the real read fails there. When exactly one of the numbers is confirmed, the others are phantoms of that symbol and
+    are dropped from all of its frames (else a phantom that came back alone in frame 2 still makes a conflict that
+    hides the confirmed cert). Otherwise nothing is dropped, and consensus() says conflict.
+
+    Only the thin band can be a phantom (``_thin_read``). The confirming symbol can carry the same misread: PSA prints
+    one Code128 on both label sides, and the real phantom is a fixed misread of a printed pattern. So when the
+    confirmed number is the thin read inside the other one, nothing is dropped (a conflict, never the thin read's
+    number). When the reads give no thin band (no boxes, one thickness), only a QR or OCR of the printed digits may
+    confirm: neither can carry a bar-pattern misread."""
+    groups: dict[tuple[str, str, str], list[CodeRead]] = defaultdict(list)
     for r in reads:
         if r.source != "ocr" and r.symbology not in TWO_D and r.frame:
-            groups[(r.frame, r.symbology)].add(r.cert)
-    drop: set[tuple[str, str, str]] = set()
-    for key, certs in groups.items():
-        if len(certs) < 2:
+            groups[(r.frame, r.source, r.symbology)].append(r)
+    drop: set[tuple[str, str, str]] = set()  # (source, symbology, cert)
+    for (_, src, sym), rs in groups.items():
+        amb, thin, blind = set(), set(), False
+        for i, a in enumerate(rs):
+            for b in rs[i + 1:]:
+                if a.cert != b.cert and _one_symbol(a, b):
+                    amb |= {a.cert, b.cert}
+                    t = _thin_read(a, b)
+                    blind |= t is None
+                    thin |= {t} - {None}
+        if len(amb) < 2:
             continue
-        others = {r.cert for r in reads if r.source != "ocr" and (r.frame, r.symbology) != key}
-        keep = certs & others
-        if len(keep) == 1:
-            drop |= {(key[0], key[1], c) for c in certs - keep}
+        others = [r for r in reads if (r.source, r.symbology) != (src, sym)]
+        keep = amb & {r.cert for r in others}
+        if len(keep) != 1 or keep & thin:
+            continue
+        if blind or not (amb - keep) <= thin:
+            if not keep & {r.cert for r in others if r.symbology in TWO_D or r.source == "ocr"}:
+                continue
+        drop |= {(src, sym, c) for c in amb - keep}
     if not drop:
         return reads, []
-    kept = [r for r in reads if (r.frame, r.symbology, r.cert) not in drop]
-    return kept, sorted({f"{s}:{r.raw}" for r in reads for f, s, c in drop if (r.frame, r.symbology, r.cert) == (f, s, c)})
+    kept = [r for r in reads if (r.source, r.symbology, r.cert) not in drop]
+    return kept, sorted({f"{r.symbology}:{r.raw}" for r in reads if (r.source, r.symbology, r.cert) in drop})
 
 
 def consensus(reads: list[CodeRead], itf: ItfModel | None = None, min_sources: int = 2, accepted: tuple[str, ...] = ACCEPTED_GRADERS) -> Verdict:
@@ -339,6 +421,9 @@ def consensus(reads: list[CodeRead], itf: ItfModel | None = None, min_sources: i
     * 1D only (ITF, Code128; any grader)               -> ok only with >= min_sources DIFFERENT printed symbols (back +
       front label barcode) or OCR of the printed digits agreeing. Repeated reads of one symbol (two frames from one
       pose, overlapping tiles) are not independent and count once. OCR that disagrees -> needs_review.
+    * the grader, on every 'ok': a code must name it (a cert URL, NAMED_KINDS), or two DIFFERENT printed symbols must
+      carry its format. A bare number's grader comes from its symbology and length only, and OCR confirms digits,
+      never a grader: one barcode in a grader's format (even with OCR agreeing) -> needs_review, grader kept
     * a code with no grader evidence (bare digits)     -> needs_review, grader unknown
     * only OCR                                          -> needs_review, grader unknown (the runner sends it to the
       exception pocket: OCR finds a digit run, not a grader, and it reads card numbers too)
@@ -375,10 +460,17 @@ def consensus(reads: list[CodeRead], itf: ItfModel | None = None, min_sources: i
     raw = (two_d or machine)[0].raw
     if grader not in accepted and grader != "unknown":
         return Verdict("other_grader", cert, srt(machine), note(f"{grader} slab"), grader=grader, raw=raw)
+    # no code names the grader and only one printed symbol has its format: the grader is a guess from a length
+    by_length = (grader != "unknown" and not any(names_grader(r) for r in machine if r.grader == grader)
+                 and len({r.source for r in machine if r.grader == grader}) < 2)
+    guess = (f"grader {grader} not confirmed: no code names it and only one printed barcode has its format (OCR confirms "
+             f"digits, never a grader) - check it is a {grader} slab")
     if two_d:
         itf.observe(cert, [r for r in machine if r.symbology == "ITF"])
         if grader == "unknown":
             return Verdict("needs_review", cert, srt(machine), note("grader not confirmed (a code with no grader's format)"), grader="unknown", raw=raw)
+        if by_length:
+            return Verdict("needs_review", cert, srt(machine), note(guess), grader=grader, raw=raw)
         return Verdict("ok", cert, srt(machine), note(), grader=grader, raw=raw)
     # 1D only: ITF or Code128, any grader
     if ocr and cert not in ocr_certs:
@@ -394,4 +486,6 @@ def consensus(reads: list[CodeRead], itf: ItfModel | None = None, min_sources: i
         status, srcs, why = "needs_review", srt(machine), "one printed barcode only (no QR) - confirm"
     if status == "ok" and grader == "unknown":
         return Verdict("needs_review", cert, srcs, note("grader not confirmed (a code with no grader's format)"), grader="unknown", raw=raw)
+    if status == "ok" and by_length:
+        return Verdict("needs_review", cert, srcs, note(why, guess), grader=grader, raw=raw)
     return Verdict(status, cert, srcs, note(why), grader=grader, raw=raw)

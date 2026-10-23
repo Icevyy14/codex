@@ -256,6 +256,8 @@ def export_heads(path: Path | None = None) -> Path:
         "HEAD_CAM_DY": L.HEAD_CAM_DY,
         "CARRY_SENSOR_C0": L.CARRY_SENSOR_C0,
         "card_top_from_label_edge_mm": {"min": L.CARD_TOP_FROM_EDGE[0], "median": L.CARD_TOP_FROM_EDGE[1], "max": L.CARD_TOP_FROM_EDGE[2]},
+        "holders": {g: {"length_mm": h["length"], "width_mm": h["width"], "card_top_to_far_edge_mm": dict(zip(("min", "median", "max"), h["top_to_far"])),
+                        "backs_measured": h["n"], "card_top_worst_from_cup_axis_mm": L.card_top_worst(g)} for g, h in L.HOLDERS.items()},
     }
     lines = []
     for k, v in doc.items():  # one HEADS row (and its name) per line, so it diffs and pastes

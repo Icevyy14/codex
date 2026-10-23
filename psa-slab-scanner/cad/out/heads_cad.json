@@ -49,9 +49,10 @@
   "elbow barb + tube end (toward +Y)",
   "drop arm (cut at the lens)"
  ],
- "FACE_DOWN_WINDOW_MM": [[-27.5, -27.5, 27.5, -16.0]],
- "face_down_window_mm_from_camera_axis": [[-27.5, -22.5, 27.5, -11.0]],
+ "FACE_DOWN_WINDOW_MM": [[-27.5, -23.5, 27.5, -18.0]],
+ "face_down_window_mm_from_camera_axis": [[-27.5, -18.5, 27.5, -13.0]],
  "HEAD_CAM_DY": -5.0,
  "CARRY_SENSOR_C0": 246.5,
- "card_top_from_label_edge_mm": {"min": 34.8, "median": 36.1, "max": 37.8}
+ "card_top_from_label_edge_mm": {"min": 34.8, "median": 36.1, "max": 37.8},
+ "holders": {"PSA": {"length_mm": 135.5, "width_mm": 80.3, "card_top_to_far_edge_mm": {"min": 97.18, "median": 98.68, "max": 99.95}, "backs_measured": 22, "card_top_worst_from_cup_axis_mm": -27.18}, "CGC": {"length_mm": 133.9, "width_mm": 79.4, "card_top_to_far_edge_mm": {"min": 93.76, "median": 95.17, "max": 96.21}, "backs_measured": 27, "card_top_worst_from_cup_axis_mm": -23.76}}
 }

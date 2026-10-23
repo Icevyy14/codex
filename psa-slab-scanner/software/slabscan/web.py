@@ -61,10 +61,11 @@ class SimProvider:
 
     sim = True
 
-    def __init__(self, cfg: Config, slabs: int = 22, seed: int = 7):
+    def __init__(self, cfg: Config, slabs: int = 22, seed: int = 7, **batch_kw):
         self.cfg = cfg
         self.slabs = slabs
         self.seed = seed
+        self.batch_kw = batch_kw  # factory.sim_stacks options, e.g. mix
         self.hw = None
         self.loads = 0
 
@@ -73,7 +74,7 @@ class SimProvider:
 
         if fresh or self.hw is None:
             self.loads += 1
-            self.hw = sim_hardware(self.cfg, slabs=self.slabs, seed=self.seed + self.loads)
+            self.hw = sim_hardware(self.cfg, slabs=self.slabs, seed=self.seed + self.loads, **self.batch_kw)
         return self.hw
 
     def invalidate(self) -> None:

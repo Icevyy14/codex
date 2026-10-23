@@ -187,15 +187,60 @@ HEAD_CAM_DY = -5.0  # head-camera axis, Y from the cup axis (negative = toward t
 # [Likely, measured on 27 real PSA backs in the realslabs set] the card's top edge is 34.8-37.8 mm (median 36.1) from the
 # slab's label-end edge; the label insert ends ~26 mm and its compartment ridge ~31 mm from that edge. sim.py guessed 32.
 CARD_TOP_FROM_EDGE = (34.8, 36.1, 37.8)  # min, median, max
-CARD_W = 63.5
+CARD_W, CARD_L = 63.0, 88.0  # Pokemon / Magic size, the narrowest card in the realslabs set (sports cards: 63.5 x 88.9)
+CARD_CORNER_R = 2.7  # [Likely +/-0.3] corner radius, traced on a real Pokemon back (the edge runs straight ~3 mm from the corner)
+# The card lies under the slab back, but the window is mapped on the slab back, so a ray at the window's edge meets the
+# card further out (checks.py _on_card_plane). [Likely +/-0.5] the card back is ~3.5 mm down: half a 7.0-7.5 mm holder less
+# half the card. n: acrylic, the lowest of the usual clear holder plastics (PS 1.59, PC 1.58), so the most parallax; an air
+# gap between the shell and the card would add some (all air, 3.5 mm: the upper bound checks.py also reports).
+CARD_DEPTH, SLAB_N = 3.5, 1.49
 LABEL_BAND = 31.0  # label compartment, from the label-end edge
 WINDOW_PLACE_TOL = 1.75 + XY_CAL_RESIDUAL  # slab play in its pocket (Y: (139 - 135.5) / 2) + the cup's X calibration residual
+CARD_IN_SLAB_X = 1.0  # card off the slab's centre line in X (measured: up to 0.81 PSA, 0.73 CGC)
+# [Likely +/-0.5 mm] Card position per grader, measured on real studio-scan backs in the realslabs set (22 PSA, 27 CGC; scale
+# from the card itself, 63 x 88 mm; the PSA median length came out at the nominal 135.5). "top_to_far" is the card top's
+# distance to the holder's FAR (non-label) edge: min, median, max. That is what sets the worst case: a slab pushed to the cup
+# end of its pocket play has its far edge on the pocket wall, so its card top lies POCKET_L / 2 + XY_CAL_RESIDUAL - top_to_far
+# from the cup axis, whatever the holder's length. CGC holders are ~1.6 mm shorter (2.55 mm of play, not 1.75) and their
+# card sits ~3.5 mm nearer the far edge, so a CGC card top can come 3.4 mm nearer the cup than a PSA one.
+HOLDERS = {
+    "PSA": {"length": 135.5, "width": 80.3, "top_to_far": (97.18, 98.68, 99.95), "n": 22},
+    "CGC": {"length": 133.9, "width": 79.4, "top_to_far": (93.76, 95.17, 96.21), "n": 27},
+}
+
+
+def card_top_worst(grader: str) -> float:
+    """Nearest the cup (mm from the cup axis, label end negative) a card top of this grader can be: the measured card top
+    nearest the far edge, the slab at the cup end of its play, plus the calibration residual."""
+    return round(POCKET_L / 2 + XY_CAL_RESIDUAL - HOLDERS[grader]["top_to_far"][0], 3)
+
+
+def card_x_shift(grader: str) -> float:
+    """Furthest the card's centre line can lie from the cup axis (mm, X) for this grader's slab anywhere in its pocket."""
+    return round((POCKET_W - HOLDERS[grader]["width"]) / 2 + XY_CAL_RESIDUAL + CARD_IN_SLAB_X, 3)
+
+
+def card_side_limit(grader: str) -> float:
+    """Largest |x| (mm from the cup axis) that stays on the card for this grader's slab anywhere in its pocket (card edge
+    in the slab-back plane, square corners; checks.py adds the corners and the card's depth)."""
+    return round(CARD_W / 2 - card_x_shift(grader), 3)
+
+
 # Card-window rectangles [x0, y0, x1, y1] on the slab plane, mm from the CUP axis (X along the row, Y along the slab, label
 # end negative). The software's face_down_window_mm is measured from the head-CAMERA axis: use face_down_window_cam().
-# y0 = the latest-measured card top (37.8 mm from the edge) moved the full placement tolerance toward the cup, +0.2 mm;
-# x: the card's edge (31.75) less the slab's X play (1.85), the calibration residual and 1.1 mm of card-in-slab offset;
-# y1: the free cup's pad at hover (checks.py check_face_down_window: exact frustums, hover and held, nothing in them).
-FACE_DOWN_WINDOW_MM = [[-27.5, -27.5, 27.5, -16.0]]
+# y0: the worst CGC card top (card_top_worst, -23.76) + 0.26 mm in the slab-back plane; PSA's is at -27.18. x: 0.2 mm inside
+# card_side_limit (CGC 27.70). Seen on the card plane (checks.py: the card's depth and rounded corners) that is about zero
+# margin: a CGC slab pushed into a pocket corner has ~1.5 % of the window on the holder (4.5 % if the 3.5 mm were all air),
+# a PSA slab none. Area rules out pulling the edges in (x +/-27.0 alone leaves 297 mm2).
+# y1: 2 mm short of the free cup's pad shadow (it ends at -16.0 at 0.56 deg of aim error); every mm here is ~0.39 deg of
+# camera tilt toward the cup before the pad is in view (checks.py check_camera_aim: 1.34 deg). The ring light's reflection
+# in the slab back ends ~11 mm from the camera axis. 1.5 deg would need y1 = -18.5, which leaves 275 mm2, under the
+# software's 300 (facedown.MIN_WINDOW_MM2).
+# [Likely, the shipped learned_match on machine-scale frames made from the realslabs scans] with every slab at the cup end
+# of its play, the old window (y0 -27.5, y1 -16) let 12 of 206 face-up slabs through at threshold 0.55, all CGC fronts:
+# the strip of holder above a CGC card looks the same from both sides. This one let none (highest face-up 0.49; 0.53 with
+# the slabs placed +/-2 mm), and accepts ~101 of 126 face-down backs (old: 116).
+FACE_DOWN_WINDOW_MM = [[-27.5, -23.5, 27.5, -18.0]]
 
 
 def face_down_window_cam() -> list[list[float]]:
@@ -273,16 +318,17 @@ def check() -> list[str]:
         problems.append("left X bumper must stop the carriage >= 2 mm on its rail and below the home switch")
     if not travel_needed()["x"][1] + 15 + 2 <= X_HARD_STOP[1] <= X_RAIL_X0 + X_RAIL_LEN - MGN12H_L / 2 - 2:
         problems.append("right X bumper must lie beyond the soft limit and stop the carriage >= 2 mm on its rail")
-    # face-down card window: area, and on the card (not the label) wherever the slab lies in its pocket
+    # face-down card window: area, and on the card (not the label) wherever a PSA or CGC slab lies in its pocket. Flat model
+    # (square corners, card in the slab-back plane); checks.py check_face_down_window measures it on the card plane.
     edge = -SLAB_H / 2
-    card_top = edge + CARD_TOP_FROM_EDGE[2] + WINDOW_PLACE_TOL  # nearest the cup the card top can be
     if window_area() < 300.0:
         problems.append("face-down card window under 300 mm2 (software facedown.MIN_WINDOW_MM2)")
     for x0, y0, x1, y1 in FACE_DOWN_WINDOW_MM:
         if not (x0 < x1 and y0 < y1 < 0):
             problems.append("face-down window rectangles must be [x0, y0, x1, y1] on the label side (y < 0)")
-        if y0 < card_top or max(abs(x0), abs(x1)) > CARD_W / 2 - 1.85 - XY_CAL_RESIDUAL - 1.0:
-            problems.append("face-down window reaches off the card for a slab at the edge of its pocket play")
+        for g in HOLDERS:
+            if y0 < card_top_worst(g) or max(abs(x0), abs(x1)) > card_side_limit(g):
+                problems.append(f"face-down window reaches off the card for a {g} slab at the edge of its pocket play")
         if y0 < edge + LABEL_BAND + WINDOW_PLACE_TOL:
             problems.append("face-down window reaches the label band")
     if CARRY_SENSOR_C0 + CARRY_BAND > min(C_SAFE_EMPTY, C_SAFE_LOADED):

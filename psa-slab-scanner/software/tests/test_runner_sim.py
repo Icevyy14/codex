@@ -55,17 +55,24 @@ def test_small_batch_every_slab_moved_and_read(tmp_path):
 
 
 def test_old_labels_go_to_station_and_still_read(tmp_path):
+    """A pre-2016 label's only code is its front ITF. OCR of the printed digits can confirm the number, never the
+    grader (another grader's 8-digit ITF would read the same), so such a slab is needs_review with grader PSA, on the
+    output stack: never 'ok', and never sent to the exception pocket for that alone."""
     cfg = _cfg(face_down_check="off")  # old labels have no back QR: the face-down check would stop on each
     stacks = make_batch(cfg, per_pocket=3, seed=5, eras=(0.4, 0.3, 0.3))
     w, r, summary = _run(tmp_path, cfg, stacks)
     rows = list(csv.DictReader((r.w.dir / "certs.csv").open()))
     assert len(rows) == sum(len(v) for v in stacks.values())
     # every row is either a confirmed read or explicitly flagged - never a silent wrong cert
-    truth = {s.cert.lstrip("0") for v in stacks.values() for s in v}
+    truth = {s.cert.lstrip("0"): s for v in stacks.values() for s in v}
     for row in rows:
         if row["status"] == "ok":
-            assert row["cert"] in truth
-    assert summary["status_counts"].get("ok", 0) >= 0.8 * len(rows)
+            assert row["cert"] in truth and truth[row["cert"]].era != "old"
+    old = [row for row in rows if row["cert"] in truth and truth[row["cert"]].era == "old"]
+    assert old and all(row["status"] == "needs_review" and row["grader"] == "PSA" and row["out_pocket"] != str(cfg.exceptions.index) for row in old)
+    assert sum("grader PSA not confirmed" in row["note"] for row in old) >= len(old) // 2  # the others: OCR read other digits
+    newer = [row for row in rows if row not in old]
+    assert sum(row["status"] == "ok" for row in newer) >= 0.8 * len(newer)
 
 
 def test_2016_labels_read_from_their_back_and_front_itf(tmp_path):

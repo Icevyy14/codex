@@ -118,6 +118,9 @@ def summary_lines(summary: dict, batch_dir: Path) -> list[str]:
     out = [f"batch {summary['batch_id']}: {summary['slabs_visited']} slabs  ({counts or 'none'})"]
     if summary.get("face_down"):
         out.append(face_down_line(summary["face_down"]))
+        aim = summary["face_down"].get("camera_aim")
+        if aim and aim != "ok" and not aim.startswith("not checked"):
+            out.append(f"CAMERA AIM: {aim}. The learned check accepted nothing this run. Re-aim the head camera (BUILD_GUIDE 7.7)")
     dups = summary.get("duplicates") or {}
     out.append("duplicates: " + (", ".join(f"{c} at #{'/#'.join(map(str, p))}" for c, p in dups.items()) if dups else "none"))
     cc = summary.get("count_check") or {}
@@ -189,7 +192,8 @@ def _hw(args, cfg: Config, parts, stacks=None):
     from .factory import open_hardware, sim_hardware
 
     if args.sim:
-        hw = sim_hardware(cfg, slabs=args.sim_slabs, stacks=stacks, head=getattr(args, "sim_head", None) or "cad")
+        hw = sim_hardware(cfg, slabs=args.sim_slabs, stacks=stacks, head=getattr(args, "sim_head", None) or "cad",
+                          head_tilt_deg=float(getattr(args, "sim_head_tilt", 0.0) or 0.0))
         if args.sim_x_offset is not None:
             hw.motion.x_offset = args.sim_x_offset
         if args.sim_z_offset is not None:
@@ -531,7 +535,10 @@ def cmd_sim(args, con):
         con.say(f"(sim: face_down_threshold {SIM_FACE_DOWN_THRESHOLD}, picked on the simulator's synthetic card backs; on the machine Phase 0 "
                 "measures it on yours. Head parts in view: " + {"cad": "today's CAD head", "cad_r2": "the round-2 CAD head"}.get(
                     args.sim_head, f"'{args.sim_head}' (hypothetical)") + ")")
-    hw = sim_hardware(cfg, stacks=stacks, head=args.sim_head)
+    tilt = float(getattr(args, "sim_head_tilt", 0.0) or 0.0)
+    if tilt:
+        con.say(f"(sim: the head camera is tilted {tilt:g} deg toward the cup)")
+    hw = sim_hardware(cfg, stacks=stacks, head=args.sim_head, head_tilt_deg=tilt)
 
     def look(src: int) -> bool:  # the simulated operator looks at the slab the check stopped on
         return hw.world.stacks[src][-1].face_down
@@ -604,7 +611,9 @@ def cmd_refs(args, con):
         where = f"batch {m.get('batch', '-')} #{m.get('position', '-')}" if "batch" in m else (f"phase0 slab {m['phase0_slab']}" if "phase0_slab" in m else "-")
         con.say(f"  {i + 1:3d}  prototype {r.proto}  {r.source:8}  {where:32}  cert {m.get('cert') or '-':>10}  {m.get('image_back', '')}")
     if refs.baseline is not None:
-        con.say(f"  empty-pocket view: batch {refs.baseline_meta.get('batch', '-')}, pocket {refs.baseline_meta.get('pocket', '-')}")
+        aim = refs.baseline_meta.get("aim")
+        con.say(f"  empty-pocket view: batch {refs.baseline_meta.get('batch', '-')}, pocket {refs.baseline_meta.get('pocket', '-')}; camera aim: "
+                + ("not checked yet" if aim is None else (aim or "ok")))
     for p, n in sorted(refs.protos().items()):
         if not refs.usable(p):
             con.say(f"  prototype {p} ({n} operator confirmation(s)) is not matched yet: it needs more confirmations or a back-QR slab")
@@ -651,6 +660,8 @@ def build_parser() -> argparse.ArgumentParser:
                             help="head parts in the simulated head camera's view: cad = today's CAD head (lens 5 mm toward the label; "
                                  "it leaves face_down_window_mm clear), cad_r2 = the round-2 CAD head (its foot hides the card window), "
                                  "open = a hypothetical narrow head")
+        parser.add_argument("--sim-head-tilt", type=float, default=d(0.0), metavar="DEG",
+                            help="the simulated head camera tilted toward the cup by DEG degrees (a mis-aimed camera, BUILD_GUIDE 7.7)")
         parser.add_argument("--sim-x-offset", type=float, default=d(None), help=argparse.SUPPRESS)
         parser.add_argument("--sim-z-offset", type=float, default=d(None), help=argparse.SUPPRESS)
 

@@ -18,6 +18,8 @@ def from_layout():
     return dataclasses.replace(_layout(), face_down_check="off")
 
 H = {"X-SlabRail": "1"}
+# Labels with a back QR only: every slab reads 'ok'. (A pre-2016 PSA label's only code is its front ITF: needs_review.)
+QR_MIX = {"psa:current": 0.6, "psa:2017+": 0.2, "cgc:2023+": 0.2}
 
 
 class HeldProvider(SimProvider):
@@ -45,7 +47,7 @@ def _wait(client, states=("finished", "stopped", "error"), timeout=240):
 
 
 def test_status_start_finish_download(tmp_path):
-    app = create_app(from_layout(), SimProvider(from_layout(), slabs=3), out_dir=tmp_path)
+    app = create_app(from_layout(), SimProvider(from_layout(), slabs=3, mix=QR_MIX), out_dir=tmp_path)
     c = app.test_client()
     s = c.get("/api/status").get_json()
     assert s["state"] == "idle" and s["sim"] is True
@@ -90,7 +92,7 @@ def test_stop_then_resume_from_the_page(tmp_path):
 
 def test_resume_continues_the_same_simulated_bed(tmp_path):
     cfg = from_layout()
-    app = create_app(cfg, SimProvider(cfg, slabs=3), out_dir=tmp_path)
+    app = create_app(cfg, SimProvider(cfg, slabs=3, mix=QR_MIX), out_dir=tmp_path)
     c = app.test_client()
     mgr = app.config["MANAGER"]
     bid = c.post("/api/start", json={}, headers=H).get_json()["batch_id"]
@@ -137,7 +139,7 @@ def test_estop_shows_the_stop_message_and_resume_rehomes(tmp_path):
                 hw.motion = Cut()
             return hw
 
-    provider = EStopProvider(cfg, slabs=3)
+    provider = EStopProvider(cfg, slabs=3, mix=QR_MIX)
     app = create_app(cfg, provider, out_dir=tmp_path)
     mgr = app.config["MANAGER"]
     c = app.test_client()

@@ -101,7 +101,8 @@ def _zxing_pass(gray: np.ndarray, camera: str, custom_regex: str | None, to_fram
             if to_frame is not None:
                 pts = [to_frame(x, y) for x, y in pts]
             box = (int(min(x for x, _ in pts)), int(min(y for _, y in pts)), int(max(x for x, _ in pts)), int(max(y for _, y in pts)))
-            reads.append(CodeRead(cert=p.cert, source=_source_for(sym, camera, p.side), symbology=sym, raw=b.text, camera=camera, grader=p.grader, box=box))
+            reads.append(CodeRead(cert=p.cert, source=_source_for(sym, camera, p.side), symbology=sym, raw=b.text, camera=camera, grader=p.grader, box=box,
+                                  kind=p.kind))
         else:
             unparsed.append(f"{sym}:{b.text}")
     return reads, unparsed
@@ -256,5 +257,5 @@ def ocr_digits(gray: np.ndarray, camera: str = "", band: tuple[int, int, int, in
     for t in tokens[:1]:
         p = parse_payload(t, "OCR")
         if p:
-            out.append(CodeRead(cert=p.cert, source="ocr", symbology="OCR", raw=t, camera=camera, grader=p.grader))
+            out.append(CodeRead(cert=p.cert, source="ocr", symbology="OCR", raw=t, camera=camera, grader=p.grader, kind=p.kind))
     return out

@@ -72,7 +72,7 @@ All commands are `python -m slabscan <command>`. Add `--sim` to use the simulato
 | `mark [--only 0,12] [--dry-run]` | Drill-template walk (above). `--dry-run` prints the order and positions. |
 | `run [--name NAME] [--front-photo always\|fallback] [--all-face-down] [--yes]` | One batch. It refuses to start before `calibrate z` and `calibrate x` have been run. `--yes` skips the start question. `--all-face-down` turns the face-down check off for this batch (below). |
 | `resume BATCH_DIR [--accept-heights] [--face-down-ok]` | Continues a stopped batch (below). `--face-down-ok`: you checked the slab the face-down check stopped on. It is refused unless the last stop was that face-down stop, and it confirms that one slab only. |
-| `sim [--slabs N] [--mix MIX] [--eras E] [--face-down-check] [--jp-rate R] [--sim-head cad\|cad_r2\|open\|none]` | Full simulated batch. Prints the summary and a time estimate. `--mix` sets the label mix per grader and era, e.g. `psa:current=0.6,psa:2017+=0.2,cgc:2023+=0.2` (kinds: `psa:current\|2017+\|2016\|old`, `cgc:2023+\|og\|authentic`, `bgs:`, `sgc:`; default: mostly PSA, some CGC, a few BGS); `--eras` is a PSA-only override. `--face-down-check` keeps the check on and counts the slabs it would stop at (a simulated operator confirms each). `--jp-rate` gives that share of cards the Japanese back. `--sim-head`: `cad` (the default) is today's head (lens 5 mm toward the label, card window clear), `cad_r2` the round-2 head whose foot hides the card window, `open` a hypothetical narrow head. |
+| `sim [--slabs N] [--mix MIX] [--eras E] [--face-down-check] [--jp-rate R] [--sim-head cad\|cad_r2\|open\|none] [--sim-head-tilt DEG]` | Full simulated batch. Prints the summary and a time estimate. `--mix` sets the label mix per grader and era, e.g. `psa:current=0.6,psa:2017+=0.2,cgc:2023+=0.2` (kinds: `psa:current\|2017+\|2016\|old`, `cgc:2023+\|og\|authentic`, `bgs:`, `sgc:`; default: mostly PSA, some CGC, a few BGS); `--eras` is a PSA-only override. `--face-down-check` keeps the check on and counts the slabs it would stop at (a simulated operator confirms each). `--jp-rate` gives that share of cards the Japanese back. `--sim-head`: `cad` (the default) is today's head (lens 5 mm toward the label, card window clear), `cad_r2` the round-2 head whose foot hides the card window, `open` a hypothetical narrow head. `--sim-head-tilt DEG` tilts the simulated head camera toward the cup (a mis-aimed camera; it works with every command that takes `--sim`). |
 | `web [--port 8080]` | Phone page (below). |
 | `phase0 [--sim N] [--out DIR] [--face-up N] [--save]` | The Phase 0 camera test (same as `python -m tools.phase0`): reads 30-50 of your slabs in the Phase 0 jig before you buy any motion parts. The read-rate report is written as soon as you type `q`. The face-up pass is off unless you ask for it (`--face-up` defaults to 0); a GO for the learned face-down check needs 15 face-up slabs. `--save` writes its threshold on a GO. |
 | `refs [--drop CERT \| --drop-operator]` | Lists the learned face-down check's card-back references, with the batch, position and cert each came from. `--drop CERT` deletes one slab's reference, for example after a wrong confirmation; `--drop-operator` deletes every reference you confirmed and keeps the back-QR ones. |
@@ -119,6 +119,22 @@ confirm it with `resume --face-down-ok`.
     not just the best one [Certain, 64 real slabs: one odd back, a card sitting low in its holder,
     matched a blue Water-type front at 0.56-0.62; no second back came above 0.44]. Blue Water-type
     fronts are the closest real match to a card back: put one in Phase 0's face-up pass.
+  - The camera's aim, checked in every run on the view over an empty pocket: only the pad may show
+    in the middle of the card window and 1 mm beyond its cup-side edge. A tilt toward the cup brings
+    the cup pad and the foot in there. Then the learned check accepts nothing and learns nothing that
+    run, and the start line, every stop, the summary and `selftest` say to re-aim the camera
+    (BUILD_GUIDE §7.7). `focus head` looks over the empty pocket 12 first and says the same.
+    [Certain, sim, round-3 card window: a square camera passes, 0.5° toward the cup is caught; the
+    camera-locked check alone let 0.6–1.0° through: only 0–2% of the window was camera-locked.]
+  - What the aim check does not see [Certain, sim and geometry]:
+    - A head part as dark as the pad shows no edge, and the 10% camera-locked rule does not catch it
+      either while it covers a strip of the window (a dark foot over 9–26% of the window read
+      0.3–0.9% camera-locked).
+    - It checks only a tilt toward the cup. A tilt away from the cup, or a roll along the row, is
+      not checked.
+    - Its thresholds come from the simulator's flat pad. Lint, dust or glue on a real pad can make
+      it fire. That is safe (the learned check stays off), but it needs a real empty-pocket picture
+      from Phase 0 to tune.
   - A back design known only from your confirmations (no back-code slab) is used once three of
     your confirmations agree. A code-proven or confirmed slab is learned from only after it was placed:
     not if the read station saw a back-label code from below (it was face-up after all), and a code
@@ -132,7 +148,22 @@ The machine:
 
 Afterwards each stack sits **one pocket to the left, in reverse order**. Pocket 12 holds the slabs
 to check by hand: unreadable ones, numbers read only by OCR (no grader), conflicts, or graders other
-than PSA and CGC.
+than PSA and CGC. Only a `needs_review` row of PSA or CGC may stay in the output stack.
+
+**What makes an `ok`** (`slabscan/certs.py`):
+- A QR carries its own error correction. A barcode (ITF, Code128) needs a second printed code
+  (the other label side, or the QR) or OCR of the printed digits to agree.
+- Two barcodes alone (no QR) can agree on the same misread, because both sides carry the same
+  pattern. So the front OCR also checks every barcode-only `ok`. If it reads other digits, the
+  slab is `needs_review`.
+- Two frames of one printed code are one source. A thin false read inside a real barcode (a
+  phantom) is dropped only when a different code or OCR confirms the other number, and then from
+  every frame of that barcode. Only the thin read can be dropped. If the confirmed number is the
+  thin one, the slab is a `conflict`.
+- The grader must come from a code that names it (a cert URL), or from two printed codes in its
+  format. A bare number gets its grader from its length only, and OCR confirms digits, never a
+  grader. So a slab whose only code is one front barcode is `needs_review` even when OCR agrees:
+  every pre-2016 PSA slab (front ITF only) [Certain, real set: 7 of 61 at machine scale].
 
 **Carry-height sensor (Z stall guard).** Before every sideways move the head must read "at carry
 height" on GPIO 6 (and "below it" at every grip, which catches a dark sensor). A Z stall that left
@@ -225,9 +256,10 @@ How it behaves:
 `python -m slabscan sim --slabs 330` runs a full load in about 5 minutes on a PC. It prints:
 - the survey time,
 - the seconds per slab,
-- the total for a full load. The 22 Oct 2026 run (seed 7, default mix, `--face-down-check`) gave 75 s of homing and survey,
-  then 14.2 s per slab: about 79 min for 330 slabs; `ok` 324, `needs_review` 6 (5 BGS slabs read only by OCR, in pocket 12,
-  and one PSA barcode that OCR read differently). Face-down: 287 by back QR, 41 by the learned card-back match, 2 confirmed
+- the total for a full load. The 23 Oct 2026 run (seed 7, default mix, `--face-down-check`) gave 75 s of homing and survey,
+  then 14.2 s per slab: about 79 min for 330 slabs; `ok` 304, `needs_review` 26: 20 pre-2016 PSA slabs whose only code is
+  the front ITF (OCR agrees, the grader is not confirmed; they stay in the output stack), 5 BGS slabs read only by OCR (in
+  pocket 12), and one PSA barcode that OCR read differently. Face-down: 287 by back QR, 41 by the learned card-back match, 2 confirmed
   (the first slabs, before 5 references existed); with back-label codes only, 43 would have stopped. Without
   `--face-down-check` the check is off and the summary says how many slabs would have stopped.
 

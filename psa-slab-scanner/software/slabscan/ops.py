@@ -660,6 +660,50 @@ def _decoded(cfg: Config, img, side: str) -> list[str]:
     return sorted({f"{r.source}:{r.cert}" for r in reads})
 
 
+def aim_over_empty_pocket(cfg: Config, r, con: Console, out_dir: Path) -> str:
+    """The head camera's aim, from its view over the empty exception pocket, checked as a learned run checks it
+    (Runner._take_baseline, facedown.aim_problem): the head goes over pocket 12, probes it (it must be empty) and looks
+    from the empty travel height. Returns "ok", what is wrong, or why it was not checked. The picture, with the card
+    window drawn in, goes to out_dir/focus_head_empty.jpg."""
+    from .facedown import describe, draw_window, frame_view_mm, image_rects
+
+    ex = cfg.exceptions
+    top = r._find_top(ex)
+    if top is None or top >= cfg.t_min / 2:
+        msg = f"not checked: pocket {ex.index} is not empty (the aim is checked on the view over an empty pocket)"
+        con.say(f"camera aim: {msg}")
+        return msg
+    frame = r._frames(r.head_cam, "head", 1)[0]
+    spec = cfg.cam_head or {}
+    view = frame_view_mm(frame.shape, r._hover_mm(), spec, r.head_cam)
+    rects = image_rects(cfg.face_down_window_mm, str(spec.get("row_axis", "x")))
+    pic = out_dir / "focus_head_empty.jpg"
+    cv2.imwrite(str(pic), draw_window(frame, rects, view))
+    why = r._aim(describe(frame, rects, view))
+    if why:
+        con.say(f"camera aim: FAIL - {why}. Shim the camera board (BUILD_GUIDE 7.7) and run focus head again. Picture: {pic}")
+        return why
+    con.say(f"camera aim: OK - over the empty pocket {ex.index} the card window shows only the pad (red boxes in {pic})")
+    return "ok"
+
+
+def stored_aim(cfg: Config, refs_path: Path | None) -> tuple[str, str]:
+    """(status, detail) of the camera aim the last learned run measured (its view over an empty pocket, kept in
+    card_backs.npz): PASS, FAIL, or WARN when there is none yet."""
+    from .facedown import CardBackRefs
+
+    if refs_path is None or not Path(refs_path).exists():
+        return "WARN", "not checked yet: the first run in learned mode checks it over an empty pocket (or run focus head)"
+    refs = CardBackRefs(refs_path, cfg.face_down_window_mm)
+    meta = refs.baseline_meta
+    if refs.baseline is None or "aim" not in meta:
+        return "WARN", f"not checked yet ({refs.note or 'no view over an empty pocket in ' + str(refs_path)}): the next learned run checks it"
+    where = f"batch {meta.get('batch', '-')}, pocket {meta.get('pocket', '-')}"
+    if meta["aim"]:
+        return "FAIL", f"{meta['aim']} ({where}). The learned face-down check accepts nothing until it is re-aimed (BUILD_GUIDE 7.7)"
+    return "PASS", f"the card window over an empty pocket showed only the pad ({where})"
+
+
 def focus(cfg: Config, hw, con: Console, which: str, out_dir: Path, motion: bool = True, frames: int = 30, save: bool = False,
           cal_path: Path | None = None, lens_from: float | None = None, lens_to: float | None = None, lens_step: float = 0.25, settle_s: float | None = None) -> dict:
     """Live sharpness + decode for one camera. The station camera (Pi Camera Module 3) is swept
@@ -678,6 +722,7 @@ def focus(cfg: Config, hw, con: Console, which: str, out_dir: Path, motion: bool
             con.say("Put ONE slab face-down on the bare pad of pocket 0, label end toward you.")
             r._home()
             if which == "head":
+                result["camera_aim"] = aim_over_empty_pocket(cfg, r, con, out_dir)
                 top = r._find_top(cfg.pocket(0))
                 if top is None or top < cfg.t_min / 2:
                     raise CalError("Pocket 0 is empty: put one slab face-down on it.")
@@ -699,6 +744,8 @@ def focus(cfg: Config, hw, con: Console, which: str, out_dir: Path, motion: bool
                 con.say(f"wrote cam_station.lens_position = {spec['lens_position']} to {cal_path}")
         else:
             if which == "head":
+                if not motion:
+                    con.say("camera aim: not checked without motion (it needs the view over an empty pocket: run focus head on the machine)")
                 con.say("Turn the M12 lens slowly; watch the score climb, go past the peak, come back to it. Lock the lens nut. Ctrl-C ends.")
             best = (-1.0, None, [])
             try:
@@ -974,6 +1021,13 @@ def selftest(cfg: Config, con: Console, hw=None, sim: bool = False, interactive:
             t.rec(name, "PASS" if (b - d > 5 or sim) else "WARN", detail + ("" if (b - d > 5 or sim) else " (ring barely changes the image: is it on? is the light roof fitted?)"))
         except Exception as e:  # noqa: BLE001
             t.rec(name, "FAIL", str(e))
+
+    # camera aim: what the last learned run saw over an empty pocket (focus head looks again)
+    if cfg.face_down_check == "learned":
+        from .facedown import FILE_NAME
+
+        status, detail = stored_aim(cfg, None if cal_path is None else Path(cal_path).parent / FILE_NAME)
+        t.rec("camera aim", status, detail)
 
     # beam gate + lid
     if cfg.overfill_gate:

@@ -51,7 +51,8 @@ from .certs import TWO_D, CodeRead, ItfModel, Verdict, consensus, face_from_abov
 from .config import CARRY_BAND_MM, Config
 from .decode import _to_gray as to_gray
 from .decode import decode_frame, label_band, ocr_digits
-from .facedown import BASELINE_MAX, GLARE_REF_MAX, MIN_TEXTURE, CardBackRefs, describe, draw_window, frame_view_mm, image_rects, learned_match, learned_ready
+from .facedown import (BASELINE_MAX, GLARE_REF_MAX, MIN_TEXTURE, CardBackRefs, aim_problem, describe, draw_window, frame_view_mm, image_rects,
+                       learned_match, learned_ready)
 from .hw import SensorFault
 from .motion import ControllerLost, SafetyViolation
 from .results import BatchWriter, SlabResult
@@ -102,10 +103,14 @@ FACE_DOWN_OK_REFUSED = ("--face-down-ok refused: the batch did not stop at the f
 
 def needs_ocr(verdict: Verdict, reads: list[CodeRead]) -> bool:
     """Front OCR is worth its time when nothing was read, or when only barcodes (no QR) were: the printed digits are
-    then the independent check that can make a one-barcode read 'ok' (certs.consensus)."""
+    then the independent check of a one-barcode read. They catch a misread and a phantom (certs.consensus); they never
+    confirm a grader, so a one-barcode read stays needs_review, with a note that says whether its digits agree.
+    A two-barcode 'ok' (back + front label, no QR) is checked too: one fixed misread of a printed pattern can come back
+    from both sides (PSA 2016 labels print one ITF on both, current labels one Code128), and then the two agree on the
+    wrong number. OCR that reads other digits makes it needs_review (one OCR per slab without a QR read)."""
     machine = [r for r in reads if r.source != "ocr"]
     one_d_only = bool(machine) and not any(r.symbology in TWO_D for r in machine)
-    return verdict.status == "no_read" or (verdict.status == "needs_review" and one_d_only)
+    return verdict.status == "no_read" or (verdict.status in ("needs_review", "ok") and one_d_only)
 
 
 def last_face_down_stop(events: list[dict]) -> int | None:
@@ -870,16 +875,28 @@ class Runner:
 
     def _take_baseline(self, pocket: int) -> None:
         """Learned mode, once per run: the head camera's view over an empty pocket (head at the empty travel height,
-        straight above it). A card window that looks like this view does not show the slab: the head hides it."""
+        straight above it). A card window that looks like this view does not show the slab: the head hides it. The same
+        view checks the camera's aim (facedown.aim_problem): a head part in the window there means the camera is tilted,
+        and then the learned check accepts nothing and learns nothing (facedown.learned_ready), every slab without a
+        back-label code stops, until a run's view over an empty pocket is clear again."""
         if self.cfg.face_down_check != "learned" or self._baseline_taken:
             return
         self._baseline_taken = True
         frame = self._frames(self.head_cam, "head", 1)[0]
         d = self._fd_describe(frame, picture="face_down_empty.jpg")
+        aim = self._aim(d)
         if d is not None:
-            self.refs.set_baseline(d, {"batch": self.w.batch_id, "pocket": pocket, "t": round(time.time(), 1)})
+            self.refs.set_baseline(d, {"batch": self.w.batch_id, "pocket": pocket, "t": round(time.time(), 1), "aim": aim})
             self._refs_dirty += 1
-            self._journal({"face_down_baseline": pocket})
+        self._journal({"face_down_baseline": pocket, "aim": aim or "ok", "t": round(time.time(), 1)})
+        if aim:
+            self.log(f"CAMERA AIM (pocket {pocket}, images/face_down_empty.jpg): {aim}. The learned face-down check accepts nothing this run: "
+                     "every slab without a back-label code stops for you. Re-aim the head camera (BUILD_GUIDE 7.7)")
+
+    def _aim(self, d) -> str:
+        """facedown.aim_problem on a card-window descriptor of the view over an empty pocket ("" = the window is clear)."""
+        row_axis = str((self.cfg.cam_head or {}).get("row_axis", "x"))
+        return aim_problem(d, image_rects(self.cfg.face_down_window_mm, row_axis), "y" if row_axis == "x" else "x")
 
     def _check_resurvey(self, measured: dict[int, float], expect: dict[int, float], accept: bool) -> None:
         cfg = self.cfg
@@ -985,7 +1002,7 @@ class Runner:
         held_reads = list(back_reads)
         verdict = self._decide(reads, held_reads)
         front = None
-        if cfg.front_photo == "always" or verdict.status != "ok":
+        if cfg.front_photo == "always" or verdict.status != "ok" or needs_ocr(verdict, reads):
             sx, sy = cfg.station_xy
             self._go(sx, sy)
             self._z(self.c(cfg.station_read_c))
@@ -1020,8 +1037,10 @@ class Runner:
             verdict = Verdict("conflict", None, verdict.sources, f"the back-label code that proved it face-down before the pick was cert {proof}, but "
                               f"{seen}: it may have been another slab's label in view, so this slab may have been FACE-UP and the cup may "
                               "have touched its front - check it by hand", verdict.grader, verdict.raw)
-        # needs_review with no grader evidence (OCR only, a bare number) never goes to the output: it may not even be PSA or CGC
-        to_output = verdict.status == "ok" or (verdict.status == "needs_review" and cfg.needs_review_to == "output" and verdict.grader != "unknown")
+        # needs_review with no grader evidence (OCR only, a bare number) never goes to the output: it may not even be PSA or CGC.
+        # Only a grader the batch accepts goes there ("unknown", two graders "PSA/CGC" or a missing grader do not).
+        to_output = verdict.status == "ok" or (verdict.status == "needs_review" and cfg.needs_review_to == "output"
+                                               and verdict.grader in tuple(cfg.accepted_graders))
         target = cfg.pocket(dst) if to_output else pex
         if target.index == pex.index and self.st.tops.get(pex.index, 0.0) + 2 * cfg.t_thick_max > cfg.max_line:
             raise Stop(f"Exception pocket {pex.index} is full. Empty it (those slabs need a hand check), then resume. The slab in the cup will be read again.")
@@ -1243,8 +1262,9 @@ class Runner:
         counts = Counter(r.face_down.split("(")[0] for r in rows)
         learned = [{"position": r.position, "out_pocket": r.out_pocket, "out_index": r.out_index, "face_down": r.face_down, "image_back": r.image_back}
                    for r in rows if r.face_down.startswith("learned")]
+        aim = (self.refs.baseline_meta.get("aim") or "ok") if self.refs.baseline is not None else "not checked (no view over an empty pocket)"
         return {"mode": self.cfg.face_down_check, "counts": dict(counts), "learned": learned, "references": self.refs.summary(),
-                "stops_this_run": self.face_down_stops}
+                "stops_this_run": self.face_down_stops, **({"camera_aim": aim} if self.cfg.face_down_check == "learned" else {})}
 
     def count_check(self) -> dict:
         """Slabs counted per source vs the source's surveyed height / mean measured thickness.
@@ -1422,6 +1442,8 @@ class Runner:
         return self._guarded(body)
 
     def _log_face_down(self) -> None:
+        if self.cfg.face_down_check == "learned" and self.refs.baseline is not None and "aim" not in self.refs.baseline_meta:
+            self.refs.baseline_meta["aim"] = self._aim(self.refs.baseline)  # a view kept from before the aim check existed
         if self.refs.note:
             self.log(f"card-back references: {self.refs.note}")
             self.refs.note = ""

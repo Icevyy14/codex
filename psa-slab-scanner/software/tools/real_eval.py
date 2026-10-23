@@ -39,6 +39,7 @@ import csv
 import dataclasses
 import hashlib
 import json
+import multiprocessing
 import re
 import statistics
 import sys
@@ -298,7 +299,7 @@ def replay(slab: list[dict], res: dict, cfg, rows: list, ocr: dict) -> dict:
     stage = "back"
     v = Runner._decide(stub, reads, heldr) if (bf or not ff) else None
     want_ocr = False
-    if (v is None or v.status != "ok") and ff:
+    if (v is None or v.status != "ok" or needs_ocr(v, reads)) and ff:
         reads, heldr = reads + front_reads, heldr + front_reads
         v = Runner._decide(stub, reads, heldr)
         stage = "back+front" if bf else "front"
@@ -330,7 +331,9 @@ def evaluate(items: list[dict], machine: bool = False, glare: bool = False, ocr:
     cfg = machine_config(config)
     t0 = time.monotonic()
     res: dict[str, dict] = {}
-    with ProcessPoolExecutor(max_workers=max(1, workers)) as ex:
+    # spawned, not forked: workers forked from a long process (the test suite, after the simulator runs) sat idle and the
+    # suite hung there for 40 min (the same test alone passed in 95 s). A lock held at the fork is the likely cause.
+    with ProcessPoolExecutor(max_workers=max(1, workers), mp_context=multiprocessing.get_context("spawn")) as ex:
         futs = {it["rel"]: ex.submit(image_job, it, machine, glare, max_upscale, config) for it in items}
         for n, (rel, fu) in enumerate(futs.items(), 1):
             try:

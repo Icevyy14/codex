@@ -94,6 +94,8 @@ SLAB = (0.85, 0.92, 1.0, 0.55)
 LABEL = (0.95, 0.95, 0.95, 1.0)
 LABEL_RED = (0.85, 0.15, 0.12, 1.0)
 GREEN = (0.1, 0.55, 0.25, 1.0)
+RING = (0.97, 0.96, 0.88, 1.0)  # LED ring diffuser
+LEAD = (0.8, 0.12, 0.1, 1.0)
 
 
 def head(name, p, axis, size, group) -> Part:
@@ -220,7 +222,17 @@ def bed_parts() -> list[Part]:
         parts.append(Part(f"gate_post_{side}", gate_post(side).translate((x, L.Y_ROW, Z_BED_TOP)), PETG, "printed", "static"))
     parts.append(Part("gate_beam", cyl((GATE_X[0], L.Y_ROW, L.GATE_Z), 1.2, GATE_X[1] - GATE_X[0], (1, 0, 0)), (1.0, 0.1, 0.1, 0.6), "purchased", "static", note="laser beam (not a part)"))
     parts.append(Part("station_camera", station_camera(SX, SY, 0.0), GREEN, "purchased", "static", note="Pi Camera Module 3"))
+    parts += station_ring_parts(SX, SY, 0.0, "station")
     return parts
+
+
+def station_ring_parts(x: float, y: float, z0: float, prefix: str, group: str = "static") -> list[Part]:
+    """The station LED ring (LEDs up) and its leads in the seat of a camera mast whose Z = 0 is at z0."""
+    face = (x, y, z0 + STATION_RING_Z + STATION_RING[2])
+    return [Part(f"{prefix}_led_ring", led_ring(STATION_RING, leds_up=True).translate(face), RING, "purchased", group,
+                 note=f"{STATION_RING[0]:.0f} mm COB ring, 12 V, LEDs up"),
+            Part(f"{prefix}_ring_leads", ring_leads(STATION_RING, STATION_RING_LEAD_DEG, leds_up=True).translate(face), LEAD, "purchased", group,
+                 note="solder pads + the leads' first mm")]
 
 
 # Camera Module 3: 25 x 24 mm board, 11.5 mm from the board's back to the lens front [Likely, RPi product brief]
@@ -238,13 +250,12 @@ def camera_mast(z_bottom: float) -> cq.Workplane:
     """Upward camera mast + LED ring seat, shared by station_mount and phase0_base. Z = 0 is the pad top
     (machine) or the base underside (Phase 0); the lens front ends up at STATION_LENS_Z in both."""
     mast = box(-17, -17, z_bottom, 17, 17, 14.5).cut(box(-13, -13, CAM_FLOOR_Z, 13, 13, 16))
-    ring = cyl((0, 0, 0), 60, 20).cut(cyl((0, 0, -1), 52, 22))  # station LED ring seat, lip at the top
-    body = mast.union(ring)
+    body = mast.union(station_ring_seat())
     boss_top = L.STATION_LENS_Z - CM3_H  # 11.5: the CM3 board back rests here
     for x, y in CM3_HOLES:  # M2 standoff bosses rising from the mast floor
         body = body.union(cyl((x, y, CAM_FLOOR_Z - 0.5), 5, boss_top - CAM_FLOOR_Z + 0.5))
     body = holes_z(body, CM3_HOLES, 1.8)  # M2 self-tapping
-    body = body.cut(box(-9, 12, CAM_FLOOR_Z + 0.5, 9, 31, 13.5))  # FPC exit through the mast wall AND the ring wall
+    body = body.cut(box(-9, 12, CAM_FLOOR_Z + 0.5, 9, STATION_SEAT[0] / 2 + STATION_SEAT[1] + 1, 13.5))  # FPC exit through the mast wall AND the ring seat
     return body
 
 
@@ -487,8 +498,22 @@ Z_PLATE_ARM_BOLTS = (-12.0, 51.5)  # z_plate local Z: below and above the MGN12H
 SENSOR_POST_X = (26.5, 30.5)  # contact-sensor post on the +X side of the buffer (clear of the arm at Y >= 25)
 # Head camera (ELP IMX179 board, M12 holder). [Guessing] board underside to lens front; MEASURE yours (BUILD_GUIDE 3.3).
 HEAD_LENS_PROJ = 20.0
-HEAD_RING_OD = 40.0  # head LED ring: 40 mm COB angel eye (a 60 mm ring would cut into the drop arm)
 LENS_WINDOW_D = 25.0  # passes a 16 mm square M12 holder (22.6 mm diagonal)
+# LED rings: 12 V COB "angel eye" rings, white (BOM). [Likely] the OD, which is the size the listings sell by. [Guessing] the ID,
+# the thickness, and the solder pads + lead exit: two pads on the back face, mid-band, the leads leaving straight out of the
+# back. MEASURE yours (BUILD_GUIDE 3.3). Head: 40 mm (a 60 mm ring would cut into the drop arm). Station: one "60 mm" COB
+# listing measures ~63 x 47 mm [Likely, sourcing notes], so the station seat takes a 60 or a 63 mm ring.
+HEAD_RING = (40.0, 30.0, 5.0)  # OD, ID, thickness
+STATION_RING = (63.0, 47.0, 5.0)  # the larger case; STATION_RING_ALT is a true 60 mm ring
+STATION_RING_ALT = (60.0, 46.0, 5.0)  # [Guessing] ID and thickness
+RING_PAD = (7.0, 3.0, 1.5)  # solder pads + joints on the back face: along the ring, across the band, height
+RING_LEAD = (3.2, 2.0, 6.0)  # the two leads leaving the back face over the pads: width (side by side), depth, length modelled
+HEAD_RING_FACE_DZ = -1.0  # head ring's LED face, from the lens front: just under it, so no part of the ring is in the lens's
+# view, and the barb elbow at the full 20 mm stroke stays well under the ring (with the face 4 mm under the lens it was 0.75 mm)
+HEAD_RING_LEAD_DEG = 67.5  # head ring lead exit, deg from +X toward +Y about the lens axis: between the 45-deg board nut and the +Y leg
+STATION_RING_Z = 20.0  # station ring's back face (it lies LEDs up on the seat's shelf), above the pad top
+STATION_RING_LEAD_DEG = 90.0  # toward +Y: the leads drop through the shelf into the camera ribbon's slot and leave with it
+STATION_SEAT = (64.0, 3.0, 6.0, 44.0)  # station ring seat: bore, wall, bore depth above the shelf, shelf inner dia
 
 # Cup + spring buffer: SMC ZPT25UUK20-B5-A10 (25 mm flat urethane pad, non-rotating buffer, 20 mm stroke, M5 female vacuum
 # port on top, M10x1 body). [Certain, SMC ZP catalog p.13-11-12, ø20/ø25 at 20 mm stroke] the M10x1 body is G = 51 long and
@@ -639,6 +664,13 @@ def occluder_boxes(compression: float = 0.0) -> list[tuple[str, tuple[float, flo
     return [(n, tuple(round(v, 2) for v in b), g) for n, b, g in out]
 
 
+def head_ring_parts(x: float, y: float, lens_z: float, prefix: str, group: str = "head") -> list[Part]:
+    """The head LED ring (LEDs down) and its leads in their seat, for a lens front at (x, y, lens_z)."""
+    face = (x, y, lens_z + HEAD_RING_FACE_DZ)
+    return [Part(f"{prefix}head_led_ring", led_ring(HEAD_RING).translate(face), RING, "purchased", group, note=f"{HEAD_RING[0]:.0f} mm COB ring, 12 V, LEDs down"),
+            Part(f"{prefix}head_ring_leads", ring_leads(HEAD_RING).translate(face), LEAD, "purchased", group, note="solder pads + the leads' first mm")]
+
+
 def vac_fitting() -> cq.Workplane:
     """M5 barb elbow envelope, local origin = its seat on the flag tab, on the cup axis: body, plus the barb arm (and the
     first few mm of tube on it) toward +Y."""
@@ -661,6 +693,7 @@ def head_parts(cup_x: float, c: float, compression: float = L.CUP_HANG) -> list[
     zl, zs, ly = c + CAM_Z, c + CAM_Z + HEAD_LENS_PROJ, cup_y + CAM_DY
     cam = cbox(cup_x, ly, zs + 5, 38, 38, 10).union(cbox(cup_x, ly, (zl + 6 + zs) / 2, 16, 16, zs - zl - 6)).union(cyl((cup_x, ly, zl), 14, 6))
     parts.append(Part("head_camera", cam, GREEN, "purchased", "head", note=f"USB 8MP IMX179, M12 3.6 mm; lens {-CAM_DY:.0f} mm toward the label from the cup axis"))
+    parts += head_ring_parts(cup_x, ly, zl, "")
     parts += carry_flag_parts(cup_x, c)
     for dx in (-10, 10):
         for dz in (-10, 10):  # MGN12H screws in counterbores on the arm side
@@ -764,18 +797,73 @@ def probe_aperture() -> cq.Workplane:
     return box(TCST_TIP_X, PROBE_Y - TCST_GAP / 2, PROBE_BEAM_Z - TCST_AP / 2, TCST_TIP_X + TCST_AP_DEPTH, PROBE_Y + TCST_GAP / 2, PROBE_BEAM_Z + TCST_AP / 2)
 
 
-def ring_seat(z_bot: float, z_top: float, ring_od: float) -> cq.Workplane:
-    """LED-ring seat: a 6 mm tube (ring pushed up against an inner lip, LEDs down), hung from z_top on four
-    legs at 0/90/180/270 deg, so the board's 45-deg screw nuts stay clear."""
-    rid = ring_od + 1.0
-    tube = cyl((0, 0, z_bot), rid + 6, 6).cut(cyl((0, 0, z_bot - 1), rid, 8))
-    tube = tube.union(cyl((0, 0, z_bot + 4), rid + 0.5, 2).cut(cyl((0, 0, z_bot + 3), rid - 8, 4)))
-    if z_top > z_bot + 6:
+def _at_angle(shape: cq.Workplane, deg: float) -> cq.Workplane:
+    return shape.rotate((0, 0, 0), (0, 0, 1), deg)
+
+
+def led_ring(ring=HEAD_RING, leds_up: bool = False) -> cq.Workplane:
+    """COB LED ring envelope, local origin = its axis at the LED face; the body lies behind the face (+Z for a ring whose
+    LEDs face down, -Z facing up)."""
+    od, id_, t = ring
+    body = cyl((0, 0, 0), od, t).cut(cyl((0, 0, -1), id_, t + 2))
+    return body.translate((0, 0, -t)) if leds_up else body
+
+
+def ring_leads(ring=HEAD_RING, deg: float = HEAD_RING_LEAD_DEG, leds_up: bool = False) -> cq.Workplane:
+    """The ring's solder pads (with their joints) on its back face, mid-band at `deg`, and the first RING_LEAD[2] mm of the two
+    leads leaving straight out of the back; same local origin as led_ring(). The rest of the leads is routed, not modelled."""
+    od, id_, t = ring
+    rm = (od + id_) / 4
+    pl, pw, ph = RING_PAD
+    lw, ld, ll = RING_LEAD
+    s = box(rm - pw / 2, -pl / 2, t, rm + pw / 2, pl / 2, t + ph).union(box(rm - ld / 2, -lw / 2, t + ph - 0.01, rm + ld / 2, lw / 2, t + ph + ll))
+    s = _at_angle(s, deg)
+    return s.mirror("XY") if leds_up else s
+
+
+def ring_seat(face_z: float, z_top: float, ring=HEAD_RING, deg: float = HEAD_RING_LEAD_DEG) -> cq.Workplane:
+    """LED-ring seat round a downward lens: a 3 mm tube whose bore takes the ring with 0.5 mm of radial play, the ring pushed
+    up against an inner lip (LEDs down, LED face at face_z, three dots of glue keep it there). A notch in the lip at `deg`
+    lets the solder pads and the leads out of the back. Hung from z_top on four legs at 0/90/180/270 deg, so the board's
+    45-deg screw nuts stay clear."""
+    od, id_, t = ring
+    rid = od + 1.0
+    back = face_z + t  # the ring's back face = the lip's underside
+    tube = cyl((0, 0, face_z - 1.0), rid + 6, t + 3.0).cut(cyl((0, 0, face_z - 2.0), rid, t + 5.0))
+    tube = tube.union(cyl((0, 0, back), rid + 0.5, 2).cut(cyl((0, 0, back - 1), id_ + 3.0, 4)))
+    rm = (od + id_) / 4
+    tube = tube.cut(_at_angle(box(rm - RING_PAD[1] / 2 - 1.5, -RING_PAD[0] / 2 - 0.5, back - 0.01, rid / 2 + 0.3, RING_PAD[0] / 2 + 0.5, back + 2.01), deg))
+    if z_top > back + 2:
         r = rid / 2 + 1.5
         for x, y in ((r, 0), (-r, 0), (0, r), (0, -r)):
             sx, sy = (3, 4) if y == 0 else (4, 3)
-            tube = tube.union(cbox(x, y, (z_bot + 5.99 + z_top + 0.01) / 2, sx, sy, z_top - z_bot - 5.98))
+            tube = tube.union(cbox(x, y, (back + 1.99 + z_top + 0.01) / 2, sx, sy, z_top - back - 1.98))
     return tube
+
+
+def ring_pocket(face_z: float, z_top: float, ring=HEAD_RING, deg: float = HEAD_RING_LEAD_DEG) -> cq.Workplane:
+    """Cutter for the same seat sunk into a plate's underside (phase0_top): the bore up to the ring's back face (the plate is
+    the lip), and a slot from there through the plate to z_top for the solder pads and the leads."""
+    od, id_, t = ring
+    rm = (od + id_) / 4
+    bore = cyl((0, 0, face_z - 5.0), od + 1.0, t + 5.0)
+    slot = box(rm - RING_PAD[1] / 2 - 0.5, -RING_PAD[0] / 2 - 0.5, face_z + t - 0.01, rm + RING_PAD[1] / 2 + 0.5, RING_PAD[0] / 2 + 0.5, z_top + 1.0)
+    return bore.union(_at_angle(slot, deg))
+
+
+def station_ring_seat() -> cq.Workplane:
+    """Upward LED-ring seat round the station lens, from Z = 0 (the pad top on the machine, the base underside in Phase 0): a
+    tube whose bore takes a 60 or a 63 mm ring lying LEDs up on a shelf (its back face at STATION_RING_Z), the shelf on a
+    45-deg cone so it prints without support, and a slot down through the shelf at STATION_RING_LEAD_DEG for the pads and
+    leads. A 63 mm ring has 0.5 mm of radial play; centre a 60 mm one (2 mm) and fix either with three dots of glue."""
+    bore, wall, depth, inner = STATION_SEAT
+    zs, rb, ri = STATION_RING_Z, bore / 2, inner / 2
+    body = cyl((0, 0, 0), bore + 2 * wall, zs + depth).cut(cyl((0, 0, zs), bore, depth + 1))
+    cone = cq.Workplane("XY").add(cq.Solid.makeCone(rb, ri, rb - ri, cq.Vector(0, 0, zs - (rb - ri))))
+    body = body.cut(cone).cut(cyl((0, 0, -1), bore, zs - (rb - ri) + 1.01)).cut(cyl((0, 0, zs - 1), inner, 2))
+    rm = (STATION_RING[0] + STATION_RING[1]) / 4
+    slot = box(rm - RING_PAD[1] / 2 - 2.0, -RING_PAD[0] / 2 - 0.5, zs - (rb - ri) - 1, rb - 0.5, RING_PAD[0] / 2 + 0.5, zs + 0.01)
+    return body.cut(_at_angle(slot, STATION_RING_LEAD_DEG))
 
 
 def camera_bracket(arm_offset: float) -> cq.Workplane:
@@ -787,7 +875,7 @@ def camera_bracket(arm_offset: float) -> cq.Workplane:
     shelf = box(-24, ly - 24, zs - 4, 24, arm_offset - 10, zs)
     shelf = shelf.cut(cyl((0, ly, zs - 10), LENS_WINDOW_D, 20))  # lens holder window
     shelf = holes_z(shelf, [(dx, ly + dy) for dx in (-16, 16) for dy in (-16, 16)], 2.2)  # 32 mm board holes, M2 + nuts
-    seat = ring_seat(z0 - 4, zs - 4, HEAD_RING_OD).translate((0, ly, 0))
+    seat = ring_seat(z0 + HEAD_RING_FACE_DZ, zs - 4).translate((0, ly, 0))
     clamp = box(-12, arm_offset - 12, z0 - 6, 12, arm_offset + 12, zs)
     body = shelf.union(seat).union(clamp)
     body = body.cut(box(-10.2, arm_offset - 10.2, z0 - 7, 10.2, arm_offset + 10.2, zs + 1))  # arm bore, cut last
@@ -1018,7 +1106,8 @@ def phase0_tray() -> cq.Workplane:
 
 def phase0_top() -> cq.Workplane:
     """Bridge resting on the post tops (blind sockets), carrying the head camera board on M2 standoffs
-    (height p0_board_spacer()) and the head LED ring. Local origin: bar underside, centre."""
+    (height p0_board_spacer()) and the head LED ring, sunk into its underside so it sits where it does on the machine relative
+    to the lens. Local origin: bar underside, centre."""
     ow = L.POCKET_W + 2 * 12
     span = ow + 2 * 11
     ly = CAM_DY  # the head lens sits CAM_DY from the slab (= cup) axis, as on the machine
@@ -1026,8 +1115,7 @@ def phase0_top() -> cq.Workplane:
     bar = bar.cut(cyl((0, ly, -1), LENS_WINDOW_D, 12))
     for sx in (-1, 1):
         bar = bar.cut(cbox(sx * span / 2, 0, P0_BAR_SOCKET / 2, 20.4, 20.4, P0_BAR_SOCKET))  # blind sockets
-    seat = ring_seat(P0_TOP_Z - 4 - P0_BAR_Z0, 0.0, HEAD_RING_OD).translate((0, ly, 0))
-    body = bar.union(seat)
+    body = bar.cut(ring_pocket(P0_TOP_Z + HEAD_RING_FACE_DZ - P0_BAR_Z0, P0_BAR_T).translate((0, ly, 0)))  # ring as on the machine, rel. to the lens
     return holes_z(body, [(dx, ly + dy) for dx in (-16, 16) for dy in (-16, 16)], 1.8, z0=P0_BAR_T - 6, h=10)  # blind, for M2 standoffs
 
 
@@ -1060,6 +1148,7 @@ def phase0_parts(compression: float = L.CUP_HANG, lift: float = 0.0) -> list[Par
     zs, ly = P0_BAR_TOP + p0_board_spacer(), CAM_DY  # board underside; lens offset as on the machine
     cam = cbox(0, ly, zs + 5, 38, 38, 10).union(cbox(0, ly, (P0_TOP_Z + 6 + zs) / 2, 16, 16, zs - P0_TOP_Z - 6)).union(cyl((0, ly, P0_TOP_Z), 14, 6))
     parts.append(Part("p0_head_camera", cam, GREEN, "purchased", "static"))
+    parts += head_ring_parts(0.0, ly, P0_TOP_Z, "p0_", "static") + station_ring_parts(0.0, 0.0, 0.0, "p0_station")
     parts += phase0_occluder(compression, lift)
     return parts
 

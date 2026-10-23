@@ -5,6 +5,7 @@ themselves are not in the repository). They pin down the label formats certs.py 
 tools/real_eval.py on such a folder of photos when SLABRAIL_REAL_IMAGES points to it.
 """
 
+import dataclasses
 import json
 import os
 import types
@@ -128,6 +129,89 @@ def test_phantom_read_is_dropped_when_another_frame_confirms_the_real_number():
     assert consensus([real, phantom]).status == "conflict"
     # both numbers in two frames of the same pose: still a conflict, nothing is dropped
     assert consensus([real, phantom, _read("Code128", "27435764", "front", "f2"), _read("Code128", "09435764", "front", "f2")]).status == "conflict"
+
+
+def _at(read, box):
+    import dataclasses
+
+    return dataclasses.replace(read, box=box)
+
+
+REAL_BOX, PHANTOM_BOX = (240, 486, 633, 547), (240, 522, 630, 534)  # px, the real fc_27435764_0 reads at full resolution
+
+
+def test_a_phantom_that_comes_back_in_a_second_frame_is_not_a_confirmation():
+    """software (round 3): the phantom '09435764' in frame 1 beside the real '27435764', and alone in frame 2 (where the
+    real read failed), 'confirmed' itself: the real number was dropped and the slab came out needs_review 9435764,
+    on the output stack. Two frames of one printed symbol are one source."""
+    real = _at(_read("Code128", "27435764", "front", "f1"), REAL_BOX)
+    phantom1 = _at(_read("Code128", "09435764", "front", "f1"), PHANTOM_BOX)
+    phantom2 = _at(_read("Code128", "09435764", "front", "f2"), PHANTOM_BOX)
+    ocr = CodeRead("27435764", "ocr", "OCR", "27435764", "front", "unknown", "f2")
+    # nothing else confirms either number: a conflict that names both, never the phantom's number
+    v = consensus([real, phantom1, phantom2])
+    assert v.status == "conflict" and v.cert is None and "27435764" in v.note and "09435764" in v.note
+    # OCR of the printed digits confirms the real number: the phantom goes from BOTH frames
+    v = consensus([real, phantom1, phantom2, ocr])
+    assert v.cert == "27435764" and "dropped a phantom read Code128:09435764" in v.note
+    assert v.status == "needs_review" and "grader PSA not confirmed" in v.note  # one barcode's format: the grader is a guess
+    # the back label's QR confirms it: 'ok', not a conflict that hides the confirmed cert
+    qr = _read("QRCode", "https://www.psacard.com/cert/27435764/", "back", "b1")
+    v = consensus([qr, real, phantom1, phantom2])
+    assert v.status == "ok" and v.cert == "27435764" and "phantom" in v.note
+
+
+def test_a_phantom_in_the_hover_and_held_frames_of_the_head_camera_is_one_source():
+    """The frame from above the stack and the held frames see the SAME back-label barcode: a phantom read in two of
+    them is still one printed symbol, never two sources. The front label's barcode is another symbol."""
+    hover = [_at(_read("Code128", "27435764", "back", "back1"), REAL_BOX), _at(_read("Code128", "09435764", "back", "back1"), PHANTOM_BOX)]
+    held = [_at(_read("Code128", "09435764", "back", "back2"), PHANTOM_BOX), _at(_read("Code128", "09435764", "back", "back3"), PHANTOM_BOX)]
+    v = consensus(hover + held)
+    assert v.status == "conflict" and v.cert is None
+    front = _at(_read("Code128", "27435764", "front", "front4"), REAL_BOX)
+    v = consensus(hover + held + [front])
+    assert v.status == "ok" and v.cert == "27435764" and v.sources == ("back_barcode", "front_barcode")
+
+
+def test_only_the_thin_read_inside_the_other_can_be_the_phantom():
+    """software (round 4): the station frame shows the real '27435764' with the thin phantom '09435764' inside it, and
+    the head camera read only the phantom on the back label's Code128 (back QR lost to glare, the real read failed).
+    The back read 'confirmed' the phantom, the REAL number was dropped from the station frame, and the slab came out
+    'ok 9435764'. PSA prints one Code128 on both sides, so the other side can carry the same misread."""
+    real = _at(_read("Code128", "27435764", "front", "front1"), REAL_BOX)
+    phantom = _at(_read("Code128", "09435764", "front", "front1"), PHANTOM_BOX)
+    back = _at(_read("Code128", "09435764", "back", "back2"), PHANTOM_BOX)
+    v = consensus([real, phantom, back])
+    assert v.status == "conflict" and v.cert is None and "27435764" in v.note and "phantom" not in v.note
+    # OCR that reads the phantom's digits is no better: the thin read is never kept over the read around it
+    ocr = CodeRead("9435764", "ocr", "OCR", "09435764", "front", "unknown", "front1")
+    real_itf, phantom_itf = (dataclasses.replace(r, symbology="ITF") for r in (real, phantom))
+    assert consensus([real_itf, phantom_itf, ocr]).status == "conflict"
+    # the other way round, the back read of the real number drops the thin phantom: 'ok'
+    v = consensus([real, phantom, _at(_read("Code128", "27435764", "back", "back2"), REAL_BOX)])
+    assert v.status == "ok" and v.cert == "27435764" and "dropped a phantom read Code128:09435764" in v.note
+
+
+def test_two_reads_of_one_thickness_are_settled_only_by_a_qr_or_ocr():
+    """Two full-height reads of one symbol with different numbers: neither is the thin band, so neither is known to be
+    the phantom. The other label side's barcode may carry the same misread; a QR or OCR of the printed digits cannot."""
+    a = _at(_read("Code128", "27435764", "front", "front1"), REAL_BOX)
+    b = _at(_read("Code128", "27435765", "front", "front1"), (241, 487, 632, 546))
+    back = _at(_read("Code128", "27435765", "back", "back2"), REAL_BOX)
+    assert consensus([a, b, back]).status == "conflict"
+    qr = _read("QRCode", "https://www.psacard.com/cert/27435764/", "back", "back2")
+    v = consensus([a, b, qr])
+    assert v.status == "ok" and v.cert == "27435764" and "phantom" in v.note
+
+
+def test_a_second_code_beside_the_first_is_another_label_not_a_phantom():
+    """Two barcodes side by side in one frame are two printed symbols (another slab's label in view): neither is
+    dropped as a phantom, even when a QR names one of them."""
+    own = _at(_read("Code128", "27435764", "back", "back1"), REAL_BOX)
+    other = _at(_read("Code128", "26275088", "back", "back1"), (240, 700, 633, 760))
+    qr = _read("QRCode", "https://www.psacard.com/cert/27435764/", "back", "back1")
+    v = consensus([qr, own, other])
+    assert v.status == "conflict" and "26275088" in v.note
 
 
 def _zx(text, pts, fmt="Code128"):

@@ -93,7 +93,8 @@ def test_a_face_down_old_label_passes_once_enough_qr_references_exist(tmp_path):
     assert summary["face_down"]["counts"] == {"qr": 6, "learned": 2} and len(summary["face_down"]["learned"]) == 2
     assert "learned(" in (tmp_path / "b" / "report.html").read_text()
     frac, n = r.refs.static_fraction()
-    assert frac < 0.02 and n == 6  # the open head leaves the window clear
+    # the open head leaves the window clear: under half of STATIC_MAX (on today's 330 mm2 window a few card pixels vote by chance: 3 %)
+    assert frac < facedown.STATIC_MAX / 2 and n == 6
 
 
 def test_a_face_up_old_label_still_stops_in_learned_mode(tmp_path):
@@ -352,7 +353,7 @@ def test_the_reference_file_persists_across_runner_instances(tmp_path):
     assert path.exists()
     refs = CardBackRefs(path, cfg.face_down_window_mm)
     assert refs.n_refs == 6 and refs.baseline is not None and "loaded 6 references" in refs.note
-    assert refs.static_fraction()[0] < 0.02 and refs.refs[0].desc.levels  # the levels are stored too
+    assert refs.static_fraction()[0] < facedown.STATIC_MAX / 2 and refs.refs[0].desc.levels  # the levels are stored too
     # a later batch of older labels only: matched against the first batch's references from its first slab
     _runner(cfg, _world(cfg, ["old"] * 3, start=50), tmp_path, refs=refs, batch="b2").run()
     assert _kinds(tmp_path, "b2") == ["learned"] * 3
@@ -381,7 +382,8 @@ def test_with_the_round2_cad_head_the_learned_check_refuses(tmp_path):
     cfg = _cfg()
     world = _world(cfg, ["qr"] * 6 + ["old"], head="cad_r2")
     r = _runner(cfg, world, tmp_path)
-    with pytest.raises(Stop, match="looks like the view over an empty pocket .* the head hides it") as e:
+    # (the aim check sees the foot's edge in the view over an empty pocket too, for a card window it reaches)
+    with pytest.raises(Stop, match="looks like the view over an empty pocket .* the head hides it|over an empty pocket the head camera sees edges") as e:
         r.run()
     assert r.refs.n_refs == 0 and r.refs.rejected == {"card window looks like the empty-pocket view (the head hides it)": 6}
     assert "becomes a reference" not in str(e.value)  # a confirmation would not teach it anything either
@@ -399,12 +401,13 @@ def _foot(y0: float, grey: int = 52):
 
 @pytest.mark.parametrize("name, parts, refused", [
     # the foot hides about 45 % of the window: its edge looks unlike the empty view's (the card is brighter than the foot,
-    # the pocket darker), so only the level check sees it
-    ("foot_y-12.35", _foot(-12.35), r"of the card window shows the same thing on every proven slab as over an empty pocket"),
+    # the pocket darker), so the pattern guard misses it. The aim check sees its edge in the view over an empty pocket
+    # (the level check would see it after 5 proven slabs)
+    ("foot_y-12.35", _foot(-12.35), r"over an empty pocket the head camera sees edges where only the pad should show"),
     # the same foot as dark as the empty pocket: no edge in the empty view at all
     ("foot_y-12.35_black", _foot(-12.35, grey=30), r"of the card window shows the same thing on every proven slab as over an empty pocket"),
     # 75 % hidden: the pattern guard sees it on every slab
-    ("foot_y-13.75", _foot(-13.75), r"looks like the (view over an empty pocket|empty-pocket view)"),
+    ("foot_y-13.75", _foot(-13.75), r"looks like the (view over an empty pocket|empty-pocket view)|over an empty pocket the head camera sees edges"),
     # the round-2 CAD head without the M10 nut and rod end: a plain foot fills the window
     ("cad_r2_no_nut", [p for p in sim.HEADS["cad_r2"] if p[6] not in (150, 170)], r"nothing visible in the card window"),
 ])
@@ -536,7 +539,7 @@ def test_glare_is_masked_and_keeps_a_frame_out_of_the_references():
     cv2.ellipse(shiny, (int(((wx0 + wx1) / 2 - x0) * px), int(((wy0 + wy1) / 2 - y0) * px)), (int(5 * px), int(2.5 * px)), 0, 0, 360, 255, -1)
     d = _desc(shiny)
     assert 0.05 < d.glare < 0.3
-    assert compare(d, clean).score > 0.8  # the rest of the window still matches
+    assert compare(d, clean).score > 0.75  # the rest of the window still matches (the spot covers a quarter of today's 5.5 mm tall window)
     refs = CardBackRefs(None, cfg.face_down_window_mm)
     assert refs.add(d, "qr") == (None, "glare on the card window") and refs.add(clean, "qr")[0] == 0
 
@@ -735,3 +738,112 @@ def test_cli_resume_refuses_face_down_ok_after_another_stop(tmp_path):
     assert main(["resume", str(tmp_path / "b"), "--face-down-ok", "--yes", "--config", str(tmp_path / "machine.toml")], console=con) == 2
     assert any("--face-down-ok refused" in ln for ln in con.lines)
     assert not (tmp_path / "b" / "stop.json").exists() or "refused" not in json.loads((tmp_path / "b" / "stop.json").read_text())["message"]
+
+
+# ---------------------------------------------------------------------- camera aim (BUILD_GUIDE 7.7)
+AIM_WINDOW = ((-27.5, -22.5, 27.5, -11.0),)  # the round-3 window: the CAD cup pad 1.4 mm (0.56 deg) beyond its cup-side edge
+
+
+def _aim_cfg():
+    base = from_layout()
+    return dataclasses.replace(base, face_down_window_mm=AIM_WINDOW, face_down_threshold=THRESHOLD,
+                               face_down_threshold_sig=facedown.threshold_tag(AIM_WINDOW))
+
+
+def _empty_view_aim(cfg, head="cad", tilt=0.0):
+    world = SimWorld(cfg, stacks={}, head=head, head_tilt_deg=tilt)
+    cam = SimCamera(world, "head")
+    frame = cam.capture()
+    rects = facedown.image_rects(cfg.face_down_window_mm, "x")
+    return facedown.aim_problem(describe(frame, rects, frame_view_mm(frame.shape, 147.0, cfg.cam_head, cam)), rects, "y")
+
+
+@pytest.mark.parametrize("head,tilt,bad", [("cad", 0.0, False), ("cad", 0.3, False), ("open", 1.2, False),
+                                           ("cad", 0.6, True), ("cad", 0.8, True), ("cad", 1.0, True), ("cad", 1.2, True), ("cad_r2", 0.0, True)])
+def test_the_view_over_an_empty_pocket_shows_a_head_part_in_the_card_window(head, tilt, bad):
+    """A tilt toward the cup slides the card window (fixed in the image) toward the cup pad and the foot. On the view over
+    an empty pocket only the pad may show there: a square camera passes, 0.6 deg toward the cup does not."""
+    why = _empty_view_aim(_aim_cfg(), head, tilt)
+    assert bool(why) == bad, why
+    if bad:
+        assert "tilted toward the cup" in why
+    assert "not inside" in facedown.aim_problem(None, facedown.image_rects(AIM_WINDOW, "x"))
+
+
+def test_a_head_camera_tilted_toward_the_cup_turns_the_learned_check_off(tmp_path, monkeypatch):
+    """software (round 3): a tilt of about 0.6-1.2 deg toward the cup puts the cup pad and the foot into the card window.
+    That is too little of the window for the camera-locked check (STATIC_MAX), so learned acceptances went on. The view
+    over an empty pocket shows it: the learned check accepts nothing and learns nothing that run, every slab without a
+    back-label code stops untouched, and the stop and the start line say to re-aim the camera."""
+    import slabscan.runner as runner_mod
+
+    cfg = _aim_cfg()
+    world = _world(cfg, ["qr"] * 10 + ["old"], head="cad", start=CLEAN)
+    world.head_tilt_deg = 0.8
+    r = _runner(cfg, world, tmp_path)
+    with pytest.raises(Stop, match=r"could not be confirmed FACE-DOWN .*learned check not active: over an empty pocket the head camera sees "
+                                   r"edges .*Re-aim the head camera \(BUILD_GUIDE 7\.7\)"):
+        r.run()
+    assert _kinds(tmp_path) == ["qr"] * 10 and r.refs.n_refs == 0  # nothing learned (a few were glare anyway)
+    assert r.refs.rejected.get("the head camera's aim puts a part of the head in the card window", 0) >= 5
+    ev = [e for e in read_journal(r.journal) if "face_down_baseline" in e]
+    assert len(ev) == 1 and ev[0]["aim"] != "ok" and r.refs.baseline_meta["aim"] == ev[0]["aim"]
+    assert "learned check not active" in r.face_down_status() and "Re-aim the head camera" in r.face_down_status()
+    assert r._face_down_summary()["camera_aim"] == ev[0]["aim"]
+    assert not world.gripping and not world.held and world.stacks[1][-1].face_down  # the old label: untouched
+    # without the aim check the same head is let through: the window is mostly clear, so the camera-locked check is quiet
+    monkeypatch.setattr(runner_mod, "aim_problem", lambda *a, **k: "")
+    world2 = _world(cfg, ["qr"] * 10 + ["old"], head="cad", start=CLEAN)
+    world2.head_tilt_deg = 0.8
+    r2 = _runner(cfg, world2, tmp_path, batch="b2")
+    r2.run()
+    assert _kinds(tmp_path, "b2") == ["qr"] * 10 + ["learned"]
+    assert r2.refs.static_fraction()[0] < facedown.STATIC_MAX
+
+
+def test_a_square_camera_on_the_next_run_turns_the_learned_check_back_on(tmp_path):
+    cfg = _aim_cfg()
+    refs = CardBackRefs(None, cfg.face_down_window_mm)
+    world = _world(cfg, ["qr"] * 6, head="cad", start=CLEAN)
+    world.head_tilt_deg = 1.0
+    _runner(cfg, world, tmp_path, refs=refs, batch="b1").run()
+    assert refs.baseline_meta["aim"] and refs.n_refs == 0
+    r = _runner(cfg, _world(cfg, ["qr"] * 6 + ["old"], head="cad", start=CLEAN + 6), tmp_path, refs=refs, batch="b2")
+    r.run()
+    assert refs.baseline_meta["aim"] == "" and _kinds(tmp_path, "b2") == ["qr"] * 6 + ["learned"]
+
+
+def test_sim_selftest_and_focus_head_report_the_camera_aim(tmp_path):
+    from slabscan.cli import main
+    from slabscan.ops import ScriptedConsole
+
+    def run(argv):
+        con = ScriptedConsole([])
+        code = main(argv, console=con)
+        return code, "\n".join(con.lines)
+
+    # the sim command: a camera tilted 2.5 deg toward the cup (with any card window), the learned check accepts nothing
+    code, out = run(["sim", "--slabs", "8", "--eras", "0.5,0,0.5", "--seed", "3", "--quiet", "--face-down-check", "--sim-head-tilt", "2.5",
+                     "--out", str(tmp_path / "sim")])
+    assert code == 0 and "the head camera is tilted 2.5 deg toward the cup" in out and "CAMERA AIM:" in out and "by the learned" not in out
+    # focus head looks over the empty exception pocket first
+    code, out = run(["--sim", "focus", "head", "--frames", "1", "--images", str(tmp_path / "f1")])
+    assert code == 0 and "camera aim: OK" in out and (tmp_path / "f1" / "focus_head_empty.jpg").exists()
+    code, out = run(["--sim", "--sim-head-tilt", "2.5", "focus", "head", "--frames", "1", "--images", str(tmp_path / "f2")])
+    assert code == 0 and "camera aim: FAIL" in out and "BUILD_GUIDE 7.7" in out
+    # selftest reports what the last learned run saw (card_backs.npz next to calibration.toml)
+    from slabscan.config import dumps
+
+    cfg = _aim_cfg()
+    cal = tmp_path / "cfg" / "calibration.toml"
+    cal.parent.mkdir()
+    (cal.parent / "machine.toml").write_text(dumps(cfg))
+    code, out = run(["--sim", "--config", str(cal.parent / "machine.toml"), "--calibration", str(cal), "selftest", "--images", str(tmp_path / "s1")])
+    assert "[WARN] camera aim: not checked yet" in out
+    refs = CardBackRefs(cal.parent / facedown.FILE_NAME, cfg.face_down_window_mm)
+    world = _world(cfg, ["qr"], head="cad", start=CLEAN)
+    world.head_tilt_deg = 1.0
+    _runner(cfg, world, tmp_path, refs=refs, batch="b3").run()
+    refs.save()
+    code, out = run(["--sim", "--config", str(cal.parent / "machine.toml"), "--calibration", str(cal), "selftest", "--images", str(tmp_path / "s2")])
+    assert code == 1 and "[FAIL] camera aim: over an empty pocket the head camera sees edges" in out and "batch b3, pocket" in out

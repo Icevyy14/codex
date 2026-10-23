@@ -76,6 +76,9 @@ class SimWorld:
     # the label; it leaves face_down_window_mm clear), "cad_r2" = the round-2 head, whose foot hides the card window,
     # "open" = a hypothetical narrow head
     head: str = "cad"
+    # FAULT INJECTION, camera aim: the head camera tilted toward the cup by this many degrees (sim.aim_shift_mm). From
+    # about 0.47 deg the cup pad comes into face_down_window_mm (the CAD head: about 0.55 deg); BUILD_GUIDE 7.7
+    head_tilt_deg: float = 0.0
     # FAULT INJECTION, Z stall: the z_lost_steps_at-th upward Z move of more than 20 mm with a slab held (the lift to
     # travel height) ends z_lost_steps mm short of its target, and the controller still reports the target (SimMotion)
     z_lost_steps: float = 0.0
@@ -426,9 +429,9 @@ class SimCamera:
 
     def _blank(self):
         if self.role == "head":  # over an empty pocket: the dark pad far below, and the head's own parts
-            key = ("empty", self.w.head, repr(self.deg))
+            key = ("empty", self.w.head, self.w.head_tilt_deg, repr(self.deg))
             if key not in _VIEW_CACHE:
-                _VIEW_CACHE[key] = empty_head_view(self.deg, self.w.head)
+                _VIEW_CACHE[key] = empty_head_view(self.deg, self.w.head, self.w.head_tilt_deg)
             return _VIEW_CACHE[key]
         return np.full((400, 900), 30, np.uint8)
 
@@ -449,7 +452,8 @@ class SimCamera:
                 return self._blank()
             s = w.held[0]
             side = "front" if s.face_down else "back"
-        base = _cached_view(s.cert, s.era, s.grader, side, self.role, self.deg, back=s.back, head=w.head, front=s.front)
+        base = _cached_view(s.cert, s.era, s.grader, side, self.role, self.deg, back=s.back, head=w.head, front=s.front,
+                            tilt=w.head_tilt_deg if self.role == "head" else 0.0)
         noise = np.random.default_rng(self.n).normal(0, 2.0, base.shape)
         return np.clip(base.astype(np.float32) + noise, 0, 255).astype(np.uint8)
 
@@ -457,11 +461,11 @@ class SimCamera:
 _VIEW_CACHE: dict = {}
 
 
-def _cached_view(cert, era, grader, side, role, deg, back="pokemon_en", head="cad", front="art"):
-    key = (cert, era, grader, side, role, back, head, front, repr(deg))
+def _cached_view(cert, era, grader, side, role, deg, back="pokemon_en", head="cad", front="art", tilt=0.0):
+    key = (cert, era, grader, side, role, back, head, front, repr(deg)) + ((tilt,) if tilt else ())
     if key not in _VIEW_CACHE:
         if role == "head":
-            _VIEW_CACHE[key] = head_view(cert, side, deg, era=era, grader=grader, back=back, head=head, front=front)
+            _VIEW_CACHE[key] = head_view(cert, side, deg, era=era, grader=grader, back=back, head=head, front=front, tilt_deg=tilt)
         else:
             # a stable seed: hash() of a str tuple changes with every process (PYTHONHASHSEED), so runs were not repeatable
             _VIEW_CACHE[key] = render_slab_side(SimSlab(cert, era=era, grader=grader), side, deg, seed=_stable_seed(*key) & 0xFFFF)

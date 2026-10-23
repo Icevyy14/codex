@@ -837,3 +837,73 @@ def test_free_cup_hang_is_in_travel_heights_and_follows_measured_buffer_trip(tmp
     cal.write_text("buffer_trip_mm = 4.5\n")
     with pytest.raises(ValueError, match="c_max"):
         load(machine, cal)
+
+
+@pytest.mark.parametrize("grader,to_output", [("PSA", True), ("CGC", True), ("unknown", False), ("PSA/CGC", False), ("", False), ("BGS", False)])
+def test_only_a_needs_review_of_an_accepted_grader_goes_to_the_output_stack(tmp_path, monkeypatch, grader, to_output):
+    """software (round 3): an unknown-grader read (OCR only, a bare number) goes to the exception pocket whatever
+    needs_review_to says; so does any grader the batch does not accept, or none at all."""
+    import slabscan.runner as runner_mod
+
+    cfg = _cfg(face_down_check="off", needs_review_to="output")
+    world, stacks = _world(cfg, per_pocket=1, sources=1)
+    monkeypatch.setattr(runner_mod, "consensus", lambda reads, itf=None, accepted=(): Verdict("needs_review", "148069831", ("barcode",), "test", grader))
+    r = _runner(cfg, world, tmp_path)
+    r.run()
+    assert len(r.w.rows) == 1
+    assert (r.w.rows[0].out_pocket != cfg.exceptions.index) == to_output, r.w.rows[0]
+
+
+def test_a_one_barcode_slab_of_another_grader_is_never_ok(tmp_path, monkeypatch):
+    """software (round 3): a BGS cert printed as a 10-digit Code128 is typed CGC by its length alone. With OCR agreeing
+    it came out 'ok CGC'. Through the whole runner (station read, front OCR) it is needs_review, never 'ok'."""
+    import slabscan.runner as runner_mod
+
+    cfg = _cfg(face_down_check="off")
+    world, stacks = _world(cfg, per_pocket=1, sources=1)
+    real_read = runner_mod.Runner._read
+
+    def read(self, frames, camera, distance_mm=None):
+        reads, unparsed = real_read(self, frames, camera, distance_mm)
+        if camera == "front":  # the station sees only a BGS-style front barcode
+            return [CodeRead("19865140", "front_barcode", "Code128", "0019865140", "front", "CGC", f"front{self._frame_seq}", kind="cgc_c128")], []
+        return [], unparsed  # the head camera sees no code
+
+    monkeypatch.setattr(runner_mod.Runner, "_read", read)
+    monkeypatch.setattr(runner_mod, "ocr_digits", lambda gray, camera="", band=None: [CodeRead("19865140", "ocr", "OCR", "0019865140", "front", "unknown", kind="ocr")])
+    r = _runner(cfg, world, tmp_path)
+    r.run()
+    v = r.w.rows[0].verdict
+    assert v.status == "needs_review" and v.cert == "19865140" and "barcode confirmed by OCR" in v.note and "grader CGC not confirmed" in v.note
+
+
+@pytest.mark.parametrize("ocr_digits,status", [("27435764", "needs_review"), ("09435764", "ok"), (None, "ok")])
+def test_a_two_barcode_ok_has_its_printed_digits_checked(tmp_path, monkeypatch, ocr_digits, status):
+    """software (round 4): the same fixed misread read alone on the back label's Code128 and on the front one (back QR
+    lost to glare) made two printed symbols agree on the wrong number, 'ok', and the front OCR never ran (it ran only for
+    no_read and needs_review). Now OCR of the printed digits checks every 1D-only 'ok'."""
+    import slabscan.runner as runner_mod
+
+    cfg = _cfg(face_down_check="off")
+    world, _ = _world(cfg, per_pocket=1, sources=1)
+    real_read = runner_mod.Runner._read
+    ran = []
+
+    def read(self, frames, camera, distance_mm=None):
+        real_read(self, frames, camera, distance_mm)
+        side = "back" if camera == "back" else "front"
+        return [CodeRead("9435764", f"{side}_barcode", "Code128", "09435764", camera, "PSA", f"{camera}{self._frame_seq}", (240, 522, 630, 534),
+                         kind="psa_c128")], []
+
+    def ocr(gray, camera="", band=None):
+        ran.append(camera)
+        return [] if ocr_digits is None else [CodeRead(ocr_digits.lstrip("0"), "ocr", "OCR", ocr_digits, "front", "unknown", kind="ocr")]
+
+    monkeypatch.setattr(runner_mod.Runner, "_read", read)
+    monkeypatch.setattr(runner_mod, "ocr_digits", ocr)
+    r = _runner(cfg, world, tmp_path)
+    r.run()
+    v = r.w.rows[0].verdict
+    assert ran == ["front"] and v.status == status and v.cert == "9435764", v
+    if status == "needs_review":
+        assert "OCR read 27435764" in v.note
