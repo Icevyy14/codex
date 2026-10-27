@@ -5,6 +5,8 @@ Load up to **330 graded slabs** (11 stacks of 30) and walk away. About 80 minute
 The machine has **two motors**: one moves the head left and right along a single beam, the
 other moves it up and down.
 
+**Engineers reviewing the design:** start with [docs/REVIEWER_BRIEF.md](docs/REVIEWER_BRIEF.md); the drawing set (PDF) and the CAD bundle are in `package/`.
+
 ![How a run works](docs/img/storyboard.png)
 
 ## Read this first
