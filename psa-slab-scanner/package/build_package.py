@@ -52,6 +52,13 @@ PACKAGE_DATE = "2026-10-27"
 TITLE = "SlabRail: graded-slab batch scanner"
 SUBTITLE = "Engineering design package – Rev A, draft for design review"
 STATUS = "Designed, CAD-checked and simulated. Not yet built."
+# What the machine does, in one line (README and REVIEWER_BRIEF: two motors, 200-300+ slabs, unattended).
+MACHINE_LINE = ("A two-motor gantry that lifts graded trading-card slabs one at a time, reads each cert number "
+                "with cameras and restacks them, so 200\u2013300+ slabs can be scanned unattended.")
+REVIEW_DOC = "docs/REVIEWER_BRIEF.md"   # the cover points to its review-questions section
+REVIEW_SECTION = re.compile(r"(?i)what we.?d like you to review|review questions")
+# Addresses the source documents may cite (PSA's public API contact, in RESEARCH.md and software/README.md).
+EMAIL_ALLOWED = {"collectors-apis@collectors.com"}
 COVER_IMAGE = "docs/img/machine_iso.png"
 DRAWINGS_PDF = "cad/out/drawings/SlabRail_drawings.pdf"
 CAD_MANIFEST = "package/cad_manifest.txt"
@@ -131,7 +138,7 @@ def scan_private(name: str, data: bytes) -> None:
         raise BuildError(f"{name} contains local paths: {sorted(hits)[:5]}")
     if b"\0" in data[:8192]:  # binary (STL, GLB): random bytes can look like an address
         return
-    mails = sorted({m.group(0).decode(errors="replace") for m in EMAIL.finditer(data)})
+    mails = sorted({m.group(0).decode(errors="replace") for m in EMAIL.finditer(data)} - EMAIL_ALLOWED)
     if mails:  # the addresses go to the console only, never into README.md
         warn(f"{name} contains {len(mails)} e-mail address(es) from the source documents")
         log(f"    address(es): {', '.join(mails[:5])}")
@@ -157,6 +164,27 @@ def repo_url_for(path: str, folder: bool = False, frag: str = "") -> str:
     else:  # REPO_URL is a repository root: use its default branch
         url = REPO_URL.rstrip("/") + kind + "HEAD/" + path
     return url + (f"#{frag}" if frag else "")
+
+
+def repo_base() -> str:
+    """https://github.com/<owner>/<repo>, from REPO_URL."""
+    return REPO_URL.split("/tree/")[0].rstrip("/") if "/tree/" in REPO_URL else REPO_URL.rstrip("/")
+
+
+def commit_url(git: dict) -> str | None:
+    """Link to the exact commit's tree of this folder (works once the commit is pushed)."""
+    if git.get("full", "unknown") == "unknown":
+        return None
+    return f"{repo_base()}/tree/{git['full']}/{git.get('prefix', '')}".rstrip("/")
+
+
+def drawing_label(sheets) -> str:
+    return f"Drawing set ({sheets[0][0]} to {sheets[-1][0]}, ANSI B)"
+
+
+def short_title(title: str) -> str:
+    """'Interface contract (single source for ...)' -> 'Interface contract'."""
+    return title.split(" (")[0].strip() or title
 
 
 def doc_key(path: str) -> str:
@@ -210,6 +238,7 @@ def git_info(inputs: list[str]) -> dict:
         st = run(["git", "status", "--porcelain", "--untracked-files=all", "--", *inputs],
                  text=True, cwd=ROOT).stdout  # not stripped: each line starts with a 2-letter status
         prefix = git("rev-parse", "--show-prefix")
+        info["prefix"] = prefix.strip("/")
         dirty = set()
         for line in st.splitlines():
             if len(line) < 4:
@@ -353,6 +382,40 @@ def long_token(text: str) -> bool:
     return any(len(w) > LONG_TOKEN for w in text.split())
 
 
+def wants_wbr(text: str) -> bool:
+    """A table-cell word that should only break after '/' or '_' (or anywhere, if still too long)."""
+    return any(len(w) > LONG_TOKEN or (len(w) > 12 and ("/" in w or "_" in w)) for w in text.split())
+
+
+def wbr_html(text: str, code: bool = False) -> dict:
+    """RawInline HTML: the text with <wbr> after every '/' and '_'; a piece still longer than
+    LONG_TOKEN may break anywhere."""
+    pieces = []
+    for piece in re.split(r"(?<=[/_])", text):
+        e = html.escape(piece, quote=False)
+        pieces.append(f'<span class="brk">{e}</span>' if len(piece) > LONG_TOKEN else e)
+    inner = "<wbr>".join(p for p in pieces if p)
+    return {"t": "RawInline", "c": ["html", f"<code>{inner}</code>" if code else inner]}
+
+
+# "BUILD_GUIDE §6.7", "DESIGN §4", "WIRING.md", "(SHOPPING_LIST)": references to another document.
+DOC_REF = re.compile(r"^(?P<pre>[(\[\"'\u201c\u2018]*)(?P<name>[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*)(?P<md>\.md)?"
+                     r"(?P<post>[)\].,;:!?'\"\u201d\u2019]*)$")
+SEC_REF = re.compile(r"^(?P<ref>\u00a7?\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*)(?P<post>.*)$")
+INLINE_TYPES = {"Str", "Space", "SoftBreak", "LineBreak", "Emph", "Strong", "Code", "Link", "Span", "RawInline",
+                "Quoted", "Strikeout", "Superscript", "Subscript", "SmallCaps", "Underline", "Math", "Cite",
+                "Image", "Note"}
+
+
+def find_section(doc: "Doc", num: str) -> str:
+    """Id of the heading numbered `num` ('4', '6.7', '5B') in doc, or ''."""
+    pat = re.compile(rf"^{re.escape(num)}(?:\.(?!\d)|\s|$)")
+    for level, hid, text in doc.headings:
+        if level >= 2 and hid and pat.match(text):
+            return hid
+    return ""
+
+
 def code_font_pt(code: str, depth: int) -> float | None:
     """Font size that fits the longest line of a code block on the page, or None for the default."""
     longest = max((len(line.rstrip()) for line in code.split("\n")), default=0)
@@ -365,11 +428,50 @@ def code_font_pt(code: str, depth: int) -> float | None:
     return max(CODE_MIN_PT, int(size * 10) / 10)
 
 
-def prepare_fragment(doc: Doc, volume_docs: dict[str, Doc]) -> str:
+def prepare_fragment(doc: Doc, volume_docs: dict[str, Doc], all_docs: dict[str, Doc],
+                     stats: dict) -> str:
     """Return the HTML of one document for one volume (ids prefixed with '<key>--')."""
     ast = json.loads(json.dumps(doc.ast))  # deep copy: link targets depend on the volume
     by_path = {d.path: d for d in volume_docs.values()}
+    names = {PurePosixPath(p).stem: d for p, d in all_docs.items() if PurePosixPath(p).parent.as_posix() == "docs"}
     fig_counter = [0]
+
+    def ref_target(tgt: Doc, hid: str) -> str:
+        if tgt.path in by_path:
+            return XDOC + (f"{tgt.key}--{hid}" if hid else f"doc-{tgt.key}")
+        return repo_url_for(tgt.path, frag=hid)
+
+    def link_refs(lst: list) -> list:
+        """Turn "BUILD_GUIDE §6.7"-style mentions into links (inside this PDF or to the repo)."""
+        out, i, n = [], 0, len(lst)
+        while i < n:
+            el = lst[i]
+            m = DOC_REF.match(el["c"]) if isinstance(el, dict) and el.get("t") == "Str" else None
+            tgt = names.get(m.group("name")) if m else None
+            if tgt:
+                sec = None
+                if (not m.group("post") and i + 2 < n and lst[i + 1].get("t") == "Space"
+                        and lst[i + 2].get("t") == "Str"):
+                    m2 = SEC_REF.match(lst[i + 2]["c"])
+                    if m2 and (m2.group("ref").startswith("\u00a7") or "." in m2.group("ref")):
+                        sec = m2
+                if sec or m.group("md") or "_" in m.group("name"):
+                    hid = find_section(tgt, sec.group("ref").lstrip("\u00a7")) if sec else ""
+                    text = [{"t": "Str", "c": m.group("name") + (m.group("md") or "")}]
+                    if sec:
+                        text += [{"t": "Space"}, {"t": "Str", "c": sec.group("ref")}]
+                    if m.group("pre"):
+                        out.append({"t": "Str", "c": m.group("pre")})
+                    out.append({"t": "Link", "c": [["", ["docref"], []], text, [ref_target(tgt, hid), ""]]})
+                    post = sec.group("post") if sec else m.group("post")
+                    if post:
+                        out.append({"t": "Str", "c": post})
+                    stats["refs"] = stats.get("refs", 0) + 1
+                    i += 3 if sec else 1
+                    continue
+            out.append(el)
+            i += 1
+        return out
 
     def resolve_local(url: str) -> tuple[str, str]:
         path, _, frag = url.partition("#")
@@ -435,17 +537,13 @@ def prepare_fragment(doc: Doc, volume_docs: dict[str, Doc]) -> str:
             return None
         return text  # not real HTML (e.g. a "<where>" placeholder): show it as text
 
-    def walk(x, extra_after, in_table=False, depth=0):
+    def walk(x, extra_after, in_table=False, depth=0, refs=True):
         if isinstance(x, dict):
             t = x.get("t")
             if t == "Link":
                 fix_link(x, extra_after)
-                if in_table and long_token(stringify(x["c"][1])):
-                    x["c"][0][1] = list(x["c"][0][1]) + ["brk"]
             elif t == "Image":
                 fix_image(x)
-            elif t == "Code" and in_table and long_token(x["c"][1]):
-                x["c"][0][1] = list(x["c"][0][1]) + ["brk"]
             elif t == "CodeBlock":
                 size = code_font_pt(x["c"][1], depth)
                 if size is not None:
@@ -466,14 +564,20 @@ def prepare_fragment(doc: Doc, volume_docs: dict[str, Doc]) -> str:
                 in_table = True
             if t in ("BulletList", "OrderedList", "BlockQuote", "DefinitionList"):
                 depth += 1
+            if t in ("Link", "Image", "Header", "Code", "CodeBlock"):
+                refs = False
             for v in list(x.values()):
-                walk(v, extra_after, in_table, depth)
+                walk(v, extra_after, in_table, depth, refs)
         elif isinstance(x, list):
+            if refs and x and isinstance(x[0], dict) and x[0].get("t") in INLINE_TYPES:
+                x[:] = link_refs(x)
             for i, v in enumerate(x):
-                if in_table and isinstance(v, dict) and v.get("t") == "Str" and long_token(v["c"]):
-                    x[i] = {"t": "Span", "c": [["", ["brk"], []], [v]]}
+                if in_table and isinstance(v, dict) and v.get("t") == "Str" and wants_wbr(v["c"]):
+                    x[i] = wbr_html(v["c"])
+                elif in_table and isinstance(v, dict) and v.get("t") == "Code" and wants_wbr(v["c"][1]):
+                    x[i] = wbr_html(v["c"][1], code=True)
                 else:
-                    walk(v, extra_after, in_table, depth)
+                    walk(v, extra_after, in_table, depth, refs)
 
     blocks = []
     for b in ast["blocks"]:
@@ -592,7 +696,7 @@ tr { break-inside: avoid; page-break-inside: avoid; }
 th, td { border: 0.5px solid #b8b8b8; padding: 2.5px 4px; vertical-align: top; text-align: left;
          overflow-wrap: break-word; word-break: normal; hyphens: manual; }
 td a, th a, td code, th code { overflow-wrap: break-word; }
-.brk, td a.brk, th a.brk, td code.brk, th code.brk { overflow-wrap: anywhere; word-break: break-all; }
+.brk { overflow-wrap: anywhere; }
 th { background: #e9edf3; font-weight: 700; }
 tbody tr:nth-child(even) td { background: #fafafa; }
 td code, th code { font-size: 0.92em; }
@@ -603,20 +707,32 @@ p > img:only-child { margin-bottom: 0.2em; }
 .linked-figure p { text-align: center; font-size: 8.5pt; color: #444; }
 section.doc { break-before: page; page-break-before: always; }
 section.doc:first-of-type { break-before: auto; }
+/* set by the build for a document whose last page would hold only a few lines */
+section.tight1 { line-height: 1.3; }
+section.tight1 p { margin-bottom: 0.45em; }
+section.tight1 h2 { margin-top: 0.95em; }
+section.tight2 { font-size: 9.6pt; line-height: 1.28; }
+section.tight2 p { margin-bottom: 0.4em; }
+section.tight2 h2 { margin-top: 0.85em; }
+section.tight2 img { max-height: 6.6in; }
 
 /* cover */
 .cover { page: cover; break-after: page; page-break-after: always; text-align: center;
          height: 9.3in; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
 .cover > * { flex: 0 0 auto; }
-.cover .kicker { font-size: 10pt; letter-spacing: 0.12em; text-transform: uppercase; color: #555; margin-top: 0.4in; }
-.cover .title { font-size: 27pt; font-weight: 700; margin: 0.25in 0 0.12in 0; color: #111; }
-.cover .subtitle { font-size: 14pt; color: #333; margin-bottom: 0.25in; }
-.cover img { width: auto; height: auto; max-width: 100%%; max-height: 4.0in; margin: 0.15in auto 0.2in auto;
+.cover .kicker { font-size: 10pt; letter-spacing: 0.12em; text-transform: uppercase; color: #555; margin-top: 0.15in; }
+.cover .title { font-size: 27pt; font-weight: 700; margin: 0.2in 0 0.1in 0; color: #111; }
+.cover .subtitle { font-size: 14pt; color: #333; margin-bottom: 0.15in; }
+.cover img { width: auto; height: auto; max-width: 100%%; max-height: 3.5in; margin: 0.1in auto 0.15in auto;
               border: 0.5px solid #ccc; }
-.cover .status { display: inline-block; margin: 0.1in auto 0.2in auto; padding: 0.45em 1.1em;
+.cover .what { font-size: 11pt; color: #222; margin: 0 0.5in 0.12in 0.5in; line-height: 1.4; }
+.cover .ask { font-size: 11pt; font-weight: 700; margin: 0 0.4in 0.12in 0.4in; }
+.cover .elsewhere { font-size: 9pt; color: #333; margin: 0 0.4in 0.1in 0.4in; line-height: 1.45; }
+.cover .elsewhere a { overflow-wrap: anywhere; }
+.cover .status { display: inline-block; margin: 0.05in auto 0.15in auto; padding: 0.45em 1.1em;
                  border: 1.2px solid #8a1c1c; color: #8a1c1c; font-weight: 700; font-size: 11.5pt; }
-.cover .volume { font-size: 11pt; color: #222; margin: 0.1in 0.6in 0.15in 0.6in; }
-.cover .meta { font-size: 9.5pt; color: #333; margin-top: auto; line-height: 1.6; }
+.cover .volume { font-size: 10pt; color: #222; margin: 0 0.6in 0.1in 0.6in; }
+.cover .meta { font-size: 8.5pt; color: #333; margin-top: auto; line-height: 1.6; }
 .cover .meta a { overflow-wrap: anywhere; }
 
 /* contents */
@@ -635,33 +751,80 @@ section.doc:first-of-type { break-before: auto; }
 """ % PAGE_MARGIN
 
 
-def cover_html(vol: dict, git: dict) -> str:
+def review_anchor(docs: dict[str, Doc]) -> tuple[str, str] | None:
+    """(named destination, section number) of the brief's review-questions section, if this volume has it."""
+    d = docs.get(REVIEW_DOC)
+    if not d:
+        return None
+    for level, hid, text in d.headings:
+        if level == 2 and hid and REVIEW_SECTION.search(text):
+            m = re.match(r"^(\d+[A-Za-z]?)\.?\s", text)
+            return f"{d.key}--{hid}", (m.group(1) if m else "")
+    warn(f"{REVIEW_DOC}: no section that asks for the review found; the cover does not point to one")
+    return None
+
+
+def complete_volume() -> dict:
+    return max(VOLUMES, key=lambda v: len(v["parts"]))
+
+
+def doc_short_name(path: str) -> str:
+    p = PurePosixPath(path)
+    return p.stem if p.parent.as_posix() == "docs" else p.with_suffix("").as_posix()
+
+
+def elsewhere_html(vol: dict) -> str:
+    """Where the documents and files that are not in this PDF are."""
+    pkg = repo_url_for("package", folder=True)
+    link = f'<a href="{html.escape(pkg)}">{html.escape(pkg)}</a>'
+    full = complete_volume()
+    missing = [doc_short_name(p) for p in full["parts"] if p != DRAWINGS and p not in vol["parts"]]
+    if missing and vol is not full:
+        listed = ", ".join(missing[:-1]) + (" and " if len(missing) > 1 else "") + missing[-1]
+        return (f"Not in this PDF: {html.escape(listed)} are in {html.escape(full['file'])} and in the repo; "
+                f"the CAD files are in {ZIP_NAME}. All the package files: {link}")
+    return f"The CAD files (STEP, STL, GLB, DXF) are in {ZIP_NAME}. All the package files: {link}"
+
+
+def cover_html(vol: dict, git: dict, ctx: dict, pages: dict | None) -> str:
     img = image_data_uri(ROOT / COVER_IMAGE)
     commit = git["short"] + (" + uncommitted changes" if git["dirty"] else "")
+    ask = ""
+    if ctx.get("review"):
+        key, num = ctx["review"]
+        pn = str(pages[key]) if pages and key in pages else "888"
+        where = f"\u00a7{num} of the reviewer brief" if num else "the reviewer brief"
+        ask = (f'<div class="ask">Design review: the questions are in <a href="#{html.escape(key)}">'
+               f'{html.escape(where)}, page {pn}</a>.</div>')
+    curl = commit_url(git)
+    commit_line = (f'Commit: <a href="{html.escape(curl)}">{html.escape(curl)}</a><br>' if curl else "")
     return f"""
 <div class="cover">
   <div class="kicker">{html.escape(vol['name'])}</div>
   <div class="title">{html.escape(TITLE)}</div>
   <div class="subtitle">{html.escape(SUBTITLE)}</div>
   <img src="{img}" alt="SlabRail, CAD render">
+  <div class="what">{html.escape(MACHINE_LINE)}</div>
   <div><span class="status">{html.escape(STATUS)}</span></div>
+  {ask}
   <div class="volume">{html.escape(vol['what'])}</div>
+  <div class="elsewhere">{ctx['elsewhere']}</div>
   <div class="meta">
     {PACKAGE_DATE} &nbsp;&middot;&nbsp; built from git commit <code>{html.escape(commit)}</code><br>
-    <a href="{html.escape(REPO_URL)}">{html.escape(REPO_URL)}</a>
+    {commit_line}Branch: <a href="{html.escape(REPO_URL)}">{html.escape(REPO_URL)}</a>
   </div>
 </div>"""
 
 
-def toc_html(vol: dict, docs: dict[str, Doc], sheets, pages: dict | None) -> str:
+def toc_html(vol: dict, docs: dict[str, Doc], sheets, pages: dict | None, ctx: dict) -> str:
     def pn(key: str) -> str:
         return str(pages[key]) if pages and key in pages else "888"
 
     rows = ['<div class="toc"><div class="toc-title">Contents</div>']
     for part in vol["parts"]:
         if part == DRAWINGS:
-            rows.append(f'<a class="row l1" href="{SHEET}first"><span class="t">Drawing set, Rev A</span>'
-                        f'<span class="src">{html.escape(DRAWINGS_PDF)}</span><span class="dots"></span>'
+            rows.append(f'<a class="row l1" href="{SHEET}first"><span class="t">{html.escape(drawing_label(sheets))}'
+                        f'</span><span class="src">{html.escape(DRAWINGS_PDF)}</span><span class="dots"></span>'
                         f'<span class="pn">{pn("@drawings")}</span></a>')
             for num, title in sheets:
                 rows.append(f'<a class="row l2" href="{SHEET}{num}"><span class="t">{num} &nbsp;{html.escape(title)}'
@@ -672,25 +835,32 @@ def toc_html(vol: dict, docs: dict[str, Doc], sheets, pages: dict | None) -> str
                     f'<span class="src">{html.escape(d.path)}</span><span class="dots"></span>'
                     f'<span class="pn">{pn("doc-" + d.key)}</span></a>')
         if vol["toc_depth"] >= 2:
-            for level, hid, text in d.headings:
-                if level == 2 and hid:
-                    k = f"{d.key}--{hid}"
-                    rows.append(f'<a class="row l2" href="#{html.escape(k)}"><span class="t">{html.escape(text)}'
-                                f'</span><span class="dots"></span><span class="pn">{pn(k)}</span></a>')
+            for level, hid, text in section_headings(d):
+                k = f"{d.key}--{hid}"
+                rows.append(f'<a class="row l2" href="#{html.escape(k)}"><span class="t">{html.escape(text)}'
+                            f'</span><span class="dots"></span><span class="pn">{pn(k)}</span></a>')
     rows.append('<div class="note">Page numbers are those of this PDF. The drawing sheets are ANSI B landscape '
-                'and carry their own sheet numbers. Links to files that are not in this PDF open the repository.'
-                '</div></div>')
+                'and carry their own sheet numbers. The SOURCE line in each drawing title block names the last '
+                'commit that changed the CAD sources, which can be older than the commit on the cover. Links to '
+                f'files that are not in this PDF open the repository.<br>{ctx["elsewhere"]}</div></div>')
     return "\n".join(rows)
 
 
+def section_headings(d: Doc) -> list[tuple[int, str, str]]:
+    """The level-2 headings that go into the contents and the bookmarks (not a document's own contents list)."""
+    return [(lvl, hid, text) for lvl, hid, text in d.headings
+            if lvl == 2 and hid and text.strip().lower() != "contents"]
+
+
 def volume_html(vol: dict, docs: dict[str, Doc], frags: dict[str, str], sheets, git: dict,
-                pages: dict | None) -> str:
-    body = [cover_html(vol, git), toc_html(vol, docs, sheets, pages)]
+                pages: dict | None, ctx: dict, tight: dict[str, int]) -> str:
+    body = [cover_html(vol, git, ctx, pages), toc_html(vol, docs, sheets, pages, ctx)]
     for part in vol["parts"]:
         if part == DRAWINGS:
             continue
         d = docs[part]
-        body.append(f'<section class="doc" id="doc-{d.key}">\n{frags[part]}\n</section>')
+        cls = f"doc tight{tight[d.key]}" if tight.get(d.key) else "doc"
+        body.append(f'<section class="{cls}" id="doc-{d.key}">\n{frags[part]}\n</section>')
     return (f'<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8">'
             f'<title>{html.escape(TITLE)}: {html.escape(vol["name"])}</title>'
             f'<style>{CSS}</style></head><body>\n' + "\n".join(body) + "\n</body></html>\n")
@@ -704,14 +874,20 @@ body { font-family: "Liberation Sans", "Arimo", "Arial", "DejaVu Sans", sans-ser
 .pg:last-child { break-after: auto; page-break-after: auto; }
 .ft { position: absolute; left: 1.8cm; right: 1.8cm; bottom: 0.95cm; display: flex; border-top: 0.5px solid #aaa;
       padding-top: 3px; }
-.ft .l { flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 1em; }
-.ft .r { flex: 0 0 auto; white-space: nowrap; }
+.ft span { white-space: nowrap; }
+.ft .pre, .ft .path { flex: 0 0 auto; }
+.ft .t { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ft .gap { flex: 1 1 auto; min-width: 1em; }
+.ft .r { flex: 0 0 auto; }
 """
 
 
-def footer_html(items: list[tuple[str, str]]) -> str:
-    pages = "".join(f'<div class="pg"><div class="ft"><span class="l">{html.escape(l)}</span>'
-                    f'<span class="r">{html.escape(r)}</span></div></div>' for l, r in items)
+def footer_html(items: list[tuple[str, str, str, str]]) -> str:
+    """items: (prefix, document title, source path, page text); only the title may be shortened."""
+    pages = "".join(f'<div class="pg"><div class="ft"><span class="pre">{html.escape(a)}</span>'
+                    f'<span class="t">{html.escape(t)}</span><span class="path">{html.escape(p)}</span>'
+                    f'<span class="gap"></span><span class="r">{html.escape(r)}</span></div></div>'
+                    for a, t, p, r in items)
     return (f'<!DOCTYPE html><html><head><meta charset="utf-8"><style>{FOOTER_CSS}</style></head>'
             f'<body>{pages}</body></html>')
 
@@ -745,6 +921,11 @@ class Printer:
                                    ".map(i => i.alt || i.src.slice(0, 60))")
             if broken:
                 raise BuildError(f"{name}: images that did not load: {broken}")
+            # The cover is one fixed-height block (overflow hidden, so it cannot split): check nothing is cut.
+            spill = page.evaluate("(() => { const c = document.querySelector('.cover');"
+                                  " return c ? c.scrollHeight - c.clientHeight : 0; })()")
+            if spill > 1:
+                raise BuildError(f"{name}: the cover content is {spill} px taller than the page")
             page.pdf(path=str(dst), prefer_css_page_size=True, print_background=True,
                      outline=outline, tagged=outline)
         finally:
@@ -809,10 +990,36 @@ def check_images(doc: Doc) -> None:
     w(doc.ast["blocks"])
 
 
+TOP_MARGIN_PT = 72 * 1.8 / 2.54     # PAGE_MARGIN top
+BOTTOM_MARGIN_PT = 72 * 2.0 / 2.54  # PAGE_MARGIN bottom
+NEAR_EMPTY = 0.15                   # a last page filled less than this is tightened away
+
+
+def page_fill(page) -> float | None:
+    """How far down a Letter page the text reaches (0 = top of the text area, 1 = bottom), or None
+    when the page also holds an image or a drawing, which the text position does not see."""
+    res = page.get("/Resources")
+    xo = res.get_object().get("/XObject") if res is not None else None
+    if xo and len(xo.get_object()) > 0:
+        return None
+    ys = []
+
+    def visit(text, cm, tm, _font, _size):
+        if text.strip():
+            ys.append(tm[4] * cm[1] + tm[5] * cm[3] + cm[5])
+
+    page.extract_text(visitor_text=visit)
+    if not ys:
+        return 0.0
+    height = float(page.mediabox.height)
+    top, bottom = height - TOP_MARGIN_PT, BOTTOM_MARGIN_PT
+    return max(0.0, min(1.0, (top - min(ys)) / (top - bottom)))
+
+
 def build_volume(vol: dict, printer: Printer, sheets, git: dict, workdir: Path, all_docs: dict,
                  draw_path: Path) -> dict:
     from pypdf import PdfReader, PdfWriter
-    from pypdf.generic import ArrayObject, ByteStringObject, NameObject, NullObject, NumberObject
+    from pypdf.generic import ArrayObject, ByteStringObject, DictionaryObject, FloatObject, NameObject, NumberObject
     from pypdf.generic import Fit
 
     t0 = time.time()
@@ -822,8 +1029,10 @@ def build_volume(vol: dict, printer: Printer, sheets, git: dict, workdir: Path, 
     keyed = {d.key: d for d in docs.values()}
     if len(keyed) != len(docs):
         raise BuildError("two documents map to the same key")
-    frags = {p: prepare_fragment(d, keyed) for p, d in docs.items()}
-    log(f"  {len(docs)} documents converted to HTML ({time.time() - t0:.1f} s)")
+    stats: dict = {}
+    frags = {p: prepare_fragment(d, keyed, all_docs, stats) for p, d in docs.items()}
+    log(f"  {len(docs)} documents converted to HTML, {stats.get('refs', 0)} document references linked "
+        f"({time.time() - t0:.1f} s)")
 
     draw_reader = PdfReader(draw_path)
     n_draw = len(draw_reader.pages)
@@ -833,9 +1042,11 @@ def build_volume(vol: dict, printer: Printer, sheets, git: dict, workdir: Path, 
         i = vol["parts"].index(DRAWINGS)
         after_draw = next((p for p in vol["parts"][i + 1:] if p != DRAWINGS), None)
 
+    ctx = {"review": review_anchor(docs), "elsewhere": elsewhere_html(vol)}
+    tight: dict[str, int] = {}
     pages = None
-    for attempt in range(1, 5):
-        html_text = volume_html(vol, docs, frags, sheets, git, pages)
+    for attempt in range(1, 8):
+        html_text = volume_html(vol, docs, frags, sheets, git, pages, ctx, tight)
         if attempt == 1:
             scan_private(f"{vol['file']} (HTML)", re.sub(r"data:[\w/+.-]+;base64,[A-Za-z0-9+/=]+", "",
                                                         html_text).encode())
@@ -861,8 +1072,25 @@ def build_volume(vol: dict, printer: Printer, sheets, git: dict, workdir: Path, 
             new["@drawings"] = ins + 1
             for j, (num, _t) in enumerate(sheets):
                 new["@" + num] = ins + j + 1
-        log(f"  layout pass {attempt}: {n_html} HTML pages ({time.time() - t0:.1f} s)")
-        if pages is not None and all(pages.get(k) == v for k, v in new.items()):
+        first = (reader.pages[1].extract_text() or "").lstrip()
+        if not first.startswith("Contents"):
+            raise BuildError(f"{vol['file']}: the cover does not fit on one page")
+        if ctx["review"] and ctx["review"][0] not in new:
+            raise BuildError(f"{vol['file']}: no page found for the review questions ({ctx['review'][0]})")
+        # A document whose last page would hold only a few lines is set a little tighter (up to twice).
+        starts_now = sorted(dests[f"doc-{d.key}"][0] for d in docs.values()) + [n_html]
+        tightened = []
+        for d in docs.values():
+            s0 = dests[f"doc-{d.key}"][0]
+            last = starts_now[starts_now.index(s0) + 1] - 1
+            if last > s0 and tight.get(d.key, 0) < 2:
+                fill = page_fill(reader.pages[last])
+                if fill is not None and fill < NEAR_EMPTY:
+                    tight[d.key] = tight.get(d.key, 0) + 1
+                    tightened.append(f"{d.path} (last page {fill:.0%} full)")
+        log(f"  layout pass {attempt}: {n_html} HTML pages ({time.time() - t0:.1f} s)"
+            + (f"; tightening {', '.join(tightened)}" if tightened else ""))
+        if not tightened and pages is not None and all(pages.get(k) == v for k, v in new.items()):
             break
         pages = new
     else:
@@ -890,9 +1118,9 @@ def build_volume(vol: dict, printer: Printer, sheets, git: dict, workdir: Path, 
     items, targets = [], []
     for h in range(1, n_html):
         d = owner[h]
-        left = f"{d.title}  ·  {d.path}" if d else "Contents"
         f = html_final[h]
-        items.append((f"SlabRail Rev A, draft for design review  ·  {left}", f"Page {f + 1} of {total}"))
+        items.append(("SlabRail Rev A, draft for design review  \u00b7  ", short_title(d.title) if d else "Contents",
+                      f"  \u00b7  {d.path}" if d else "", f"Page {f + 1} of {total}"))
         targets.append(f)
     if items:
         foot = PdfReader(printer.pdf(footer_html(items), f"{Path(vol['file']).stem}_footer", outline=False))
@@ -943,10 +1171,14 @@ def build_volume(vol: dict, printer: Printer, sheets, git: dict, workdir: Path, 
         a, b = norm(outline_title), norm(text)
         return a == b or (bool(a) and bool(b) and (b in a or a in b))
 
+    head_pos: dict[str, tuple[int, float]] = {}
     if len(flat) == len(seq) and all(same(a[0], b[3]) for a, b in zip(flat, seq)):
         for (title, pg, top), (d, lvl, hid, txt) in zip(flat, seq):
-            if lvl == 2 and pg is not None:
-                h2_pos[(d.key, hid)] = (pg, top)
+            if pg is not None and hid:
+                if lvl == 2:
+                    h2_pos[(d.key, hid)] = (pg, top)
+                if top is not None:
+                    head_pos[f"{d.key}--{hid}"] = (pg, top)
     else:
         warn(f"{vol['file']}: Chromium's heading outline ({len(flat)}) does not match the documents' headings "
              f"({len(seq)}); section bookmarks come from the contents links only")
@@ -955,6 +1187,24 @@ def build_volume(vol: dict, printer: Printer, sheets, git: dict, workdir: Path, 
             k, hid = name.split("--", 1)
             h2_pos.setdefault((k, hid), (pg, top))
 
+    # Chromium places its named destinations about one top margin above the target, so links
+    # landed above the heading. Put heading targets on the heading, and lower the others by the margin.
+    dest_root = writer.root_object.get("/Dests")
+    if dest_root is not None:
+        for name, dv in dest_root.get_object().items():
+            arr = dv.get_object()
+            if isinstance(arr, DictionaryObject) and "/D" in arr:
+                arr = arr["/D"].get_object()
+            if not isinstance(arr, ArrayObject) or len(arr) < 4 or arr[1] != "/XYZ":
+                continue
+            key = str(name).lstrip("/")
+            if key in head_pos:
+                hp, top = head_pos[key]
+                arr[0] = writer.pages[final(hp)].indirect_reference
+                arr[3] = FloatObject(round(top, 2))
+            elif isinstance(arr[3], (FloatObject, NumberObject)):
+                arr[3] = FloatObject(round(max(0.0, float(arr[3]) - TOP_MARGIN_PT), 2))
+
     bookmarks = []
     writer.add_outline_item("Cover", 0)
     bookmarks.append(("Cover", 1, 0))
@@ -962,8 +1212,8 @@ def build_volume(vol: dict, printer: Printer, sheets, git: dict, workdir: Path, 
     bookmarks.append(("Contents", 2, 0))
     for part in vol["parts"]:
         if part == DRAWINGS:
-            parent = writer.add_outline_item(f"Drawing set ({len(sheets)} sheets, ANSI B)", ins, is_open=True)
-            bookmarks.append((f"Drawing set ({len(sheets)} sheets, ANSI B)", ins + 1, 0))
+            parent = writer.add_outline_item(drawing_label(sheets), ins, is_open=True)
+            bookmarks.append((drawing_label(sheets), ins + 1, 0))
             for j, (num, title) in enumerate(sheets):
                 writer.add_outline_item(f"{num} {title}", ins + j, parent=parent)
                 bookmarks.append((f"{num} {title}", ins + j + 1, 1))
@@ -975,8 +1225,8 @@ def build_volume(vol: dict, printer: Printer, sheets, git: dict, workdir: Path, 
             label = f"{d.title} ({d.path})"
         parent = writer.add_outline_item(label, pg, is_open=False)
         bookmarks.append((label, pg + 1, 0))
-        for level, hid, text in d.headings:
-            if level != 2 or (d.key, hid) not in h2_pos:
+        for level, hid, text in section_headings(d):
+            if (d.key, hid) not in h2_pos:
                 continue
             hp, top = h2_pos[(d.key, hid)]
             fit = Fit.xyz(top=top) if top is not None else Fit.fit()
@@ -1012,6 +1262,7 @@ def build_volume(vol: dict, printer: Printer, sheets, git: dict, workdir: Path, 
 
     log(f"  {total} pages, {n_ext} external links, {len(bookmarks)} bookmarks ({time.time() - t0:.1f} s)")
     return {"tmp": tmp, "pages": total, "html_pages": n_html, "draw_at": ins + 1 if has_draw else None,
+            "tight": {k: v for k, v in tight.items() if v}, "review": (ctx["review"], pages),
             "docs": [(docs[p].title, p, pages[f"doc-{docs[p].key}"]) for p in doc_parts],
             "bookmarks": bookmarks, "ext_links": n_ext, "page_map": pages}
 
@@ -1076,7 +1327,91 @@ def check_pdf(path: Path) -> dict:
     return {"pages": len(r.pages), "mb": size_mb}
 
 
-def build_zip(workdir: Path, overrides: dict[str, Path]) -> dict:
+# How the zip's own README groups the manifest: (title, test on the repo path, what the files are).
+ZIP_GROUPS = [
+    ("Assemblies, STEP", lambda p: p.startswith("cad/out/assembly/") and p.endswith(".step"),
+     "The whole machine, one file per pose: one named, coloured solid per part, in machine coordinates. "
+     "Measure on these."),
+    ("Assemblies, GLB", lambda p: p.endswith(".glb"),
+     "The same assemblies as meshes, for viewing only (glTF: metres, Y up)."),
+    ("Printed parts, STEP", lambda p: p.startswith("cad/out/printed/") and p.endswith(".step"),
+     "One solid per printed part, in print orientation (not in machine coordinates)."),
+    ("Printed parts, STL", lambda p: p.startswith("cad/out/printed/") and p.endswith(".stl"),
+     "The same parts for the slicer, already in print orientation."),
+    ("Print list", lambda p: p.endswith("print_list.json"),
+     "Per printed part: quantity, bounding box, volume (cm\u00b3) and a print note."),
+    ("Cut list", lambda p: p.endswith("cut_list.csv"), "Stock cut to length, with quantities."),
+    ("Probe flag blank", lambda p: "probe_flag_blank" in p,
+     "Flat outline of the bent aluminium probe flag (DXF) and its dimensioned drawing (SVG, 1:1 at 100 %)."),
+    ("Geometry checks", lambda p: p.endswith("checks.txt"),
+     "Output of the last geometry-check run: one line per check."),
+    ("Drawing set", lambda p: p == DRAWINGS_PDF, "The dimensioned drawings, Rev A, draft for design review."),
+    ("Bill of materials", lambda p: p.endswith("BOM.csv"), "Every part to buy, one line each."),
+    ("CAD notes", lambda p: p == CAD_README,
+     "The full CAD README as it is in the repo. It also describes the Python sources and commands, which "
+     "are in the repo, not in this zip."),
+]
+ZIP_README_SECTIONS = ["Units", "Coordinate system and origin", "Poses"]  # copied from cad/README.md
+
+
+def md_sections(text: str, titles: list[str]) -> dict[str, str]:
+    """The '## title' sections of a Markdown file, by title."""
+    found, cur, buf = {}, None, []
+    for line in text.splitlines() + ["## "]:
+        if line.startswith("## "):
+            if cur in titles:
+                found[cur] = "\n".join(buf).strip()
+            cur, buf = line[3:].strip(), []
+        elif cur is not None:
+            buf.append(line)
+    return found
+
+
+def zip_readme(entries: list[str], git: dict, sheets) -> str:
+    L = [f"# SlabRail CAD files ({ZIP_NAME})\n",
+         f"{TITLE}. Rev A, draft for design review. {STATUS} Package date {PACKAGE_DATE}.\n"]
+    curl = commit_url(git)
+    if curl:
+        dirty = " The inputs had uncommitted changes when the zip was built." if git["dirty"] else ""
+        L.append(f"Built from git commit `{git['short']}` ({curl}).{dirty}\n")
+    L.append("Every file here is generated from the CadQuery model. The model's Python sources, and the "
+             f"commands that regenerate these files, are in the repo, not in this zip: {repo_url_for('cad', True)} "
+             "(described in `cad/README.md`, which is also in this zip). Do not edit the exports by hand.\n")
+    L.append(f"The files keep their repo paths (relative to the `psa-slab-scanner/` folder) under `{ZIP_TOP}/`.\n")
+    L.append("## What is in this zip\n")
+    L.append("| Files | What they are |")
+    L.append("|---|---|")
+    left = list(entries)
+    for title, test, what in ZIP_GROUPS:
+        hit = [e for e in left if test(e)]
+        if not hit:
+            continue
+        left = [e for e in left if e not in hit]
+        if title == "Drawing set":
+            what = f"{drawing_label(sheets)}: {what}"
+        if len(hit) > 3:
+            folder = PurePosixPath(hit[0]).parent.as_posix()
+            names = ", ".join(PurePosixPath(h).stem for h in hit)
+            files = f"{len(hit)} files in `{folder}/`: {names}"
+        else:
+            files = ", ".join(f"`{h}`" for h in hit)
+        L.append(f"| **{title}**: {files} | {what} |")
+    if left:
+        L.append("| **Other**: " + ", ".join(f"`{h}`" for h in left) + " | |")
+    L.append("")
+    sections = md_sections((ROOT / CAD_README).read_text(encoding="utf-8"), ZIP_README_SECTIONS)
+    for title in ZIP_README_SECTIONS:
+        if title not in sections:
+            warn(f"{CAD_README} has no '## {title}' section; the zip README leaves it out")
+            continue
+        L.append(f"## {title}\n")
+        L.append(sections[title] + "\n")
+    L.append(f"_The three sections above are copied from `cad/README.md`. Names such as `layout.py` or "
+             f"`build.POSES` there refer to the CAD sources in the repo._")
+    return "\n".join(L) + "\n"
+
+
+def build_zip(workdir: Path, overrides: dict[str, Path], git: dict, sheets) -> dict:
     t0 = time.time()
     log(f"\n== {ZIP_NAME}")
     mpath = ROOT / CAD_MANIFEST
@@ -1100,8 +1435,10 @@ def build_zip(workdir: Path, overrides: dict[str, Path]) -> dict:
     if not (ROOT / CAD_README).is_file():
         raise BuildError(f"missing {CAD_README}")
     stamp = tuple(int(x) for x in PACKAGE_DATE.split("-")) + (0, 0, 0)
-    files = [(f"{ZIP_TOP}/README.md", ROOT / CAD_README)] + [(f"{ZIP_TOP}/{e}", overrides.get(e, ROOT / e))
-                                                             for e in entries]
+    top_readme = workdir / "zip_README.md"
+    top_readme.write_text(zip_readme(entries, git, sheets), encoding="utf-8")
+    files = [(f"{ZIP_TOP}/README.md", top_readme)] + [(f"{ZIP_TOP}/{e}", overrides.get(e, ROOT / e))
+                                                      for e in entries]
     tmp = workdir / ZIP_NAME
     total = 0
     with zipfile.ZipFile(tmp, "w") as z:
@@ -1111,8 +1448,7 @@ def build_zip(workdir: Path, overrides: dict[str, Path]) -> dict:
             zi.external_attr = 0o644 << 16
             zi.create_system = 3
             data = src.read_bytes()
-            if arc != f"{ZIP_TOP}/README.md":
-                scan_private(arc, data)
+            scan_private(arc, data)
             total += len(data)
             z.writestr(zi, data, compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
     with zipfile.ZipFile(tmp) as z:
@@ -1156,6 +1492,8 @@ def write_readme(results: dict, zipres: dict, sheets, git: dict, versions: dict,
     L.append(f"- Package date: {PACKAGE_DATE}")
     commit = f"`{git['short']}` (`{git['full']}`)" if git["full"] != "unknown" else "unknown (no git)"
     L.append(f"- Inputs from git commit: {commit}")
+    if commit_url(git):
+        L.append(f"- That commit's files: {commit_url(git)} (the branch, which moves on: {REPO_URL})")
     if git["full"] == "unknown":
         L.append("- Built outside a git checkout, so the commit and any local changes are not known.")
     elif git["dirty"]:
@@ -1164,17 +1502,27 @@ def write_readme(results: dict, zipres: dict, sheets, git: dict, versions: dict,
                  + "). Commit them and rebuild for a package that matches a commit exactly.")
     else:
         L.append("- The inputs had no uncommitted changes: the package matches that commit.")
-    L.append(f"- Repository: {REPO_URL}\n")
+    L.append(f"- Repository: {REPO_URL}")
+    L.append("- The SOURCE line in each drawing title block names the last commit that changed the CAD sources, "
+             "which can be older than the commit above.\n")
     L.append("## Files\n")
     L.append("| File | What it is | Size | Pages |")
     L.append("|---|---|---:|---:|")
+    full = complete_volume()
     for vol in VOLUMES:
         r = results[vol["file"]]
-        L.append(f"| `{vol['file']}` | {vol['what']} | {human(r['bytes'])} | {r['pages']} |")
-    L.append(f"| `{ZIP_NAME}` | The CAD files: {zipres['manifest_count']} files from `cad_manifest.txt` "
+        what = vol["what"]
+        missing = [doc_short_name(p) for p in full["parts"] if p != DRAWINGS and p not in vol["parts"]]
+        if missing and vol is not full:
+            what += f" Not in it: {', '.join(missing)} (they are in `{full['file']}`)."
+        if r.get("review_page"):
+            what += f" The review questions start on page {r['review_page']}."
+        L.append(f"| `{vol['file']}` | {what} | {human(r['bytes'])} | {r['pages']} |")
+    L.append(f"| `{ZIP_NAME}` | The CAD files: the {zipres['manifest_count']} files in `cad_manifest.txt` "
              f"(assembly STEP and GLB, printed-part STEP and STL, print list, cut list, probe-flag DXF/SVG, "
-             f"geometry-check results, the drawing set PDF, `docs/BOM.csv`) under `{ZIP_TOP}/` with their repo "
-             f"paths, plus `cad/README.md` again as `{ZIP_TOP}/README.md`. {human(zipres['raw'])} unzipped. | "
+             f"geometry-check results, the drawing set PDF, `docs/BOM.csv`, `cad/README.md`) under `{ZIP_TOP}/` "
+             f"with their repo paths, plus a short `{ZIP_TOP}/README.md` written for the zip (what is in it, "
+             f"units, coordinates, poses, where the sources are). {human(zipres['raw'])} unzipped. | "
              f"{human(results[ZIP_NAME]['bytes'])} | |")
     L.append("| `build_package.py` | The script that builds everything here. | | |")
     L.append("| `cad_manifest.txt` | The list of files that go into the zip, one repo-relative path per line. | | |")
@@ -1188,8 +1536,8 @@ def write_readme(results: dict, zipres: dict, sheets, git: dict, versions: dict,
         L.append("| 2 | Contents | |")
         for part in vol["parts"]:
             if part == DRAWINGS:
-                L.append(f"| {r['draw_at']} | Drawing set, {len(sheets)} sheets ({sheets[0][0]} to {sheets[-1][0]}), "
-                         f"ANSI B landscape, merged as-is | `{DRAWINGS_PDF}` |")
+                L.append(f"| {r['draw_at']} | {drawing_label(sheets)}, {len(sheets)} sheets, landscape, merged "
+                         f"as-is | `{DRAWINGS_PDF}` |")
                 continue
             title, path, pg = next(x for x in r["docs"] if x[1] == part)
             L.append(f"| {pg} | {title} | `{path}` |")
@@ -1284,7 +1632,7 @@ def main() -> int:
         draw_sha = sha256(draw_path)
         sheets = read_sheets(draw_path, args.allow_incomplete_drawings)
         log(f"  drawing set: {len(sheets)} sheets, {sheets[0][0]} to {sheets[-1][0]}")
-        zipres = build_zip(workdir, {DRAWINGS_PDF: draw_path})
+        zipres = build_zip(workdir, {DRAWINGS_PDF: draw_path}, git, sheets)
         printer = Printer(workdir)
         versions["Chromium"] = printer.version
         try:
@@ -1299,8 +1647,10 @@ def main() -> int:
             info = check_pdf(r["tmp"])
             if info["pages"] != r["pages"]:
                 raise BuildError(f"{name}: page count changed on re-reading")
+            (rv, rpages) = r["review"]
             results[name] = {"bytes": r["tmp"].stat().st_size, "pages": r["pages"], "sha256": sha256(r["tmp"]),
-                             "draw_at": r["draw_at"], "docs": r["docs"]}
+                             "draw_at": r["draw_at"], "docs": r["docs"],
+                             "review_page": rpages.get(rv[0]) if rv else None}
             staged[name] = r["tmp"]
         results[ZIP_NAME] = {"bytes": zipres["tmp"].stat().st_size, "sha256": sha256(zipres["tmp"])}
         staged[ZIP_NAME] = zipres["tmp"]
