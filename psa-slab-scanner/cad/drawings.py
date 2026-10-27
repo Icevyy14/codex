@@ -1032,8 +1032,9 @@ def make_view(sheet: Sheet, shape, vname: str, scale: Scale, x: float, y: float,
     return v
 
 
-def break_marks(v: View, amp: float = 0.8, wave: float = 4.0, cluster: float = 6.0):
-    """Thin wavy break lines along the window edges where the view's visible edges are cut off (clipped views)."""
+def break_marks(v: View, amp: float = 0.8, wave: float = 4.0, cluster: float = 45.0):
+    """Thin wavy break lines along the window edges where the view's visible edges are cut off (clipped views); cuts less
+    than `cluster` model mm apart (one extrusion's two faces) share one line."""
     k = v.k
     edges = {"bottom": (1, v.v0, -1, (v.u0, v.u1)), "top": (1, v.v1, 1, (v.u0, v.u1)), "left": (0, v.u0, -1, (v.v0, v.v1)),
              "right": (0, v.u1, 1, (v.v0, v.v1))}  # (page axis, window line, outside sign, extent along the line)
@@ -1053,7 +1054,7 @@ def break_marks(v: View, amp: float = 0.8, wave: float = 4.0, cluster: float = 6
         hits.sort()
         groups = [[hits[0], hits[0]]]
         for w in hits[1:]:
-            if (w - groups[-1][1]) / k < cluster:
+            if w - groups[-1][1] < cluster:
                 groups[-1][1] = w
             else:
                 groups.append([w, w])
@@ -2079,7 +2080,7 @@ def sheet_frame(sh: Sheet, geo: Geo, plan):
         (("bb", akey("z_leadscrew"), "zlen"), "z_leadscrew Z", 8, S15, {"rod": True}, "T8x8 Z screw, length below the motor face: cut the motor's 400 mm screw; 311-356 works (cut_list.csv)", [], "311-356"),
         (None, None, None, None, None, "probe flag blank: D-06", [], "D-06"),
         (("bb", "p0/p0_post_1", "zlen"), "p0_post_1 Z", 20, S15, {}, "Phase 0 jig post; cut square", [], "+/-0.5"),
-        (("bb", "p0/p0_arm_stub", "zlen"), "p0_arm_stub Z", 20, S15, {"holes": [(s19.value, hd.value)]}, f"Phase 0 jig arm stub; cross hole {s19.text} from one end, match-drilled through head_foot", [s19], "+/-0.5"),
+        (("bb", "p0/p0_arm_stub", "zlen"), "p0_arm_stub Z", 20, S15, {"holes": [(s19.value, hd.value)]}, f"Phase 0 jig arm stub; Ø{hd.text} THRU cross hole {s19.text} from one end, match-drilled through head_foot (BUILD_GUIDE 1.5)", [hd, s19], "+/-0.5"),
         (None, None, None, None, None, "carry-sensor flag: D-06", [], "D-06"),
         (("bb", akey("rod_00"), "zlen"), "rod_00 Z", 8, S15, {"dome": True, "rod": True}, f"guide rod; dome the top R{dome.text}-3 (ROD_DOME_R; BUILD_GUIDE 5.4), chamfer the bottom lightly", [dome], "PROPOSED +/-0.5"),
     ]
