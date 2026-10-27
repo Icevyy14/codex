@@ -173,7 +173,14 @@ def git_info(inputs: list[str]) -> dict:
         info["date"] = run(["git", "-C", str(ROOT), "log", "-1", "--format=%cs", "HEAD"], text=True).stdout.strip()
         st = run(["git", "-C", str(ROOT), "status", "--porcelain", "--untracked-files=all", "--", *inputs],
                  text=True).stdout
-        info["dirty"] = sorted({line[3:].strip() for line in st.splitlines() if line.strip()})
+        prefix = run(["git", "-C", str(ROOT), "rev-parse", "--show-prefix"], text=True).stdout.strip()
+        dirty = set()
+        for line in st.splitlines():
+            if not line.strip():
+                continue
+            path = line[3:].split(" -> ")[-1].strip().strip('"')
+            dirty.add(path[len(prefix):] if prefix and path.startswith(prefix) else path)
+        info["dirty"] = sorted(dirty)
     except BuildError as e:
         warn(f"git information not available ({str(e).splitlines()[0]})")
     return info

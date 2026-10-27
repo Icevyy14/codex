@@ -124,7 +124,7 @@ The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Verification done so far (no hardware)
 
-- **[Certain] All 177 CAD checks pass** (`cad/checks.py`, re-run on 23 Oct 2026, about 12–15 min;
+- **[Certain] All 177 CAD checks pass** (`cad/checks.py`, re-run on 27 Oct 2026 after the printed-mesh fix, about 12–17 min;
   every number is in `cad/out/checks.txt`, so trust that file over this list).
   - Picking the last slab of every pocket with full neighbours clears them by ≥ 14.5 mm.
   - Carried slabs clear the dowels by ≥ 21 mm; a double pick of two thick holders by ≥ 5 mm.
@@ -153,9 +153,10 @@ The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
     over about 1.3° toward the cup puts the cup pad in the card window (1.34° in the CAD check). The
     software checks a tilt toward the cup on every learned run; it does not see a tilt away from
     the cup, a roll along the row, or a head part as dark as the pad.
-- **[Certain] Software tests: `299 passed, 1 skipped in 1135.84s (0:18:55)`** (full suite,
-  23 Oct 2026; the skipped test runs the rules on the real image set when it is pointed at it:
-  on its own it gave `1 passed, 61 deselected in 137.29s (0:02:17)`). The simulator **raises a crash on any unsafe move**. Every
+- **[Certain] Software tests: `300 passed, 1 skipped in 1410.97s (0:23:30)`** (full suite,
+  27 Oct 2026, while the CAD checks shared the machine; the skipped test runs the rules on the real
+  image set when it is pointed at it: on its own it gave `1 passed, 61 deselected in 137.29s
+  (0:02:17)` on 23 Oct). The simulator **raises a crash on any unsafe move**. Every
   slab is moved exactly once and read. The tests also cover:
   - the real payload strings of PSA and CGC labels (QR forms, ITF, Code128, the 13-digit CGC cert,
     the phantom read, which can no longer confirm itself or drop the real number),

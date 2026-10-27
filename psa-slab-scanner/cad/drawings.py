@@ -1017,7 +1017,8 @@ def _hit(a, b) -> bool:
 
 
 def make_view(sheet: Sheet, shape, vname: str, scale: Scale, x: float, y: float, label=None, hidden=True, lw=LW_VIS,
-              window=None, hid_color=HIDDEN, color=INK, defl=None, clip=False) -> View:
+              window=None, hid_color=HIDDEN, color=INK, defl=None, clip=False, breaks=True) -> View:
+    """clip: cut the drawing at the window; breaks: then mark each place an edge leaves the window with a break line."""
     shape = _wrapped(shape)
     win = window or proj_box(vname, bbox(shape))
     v = View(sheet, vname, win, scale, x, y, label)
@@ -1026,7 +1027,42 @@ def make_view(sheet: Sheet, shape, vname: str, scale: Scale, x: float, y: float,
         v.polys(hid, lw=LW_HID, color=hid_color, ls=DASH_HID, track=False, clip=clip)
     v.polys(vis, lw=lw, color=color, clip=clip)
     v.vis, v.hid = vis, hid
+    if clip and breaks:
+        break_marks(v)
     return v
+
+
+def break_marks(v: View, amp: float = 0.8, wave: float = 4.0, cluster: float = 6.0):
+    """Thin wavy break lines along the window edges where the view's visible edges are cut off (clipped views)."""
+    k = v.k
+    edges = {"bottom": (1, v.v0, -1, (v.u0, v.u1)), "top": (1, v.v1, 1, (v.u0, v.u1)), "left": (0, v.u0, -1, (v.v0, v.v1)),
+             "right": (0, v.u1, 1, (v.v0, v.v1))}  # (page axis, window line, outside sign, extent along the line)
+    for _, (ax, c, sg, (lo, hi)) in edges.items():
+        hits = []
+        for p in v.vis:
+            for p0, p1 in zip(p[:-1], p[1:]):
+                d0, d1 = sg * (p0[ax] - c), sg * (p1[ax] - c)  # > 0: outside the window
+                if not ((d0 > 1e-6) != (d1 > 1e-6)) or max(d0, d1) <= 1e-6:
+                    continue  # both outside, or both inside / on the line: not cut here
+                t = d0 / (d0 - d1)
+                w = p0[1 - ax] + t * (p1[1 - ax] - p0[1 - ax])
+                if lo + 1e-6 < w < hi - 1e-6:
+                    hits.append(w)
+        if not hits:
+            continue
+        hits.sort()
+        groups = [[hits[0], hits[0]]]
+        for w in hits[1:]:
+            if (w - groups[-1][1]) / k < cluster:
+                groups[-1][1] = w
+            else:
+                groups.append([w, w])
+        for g0, g1 in groups:
+            w0, w1 = max(lo, g0 - 1.5 * k), min(hi, g1 + 1.5 * k)
+            ws = np.linspace(w0, w1, max(8, int((w1 - w0) / k / 0.5)))
+            off = amp * k * np.sin(2 * math.pi * (ws - w0) / (wave * k))
+            pts = np.column_stack([ws, c + off]) if ax == 1 else np.column_stack([c + off, ws])
+            v.polys([pts], lw=0.35, track=False)
 
 
 HATCH = {"printed": "//", "purchased": "\\\\", "made": "xx", "wood": "--"}  # per part kind; slabs (clear acrylic) are not hatched
@@ -2101,10 +2137,14 @@ def sheet_bed(sh: Sheet, geo: Geo, plan):
     sh.text(16.0, TOP - 10.0, "gate posts; base rails and feet hidden", weight="bold", va="top")
     g = lambda n, w: bb_value(geo.shape(akey(n)), w)  # noqa: E731
     # datum O
-    vp.seg((-12.0, 0.0), (12.0, 0.0), lw=0.6, owner=-3)
-    vp.seg((0.0, -12.0), (0.0, 12.0), lw=0.6, owner=-3)
-    vp.ax.add_patch(Circle((0.0, 0.0), 4.0, fill=False, lw=0.6, clip_on=False))
-    vp.text(6.0, -16.0, "DATUM O", weight="bold", va="top", ha="left")  # inside pad 0's outline, clear of its lines
+    from matplotlib.patches import Wedge
+
+    vp.seg((-14.0, 0.0), (14.0, 0.0), lw=0.6, owner=-3)
+    vp.seg((0.0, -14.0), (0.0, 14.0), lw=0.6, owner=-3)
+    vp.ax.add_patch(Circle((0.0, 0.0), 9.0, fill=False, lw=0.6, clip_on=False))  # origin symbol: two quadrants filled
+    for a0 in (0.0, 180.0):
+        vp.ax.add_patch(Wedge((0.0, 0.0), 9.0, a0, a0 + 90.0, facecolor=INK, edgecolor=INK, lw=0.3, clip_on=False))
+    vp.text(2.0, -16.0, "DATUM O", weight="bold", va="top", ha="left")  # inside pad 0's outline, clear of its lines
     vp.centerline((b[0] - 20, 0.0), (b[3] + 20, 0.0), lw=0.35)
     # pocket centres along the top
     items = []
@@ -2197,8 +2237,8 @@ def sheet_bed(sh: Sheet, geo: Geo, plan):
     sel += [parts[nm].shape for nm in ("bed_plywood", "pad_0", "pad_1")]
     shp = compound(sel)
     u0, u1 = rx - 24.0, rx + 24.0
-    vlo = make_view(sh, shp, "front", S12, 172.0, 62.0, hidden=True, window=(u0, -24.0, u1, 10.0), clip=True)
-    vhi = make_view(sh, shp, "front", S12, 172.0, 62.0 + vlo.h + 9.0, hidden=True, window=(u0, 202.0, u1, 224.0), clip=True)
+    vlo = make_view(sh, shp, "front", S12, 172.0, 62.0, hidden=True, window=(u0, -24.0, u1, 10.0), clip=True, breaks=False)
+    vhi = make_view(sh, shp, "front", S12, 172.0, 62.0 + vlo.h + 9.0, hidden=True, window=(u0, 202.0, u1, 224.0), clip=True, breaks=False)
     for vv, vb in ((vlo, 10.0), (vhi, 202.0)):
         xs_ = np.linspace(u0, u1, 9)
         zz = [vb + (1.2 if i % 2 else -1.2) * 2 for i in range(9)]
@@ -2233,11 +2273,11 @@ def sheet_bed(sh: Sheet, geo: Geo, plan):
     yb, cells = sh.table(tx, 137.0, rows, [40.0, 40.0, 70.0])
     _attach({i: [a for r_, c_, a in cells if r_ == i] for i in (1, 2, 3)}, [{"recs": []}, {"recs": [rl, rw, rt]}, {"recs": [npads, pw, pl, pt]}, {"recs": [nrods]}])
     t = sh.wrap(tx, yb - 3.0,
-                f"Datum O = machine origin, X 0 and Y 0 (the pocket-row centre line), as the software uses them; X ordinates from O. The rod holes are "
-                f"NOT laid out from the bed edges: the machine drills them through drill_template, so beam skew and belt stretch are built in "
-                f"(BUILD_GUIDE 5.6). Station mount: cell {stc.text}, four #8 wood screws, no pad. Gate posts: bare plywood, no shim (5.9).", PW - 14.0 - tx)
+                f"Datum O = machine origin (X 0; Y 0 = the pocket-row centre line), as the software uses it; X ordinates from O. The machine "
+                f"drills the rod holes through drill_template, so they are not laid out from the bed edges (BUILD_GUIDE 5.6). Station mount: "
+                f"cell\u00a0{stc.text}, four #8 wood screws, no pad. Gate posts: bare plywood, no shim (5.9).", PW - 14.0 - tx)
     for a in sh.pg.texts[-8:]:
-        if f"cell {stc.text}," in a.get_text():
+        if f"cell\u00a0{stc.text}," in a.get_text():
             stc.artist = a
     # rod holes: callout on the plan + the pattern in words (the bed itself has no holes in the CAD: the rods pass into it)
     rdc = C("ROD_D")
@@ -2260,10 +2300,10 @@ def sheet_bed(sh: Sheet, geo: Geo, plan):
            "pocket 0 back rods: right rod X - left rod X")
     stc2 = C("STATION_CELL", unit="count")
     sh.wrap_recs(tx, t - 2.5,
-                 f"ROD HOLES: {nr2.text}x Ø{rdc.text} (CAD ROD_D; drill with the brad-point bit that matches the dowels: 5/16 in for the BOM's 7.94 "
-                 f"dowels), {emc.text} deep (ROD_EMBED), square to the bed (guide block, BUILD_GUIDE 5.6). Side rods on the cell wall lines, first "
-                 f"X {f0.text}, then every {pit.text}, at Y ±{sr.text}; front/back rods in pairs {fp.text} apart about each pocket centre, at "
-                 f"Y ±{fr.text}; none front/back in the station cell {stc2.text}.", PW - 14.0 - tx, [nr2, rdc, emc, f0, pit, sr, fr, fp, stc2])
+                 f"ROD HOLES: {nr2.text}x Ø{rdc.text} (ROD_D; brad-point bit to suit the dowels: 5/16 in for the BOM's 7.94 dowels) x {emc.text} deep "
+                 f"(ROD_EMBED), square to the bed (guide block, 5.6). Side rods on the wall lines: X\u00a0{f0.text}, then every {pit.text}, at "
+                 f"Y\u00a0±{sr.text}. Front/back rods: pairs {fp.text} apart about each pocket centre, at Y\u00a0±{fr.text}; none in cell {stc2.text}.",
+                 PW - 14.0 - tx, [nr2, rdc, emc, f0, pit, sr, fr, fp, stc2])
 
 
 SHEET_FUNCS["bed"] = sheet_bed
@@ -2502,8 +2542,8 @@ def sheet_flat(sh: Sheet, geo: Geo, plan):
     vb.dim(tl, pts[i_top_out], "h", 12.0, r_tot, pre="(", post=") blank, reference")  # = tab half width + blade outer edge
     vb.dim((0.0, pts[i_bot_in][1]), pts[i_bot_in], "h", -5.0, r_bi)
     vb.dim((0.0, pts[i_bot_out][1]), pts[i_bot_out], "h", -12.0, r_bo)
-    vb.dim((pts[i_top_out][0], 0.0), pts[i_top_out], "v", 5.0, r_top, post=" to the\ntrip edge", text_at="left")  # in the open corner right of the neck
-    vb.dim((pts[i_bot_out][0], 0.0), pts[i_bot_out], "v", 15.0, r_bot)
+    vb.dim((pts[i_top_out][0], 0.0), pts[i_top_out], "v", 5.0, r_top, post=" to the\ntrip edge")
+    vb.dim((pts[i_bot_out][0], 0.0), pts[i_bot_out], "v", 28.0, r_bot)  # outside the 8.5 dimension's text
     vb.dim((tl[0], 0.0), pts[i_band], "v", -5.0, r_band)
     vb.dim((tl[0], 0.0), tl, "v", -5.0, r_tabv, post=" (trim)")
     # the bent flag, for reference
