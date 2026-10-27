@@ -814,7 +814,8 @@ the rods vertical. [Certain, by construction of the drill-template method]
   rod holes. (BOM.md)
 
 **5.2 Cut the two upright notches** at the back corners, one at each end.
-- Each notch is 41 mm along X (open to the end) by 41 mm along Y.
+- Each notch is 40.5 mm along X from the bed's end (open to the end) by 41 mm along Y. [Certain,
+  CAD: a 41 mm cut centred on the upright, and the bed ends 0.5 mm inside it; drawing D-03]
 - It runs from **24.5 mm to 65.5 mm in from the back edge** (Y 106.5 … 147.5). [Certain, CAD]
 - Jigsaw or bandsaw, then file to fit. The upright must drop in without forcing.
 
@@ -936,8 +937,9 @@ glue's full strength, or ream the hole and re-glue.
     `STATION_READ_C = 23 + 140 + 6.6 + 2`, the last 2 mm being the free cup's hang below its
     calibrated height]
 - **Gate posts:**
-  - Left post at X = −20 (laser), right post at X = 1300 (receiver), both on Y = 0. [Certain,
-    `model.py`]
+  - Left post centred at X = −24 (laser), right post centred at X = 1304 (receiver), both on
+    Y = 0; each foot is 22 mm along X. [Certain, CAD bounding box; drawing D-03. The part origins
+    in `model.py` are X = −20 / 1300]
   - **They stand on the bare plywood, with no shim.** The CAD puts the barrel 217 mm above the
     foot, so the beam lands at 214 mm above the pad top. [Certain, `model.gate_post`] A shim would
     lift the beam to 217 mm, and a stack up to about 216 mm would then pass the overfill check.

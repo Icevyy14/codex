@@ -27,11 +27,11 @@ from __future__ import annotations
 
 import argparse
 import base64
-import datetime as dt
 import hashlib
 import html
 import io
 import json
+import logging
 import os
 import re
 import shutil
@@ -106,9 +106,35 @@ class BuildError(RuntimeError):
 WARNINGS: list[str] = []
 
 
+def scrub(msg: str) -> str:
+    """Keep this machine's paths out of messages that end up in README.md."""
+    msg = msg.replace(str(ROOT) + "/", "").replace(str(ROOT), ".")
+    return re.sub(r"(?<![\w.])/(?:tmp|home|root|Users|var)/\S*", "<local path>", msg)
+
+
 def warn(msg: str) -> None:
+    msg = scrub(msg)
     WARNINGS.append(msg)
     print(f"  WARNING: {msg}", flush=True)
+
+
+LOCAL_PATH = re.compile(rb"(?<![\w.~])/(?:tmp|home|root|Users)/[\w.-]+")
+EMAIL = re.compile(rb"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
+
+
+def scan_private(name: str, data: bytes) -> None:
+    """Fail on a path from this machine; list e-mail addresses as warnings."""
+    hits = {m.group(0).decode(errors="replace") for m in LOCAL_PATH.finditer(data)}
+    if str(ROOT).encode() in data:
+        hits.add("<the repo's absolute path>")
+    if hits:
+        raise BuildError(f"{name} contains local paths: {sorted(hits)[:5]}")
+    if b"\0" in data[:8192]:  # binary (STL, GLB): random bytes can look like an address
+        return
+    mails = sorted({m.group(0).decode(errors="replace") for m in EMAIL.finditer(data)})
+    if mails:  # the addresses go to the console only, never into README.md
+        warn(f"{name} contains {len(mails)} e-mail address(es) from the source documents")
+        log(f"    address(es): {', '.join(mails[:5])}")
 
 
 def log(msg: str) -> None:
@@ -116,15 +142,21 @@ def log(msg: str) -> None:
 
 
 def rel(p: Path) -> str:
-    return p.resolve().relative_to(ROOT).as_posix()
+    try:
+        return p.resolve().relative_to(ROOT).as_posix()
+    except ValueError:
+        return p.name
 
 
-def repo_url_for(path: str) -> str:
+def repo_url_for(path: str, folder: bool = False, frag: str = "") -> str:
     """Web link to one file or folder of the repo, built from REPO_URL alone."""
+    kind = "/tree/" if folder else "/blob/"
     path = path.strip("/")
     if "/tree/" in REPO_URL:  # .../tree/<branch>/<folder>  ->  .../blob/<branch>/<folder>/<file>
-        return REPO_URL.replace("/tree/", "/blob/", 1).rstrip("/") + "/" + path
-    return REPO_URL.rstrip("/") + "/blob/HEAD/" + path  # a repo root: the default branch
+        url = REPO_URL.replace("/tree/", kind, 1).rstrip("/") + "/" + path
+    else:  # REPO_URL is a repository root: use its default branch
+        url = REPO_URL.rstrip("/") + kind + "HEAD/" + path
+    return url + (f"#{frag}" if frag else "")
 
 
 def doc_key(path: str) -> str:
@@ -167,22 +199,26 @@ def check_tools() -> dict:
 
 def git_info(inputs: list[str]) -> dict:
     info = {"short": "unknown", "full": "unknown", "date": "", "dirty": []}
+
+    def git(*a: str) -> str:
+        return run(["git", *a], text=True, cwd=ROOT).stdout.strip()
+
     try:
-        info["full"] = run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True).stdout.strip()
-        info["short"] = run(["git", "-C", str(ROOT), "rev-parse", "--short=7", "HEAD"], text=True).stdout.strip()
-        info["date"] = run(["git", "-C", str(ROOT), "log", "-1", "--format=%cs", "HEAD"], text=True).stdout.strip()
-        st = run(["git", "-C", str(ROOT), "status", "--porcelain", "--untracked-files=all", "--", *inputs],
-                 text=True).stdout
-        prefix = run(["git", "-C", str(ROOT), "rev-parse", "--show-prefix"], text=True).stdout.strip()
+        info["full"] = git("rev-parse", "HEAD")
+        info["short"] = git("rev-parse", "--short=7", "HEAD")
+        info["date"] = git("log", "-1", "--format=%cs", "HEAD")
+        st = run(["git", "status", "--porcelain", "--untracked-files=all", "--", *inputs],
+                 text=True, cwd=ROOT).stdout  # not stripped: each line starts with a 2-letter status
+        prefix = git("rev-parse", "--show-prefix")
         dirty = set()
         for line in st.splitlines():
-            if not line.strip():
+            if len(line) < 4:
                 continue
             path = line[3:].split(" -> ")[-1].strip().strip('"')
             dirty.add(path[len(prefix):] if prefix and path.startswith(prefix) else path)
         info["dirty"] = sorted(dirty)
-    except BuildError as e:
-        warn(f"git information not available ({str(e).splitlines()[0]})")
+    except BuildError:
+        warn("git information not available (not a git checkout, or git is missing): commit shown as unknown")
     return info
 
 
@@ -374,7 +410,7 @@ def prepare_fragment(doc: Doc, volume_docs: dict[str, Doc]) -> str:
                                                          [image_data_uri(p), ""]]}]},
                 {"t": "Para", "c": [{"t": "Emph", "c": [{"t": "Str", "c": f"Figure: {rp}"}]}]}]]})
             return
-        el["c"][2][0] = repo_url_for(rp)
+        el["c"][2][0] = repo_url_for(rp, folder=p.is_dir(), frag=frag)
 
     def fix_image(el):
         attr, alt, (src, ttl) = el["c"]
@@ -462,12 +498,13 @@ def prepare_fragment(doc: Doc, volume_docs: dict[str, Doc]) -> str:
 def read_sheets(pdf_path: Path, allow_incomplete: bool = False) -> list[tuple[str, str]]:
     """(sheet number, title) for each page of the drawing PDF, in page order."""
     from pypdf import PdfReader
-    if not pdf_path.is_file():
-        raise BuildError(f"drawing set missing: {rel(pdf_path)}")
-    r = PdfReader(pdf_path)
+    try:
+        r = PdfReader(pdf_path)
+        texts = [p.extract_text() or "" for p in r.pages]
+    except Exception as e:  # a truncated file, e.g. one that is still being written
+        raise BuildError(f"cannot read the drawing set {DRAWINGS_PDF}: {type(e).__name__}: {e}") from e
     if not r.pages:
         raise BuildError("the drawing set has no pages")
-    texts = [p.extract_text() or "" for p in r.pages]
     index: dict[str, str] = {}
     lines = texts[0].splitlines()
     if "SHEET INDEX" in lines:
@@ -477,7 +514,7 @@ def read_sheets(pdf_path: Path, allow_incomplete: bool = False) -> list[tuple[st
                 index[m.group(1)] = m.group(2)
             elif index:
                 break
-    sheets = []
+    sheets, not_indexed = [], []
     for i, t in enumerate(texts):
         m = re.search(r"SHEET\s+(D-\d{2})\s+of\s+(D-\d{2})", t)
         if not m:
@@ -487,8 +524,11 @@ def read_sheets(pdf_path: Path, allow_incomplete: bool = False) -> list[tuple[st
         if not title:  # fall back to the title block: the line after the sheet number
             after = t[m.end():].lstrip("\n").splitlines()
             title = re.sub(r"\s+SCALE\b.*$", "", after[0]).strip() if after else num
-            warn(f"sheet {num} is not in the D-00 index; title taken from the title block: {title}")
+            not_indexed.append(num)
         sheets.append((num, title))
+    if not_indexed:
+        warn(f"sheet(s) {', '.join(not_indexed)} not found in the D-00 sheet index; their titles come "
+             f"from the title blocks")
     nums = [s[0] for s in sheets]
     if len(set(nums)) != len(nums):
         raise BuildError(f"drawing set: repeated sheet numbers {nums}")
@@ -753,7 +793,24 @@ def norm(s: str) -> str:
     return re.sub(r"[^0-9a-z]+", "", s.lower())
 
 
-def build_volume(vol: dict, printer: Printer, sheets, git: dict, workdir: Path) -> dict:
+def check_images(doc: Doc) -> None:
+    """Fail before any rendering if a document shows an image that is not in the repo."""
+    def w(x):
+        if isinstance(x, dict):
+            if x.get("t") == "Image":
+                src = x["c"][2][0]
+                if not urlparse(src).scheme and not (doc.dir / unquote(src.partition("#")[0])).is_file():
+                    raise BuildError(f"{doc.path}: image not found: {src}")
+            for v in x.values():
+                w(v)
+        elif isinstance(x, list):
+            for v in x:
+                w(v)
+    w(doc.ast["blocks"])
+
+
+def build_volume(vol: dict, printer: Printer, sheets, git: dict, workdir: Path, all_docs: dict,
+                 draw_path: Path) -> dict:
     from pypdf import PdfReader, PdfWriter
     from pypdf.generic import ArrayObject, ByteStringObject, NameObject, NullObject, NumberObject
     from pypdf.generic import Fit
@@ -761,14 +818,14 @@ def build_volume(vol: dict, printer: Printer, sheets, git: dict, workdir: Path) 
     t0 = time.time()
     log(f"\n== {vol['file']}")
     doc_parts = [p for p in vol["parts"] if p != DRAWINGS]
-    docs = {p: Doc(p) for p in doc_parts}
+    docs = {p: all_docs[p] for p in doc_parts}
     keyed = {d.key: d for d in docs.values()}
     if len(keyed) != len(docs):
         raise BuildError("two documents map to the same key")
     frags = {p: prepare_fragment(d, keyed) for p, d in docs.items()}
-    log(f"  {len(docs)} documents converted ({time.time() - t0:.1f} s)")
+    log(f"  {len(docs)} documents converted to HTML ({time.time() - t0:.1f} s)")
 
-    draw_reader = PdfReader(ROOT / DRAWINGS_PDF)
+    draw_reader = PdfReader(draw_path)
     n_draw = len(draw_reader.pages)
     has_draw = DRAWINGS in vol["parts"]
     after_draw = None  # first document after the drawing set
@@ -779,6 +836,9 @@ def build_volume(vol: dict, printer: Printer, sheets, git: dict, workdir: Path) 
     pages = None
     for attempt in range(1, 5):
         html_text = volume_html(vol, docs, frags, sheets, git, pages)
+        if attempt == 1:
+            scan_private(f"{vol['file']} (HTML)", re.sub(r"data:[\w/+.-]+;base64,[A-Za-z0-9+/=]+", "",
+                                                        html_text).encode())
         pdf_path = printer.pdf(html_text, f"{Path(vol['file']).stem}_pass{attempt}")
         reader = PdfReader(pdf_path)
         n_html = len(reader.pages)
@@ -996,8 +1056,18 @@ def check_pdf(path: Path) -> dict:
                 if x.get("/Subtype") == "/Form":
                     fonts_in(x.get("/Resources"))
 
+    uris = []
     for p in r.pages:
         fonts_in(p.get("/Resources"))
+        for a in p.get("/Annots") or []:
+            act = a.get_object().get("/A")
+            if act is not None and act.get("/S") == "/URI":
+                uris.append(str(act.get("/URI")))
+    meta = " ".join(str(v) for v in (r.metadata or {}).values())
+    data = ("\n".join(uris) + "\n" + meta).encode()
+    hits = {m.group(0).decode() for m in LOCAL_PATH.finditer(data)}
+    if hits or any(u.startswith("file:") for u in uris):
+        raise BuildError(f"{path.name}: local paths in links or metadata: {sorted(hits)[:5]}")
     if not_embedded:
         raise BuildError(f"{path.name}: fonts not embedded: {sorted(not_embedded)}")
     if type3:
@@ -1006,7 +1076,7 @@ def check_pdf(path: Path) -> dict:
     return {"pages": len(r.pages), "mb": size_mb}
 
 
-def build_zip(workdir: Path) -> dict:
+def build_zip(workdir: Path, overrides: dict[str, Path]) -> dict:
     t0 = time.time()
     log(f"\n== {ZIP_NAME}")
     mpath = ROOT / CAD_MANIFEST
@@ -1030,7 +1100,8 @@ def build_zip(workdir: Path) -> dict:
     if not (ROOT / CAD_README).is_file():
         raise BuildError(f"missing {CAD_README}")
     stamp = tuple(int(x) for x in PACKAGE_DATE.split("-")) + (0, 0, 0)
-    files = [(f"{ZIP_TOP}/README.md", ROOT / CAD_README)] + [(f"{ZIP_TOP}/{e}", ROOT / e) for e in entries]
+    files = [(f"{ZIP_TOP}/README.md", ROOT / CAD_README)] + [(f"{ZIP_TOP}/{e}", overrides.get(e, ROOT / e))
+                                                             for e in entries]
     tmp = workdir / ZIP_NAME
     total = 0
     with zipfile.ZipFile(tmp, "w") as z:
@@ -1040,6 +1111,8 @@ def build_zip(workdir: Path) -> dict:
             zi.external_attr = 0o644 << 16
             zi.create_system = 3
             data = src.read_bytes()
+            if arc != f"{ZIP_TOP}/README.md":
+                scan_private(arc, data)
             total += len(data)
             z.writestr(zi, data, compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
     with zipfile.ZipFile(tmp) as z:
@@ -1083,7 +1156,9 @@ def write_readme(results: dict, zipres: dict, sheets, git: dict, versions: dict,
     L.append(f"- Package date: {PACKAGE_DATE}")
     commit = f"`{git['short']}` (`{git['full']}`)" if git["full"] != "unknown" else "unknown (no git)"
     L.append(f"- Inputs from git commit: {commit}")
-    if git["dirty"]:
+    if git["full"] == "unknown":
+        L.append("- Built outside a git checkout, so the commit and any local changes are not known.")
+    elif git["dirty"]:
         L.append(f"- **The inputs had uncommitted changes when this was built** ({len(git['dirty'])} file(s): "
                  + ", ".join(f"`{d}`" for d in git["dirty"][:12]) + (", ..." if len(git["dirty"]) > 12 else "")
                  + "). Commit them and rebuild for a package that matches a commit exactly.")
@@ -1148,7 +1223,8 @@ def write_readme(results: dict, zipres: dict, sheets, git: dict, versions: dict,
     L.append("To change the repository link, edit `REPO_URL` at the top of `build_package.py`; the date, title "
              "and status line are next to it. The documents in each PDF and their order are in `VOLUMES`.\n")
     tools = ", ".join(f"{k} {v}" for k, v in versions.items())
-    L.append(f"Last built with {tools}; the build took {elapsed:.0f} s.")
+    L.append(f"Last built with {tools}. With the same inputs and tools the PDFs and the zip come out "
+             f"byte for byte the same (the checksums above).")
     if WARNINGS:
         L.append("\nBuild warnings:\n")
         for w in WARNINGS:
@@ -1169,6 +1245,7 @@ def main() -> int:
 
     t_start = time.time()
     os.chdir(ROOT)
+    logging.getLogger("pypdf").setLevel(logging.ERROR)  # Chromium's PDFs trip harmless xref notices
     log(f"Building the SlabRail package in {rel(OUT)}/")
     versions = check_tools()
 
@@ -1190,33 +1267,58 @@ def main() -> int:
         workdir = Path(tempfile.mkdtemp(prefix="slabrail_pkg_"))
         cleanup = True
     try:
-        sheets = read_sheets(ROOT / DRAWINGS_PDF, args.allow_incomplete_drawings)
+        all_docs = {}
+        for v in VOLUMES:
+            for p in v["parts"]:
+                if p != DRAWINGS and p not in all_docs:
+                    all_docs[p] = Doc(p)
+                    check_images(all_docs[p])
+        if not (ROOT / COVER_IMAGE).is_file():
+            raise BuildError(f"cover image missing: {COVER_IMAGE}")
+        log(f"  {len(all_docs)} documents read")
+        # One copy of the drawing set, read once, goes into both PDFs and the zip.
+        if not (ROOT / DRAWINGS_PDF).is_file():
+            raise BuildError(f"drawing set missing: {DRAWINGS_PDF}")
+        draw_path = workdir / "drawings_snapshot.pdf"
+        shutil.copyfile(ROOT / DRAWINGS_PDF, draw_path)
+        draw_sha = sha256(draw_path)
+        sheets = read_sheets(draw_path, args.allow_incomplete_drawings)
         log(f"  drawing set: {len(sheets)} sheets, {sheets[0][0]} to {sheets[-1][0]}")
-        zipres = build_zip(workdir)
+        zipres = build_zip(workdir, {DRAWINGS_PDF: draw_path})
         printer = Printer(workdir)
         versions["Chromium"] = printer.version
         try:
-            vols = {v["file"]: build_volume(v, printer, sheets, git, workdir) for v in VOLUMES}
+            vols = {v["file"]: build_volume(v, printer, sheets, git, workdir, all_docs, draw_path)
+                    for v in VOLUMES}
         finally:
             printer.close()
 
-        results = {}
+        # Check everything, write the README, and only then replace the old outputs.
+        results, staged = {}, {}
         for name, r in vols.items():
             info = check_pdf(r["tmp"])
             if info["pages"] != r["pages"]:
                 raise BuildError(f"{name}: page count changed on re-reading")
-        for name, r in vols.items():
-            dst = OUT / name
-            os.replace(r["tmp"], dst) if r["tmp"].parent == dst.parent else shutil.move(str(r["tmp"]), dst)
-            results[name] = {"bytes": dst.stat().st_size, "pages": r["pages"], "sha256": sha256(dst),
+            results[name] = {"bytes": r["tmp"].stat().st_size, "pages": r["pages"], "sha256": sha256(r["tmp"]),
                              "draw_at": r["draw_at"], "docs": r["docs"]}
-        dst = OUT / ZIP_NAME
-        shutil.move(str(zipres["tmp"]), dst)
-        results[ZIP_NAME] = {"bytes": dst.stat().st_size, "sha256": sha256(dst)}
-
+            staged[name] = r["tmp"]
+        results[ZIP_NAME] = {"bytes": zipres["tmp"].stat().st_size, "sha256": sha256(zipres["tmp"])}
+        staged[ZIP_NAME] = zipres["tmp"]
+        if (ROOT / DRAWINGS_PDF).is_file() and sha256(ROOT / DRAWINGS_PDF) != draw_sha:
+            warn(f"{DRAWINGS_PDF} changed while the package was being built; the package holds the copy read "
+                 f"at the start. Rebuild once it is final.")
         elapsed = time.time() - t_start
-        (OUT / "README.md").write_text(write_readme(results, zipres, sheets, git, versions, elapsed),
-                                       encoding="utf-8")
+        readme = write_readme(results, zipres, sheets, git, versions, elapsed)
+        scan_private("package/README.md", readme.encode())
+        (workdir / "README.md").write_text(readme, encoding="utf-8")
+        staged["README.md"] = workdir / "README.md"
+        parts = {}
+        for name, src in staged.items():  # copy next to the target, then rename: no half-written outputs
+            part = OUT / f".{name}.part"
+            shutil.copyfile(src, part)
+            parts[name] = part
+        for name, part in parts.items():
+            os.replace(part, OUT / name)
         log("\nWritten:")
         for name in [v["file"] for v in VOLUMES] + [ZIP_NAME, "README.md"]:
             p = OUT / name

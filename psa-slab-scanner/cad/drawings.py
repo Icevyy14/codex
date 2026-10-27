@@ -977,8 +977,10 @@ class View:
         vb = (self.x, self.y, self.x + self.w, self.y + self.h)
         angs = prefer or [45, 135, -45, -135, 90, -90, 0, 180, 22, 158, -22, -158, 68, 112, -68, -112]
         best = None
-        # dimension, leader and centre lines already drawn (not the views' own edges, owner -1): a balloon must not sit on one
+        # dimension, leader and centre lines already drawn (not the views' own edges, owner -1): a balloon must not sit on one,
+        # and its leader must not cross a dimension or another leader (owner > 0)
         lines = [pts for o, pts in self.sheet.segs if o != -1]
+        dims_ = [pts for o, pts in self.sheet.segs if o > 0]
         for dist in (5.5, 8.0, 11.0, 14.0, 18.0, 23.0, 30.0, 38.0, 48.0):
             for a in angs:
                 cx = x0 + (r_pap + dist) * math.cos(math.radians(a))
@@ -993,6 +995,8 @@ class View:
                 # nor may its leader cross a dimension's text
                 la, lb = (x0 + r_pap * math.cos(math.radians(a)), y0 + r_pap * math.sin(math.radians(a))), (cx, cy)
                 if any(_seg_rect(la[0], la[1], lb[0], lb[1], o) for o in self.sheet.occ if o != vb and not _hit(o, vb)):
+                    continue
+                if any(_seg_cross(la, lb, q0, q1) for pts in dims_ for q0, q1 in zip(pts[:-1], pts[1:])):
                     continue
                 inview = _hit(rr, vb)
                 score = dist + (40.0 if inview and avoid_view else 0.0)
@@ -1010,6 +1014,14 @@ class View:
         t = self.sheet.text(cx, cy - 0.05, tag, ha="center", va="center", weight="bold", owner=own, occ=False, zorder=6)
         self.sheet.occ.append((cx - R, cy - R, cx + R, cy + R))
         return t
+
+
+def _seg_cross(a, b, c, d) -> bool:
+    """Do the segments ab and cd cross (proper intersection)?"""
+    def orient(p, q, r):
+        return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+    o1, o2, o3, o4 = orient(a, b, c), orient(a, b, d), orient(c, d, a), orient(c, d, b)
+    return o1 * o2 < 0 and o3 * o4 < 0
 
 
 def _hit(a, b) -> bool:
@@ -1555,7 +1567,7 @@ def auto_features(geo: Geo, name: str) -> list[dict]:
         rows.append({"text": txt, "recs": recs, "feat": rep, "axis": axis, "r": rep["d"] / 2, "slot": True})
     bgroups: dict = {}
     for f in feats:
-        if not f["hole"] and f["span"] > 6.2 and f["d"] >= 4.0:
+        if not f["hole"] and f["span"] > 4.6 and f["d"] >= 4.0:  # full bosses, and bosses merged into a wall on one side
             bgroups.setdefault((f["axis"], round(f["d"], 2)), []).append(f)
     for (axis, dd), bs in sorted(bgroups.items()):
         bs = sorted(bs, key=lambda h: (round(h["c"][0], 2), round(h["c"][1], 2)))
@@ -1564,7 +1576,8 @@ def auto_features(geo: Geo, name: str) -> list[dict]:
         rd = G(f"{name} boss d{dd} along {axis}: diameter", ("cylk", key, axis, rep["d"], tuple(near), "d", False), f"{name} outer cylinder along {axis}: diameter")
         rh = G(f"{name} boss d{dd} along {axis}: length", ("cylk", key, axis, rep["d"], tuple(near), "len", False), f"{name} outer cylinder along {axis}: length")
         n = len(bs)
-        txt = (f"{n}x " if n > 1 else "") + f"Ø{rd.text} x {rh.text} long (outside), axis {axis.upper()}: {_use(name, axis, rep['d'], hole=False)}"
+        part = ", part-round (joins the wall)" if any(h["span"] < 6.2 for h in bs) else ""
+        txt = (f"{n}x " if n > 1 else "") + f"Ø{rd.text} x {rh.text} long (outside){part}, axis {axis.upper()}: {_use(name, axis, rep['d'], hole=False)}"
         rows.append({"text": txt, "recs": [rd, rh], "feat": rep, "axis": axis, "r": rep["d"] / 2, "boss": True})
     return rows
 
@@ -1728,6 +1741,9 @@ def custom_rows(geo: Geo, name: str) -> list[dict]:  # noqa: C901 - one branch p
         ox = G("phase0_tray: opening X", s_sub(s_lpl(n, "x", (37.55, 0, -1)), s_lpl(n, "x", (-37.55, 0, -1))), "phase0_tray opening faces X")
         oy = G("phase0_tray: opening Y", s_sub(s_lpl(n, "y", (0, 65.15, -1)), s_lpl(n, "y", (0, -65.15, -1))), "phase0_tray opening faces Y")
         out.append(_row(f"Slab recess {rx.text} x {ry.text}, {rd.text} deep; opening {ox.text} x {oy.text}; the ledges carry the slab's front face", [rx, ry, rd, ox, oy]))
+        lz = G("phase0_tray: recess lead-in depth (Z)", ("chamfer", n, (41.15, 0, 3.5), "z"), "phase0_tray recess lead-in 45-deg face: Z extent")
+        lx = G("phase0_tray: recess lead-in width (X)", ("chamfer", n, (41.15, 0, 3.5), "x"), "phase0_tray recess lead-in 45-deg face: X extent")
+        out.append(_row(f"45° lead-in round the top edge of the recess, {lx.text} wide x {lz.text} deep", [lx, lz]))
         cw = G("phase0_tray: clamp bore", s_sub(s_lpl(n, "x", (M.P0_POST_X + 10.2, 0, 6)), s_lpl(n, "x", (M.P0_POST_X - 10.2, 0, 6))), "phase0_tray clamp bore faces X")
         cc = G("phase0_tray: clamp centres", s_sub(("mid", s_lpl(n, "x", (M.P0_POST_X + 10.2, 0, 6)), s_lpl(n, "x", (M.P0_POST_X - 10.2, 0, 6))),
                                                    ("mid", s_lpl(n, "x", (-M.P0_POST_X + 10.2, 0, 6)), s_lpl(n, "x", (-M.P0_POST_X - 10.2, 0, 6)))), "phase0_tray clamp centres X")
@@ -2052,7 +2068,9 @@ def sheet_frame(sh: Sheet, geo: Geo, plan):
             "Base rails: centre distance (RIGHT view) +/-0.5 at both ends; diagonals equal within 1. Upright inner faces (FRONT) +/-0.5, "
             "equal at the bottom and the top [Certain, CAD]. Bed top to beam bottom +/-0.5, equal at both ends [Certain, CAD]. Uprights stand on "
             "the back base rail through notches in the bed (D-03); the beam sits on the uprights, flush with their outer faces. "
-            "Joints (L brackets, back joining plates) are NOT in the CAD: BUILD_GUIDE 4.3 [Guessing on the exact layout].",
+            "Joints (L brackets, back joining plates) are NOT in the CAD: BUILD_GUIDE 4.3 [Guessing on the exact layout]. Nor are the "
+            "bed-to-base-rail bolts (16x M5x25 with washers into T-nuts in the rails' outer slots, BUILD_GUIDE 4.3 [Likely]): drill the bed "
+            "for them on assembly, after a test on a rail offcut.",
             PW - 14.0 - nx)
     # cut list
     rows = list(__import__("csv").reader(open(HERE / "out" / "cut_list.csv")))[1:]
@@ -2554,6 +2572,9 @@ def sheet_flat(sh: Sheet, geo: Geo, plan):
     vfr = make_view(sh, pf, "front", S21, fx, fy, hidden=True)
     vto = make_view(sh, pf, "top", S21, fx, fy + vfr.h + 12.0, hidden=True)
     vri = make_view(sh, pf, "right", S21, fx + vfr.w + 14.0, fy, hidden=True)
+    sh.text(vfr.x + vfr.w / 2, vfr.y - 3.0, "FRONT", weight="bold", ha="center", va="top")
+    sh.text(vto.x + vto.w + 3.0, vto.y + vto.h / 2, "TOP", weight="bold", va="center")
+    sh.text(vri.x + vri.w / 2, vri.y - 11.0, "RIGHT", weight="bold", ha="center", va="top")
     sh.text(fx, vto.y + vto.h + 14.0, "PROBE FLAG AS BENT (2:1), for reference", weight="bold")
     sh.text(fx, vto.y + vto.h + 9.5, "(head frame: X along the row, Z above the cup face)")
     hole = ("cyl", "local/probe_flag", "z", M.FLAG_HOLE, (0.0, 0.0, b[5] - 0.5), "d")
@@ -2714,8 +2735,8 @@ def sheet_jig(sh: Sheet, geo: Geo, plan):
     vr.dim((-15.5, g("p0_slab", "zmax")), (M.CAM_DY - r_hl, g("p0_head_camera", "zmin")), "v", 0.0, d2, text_at="left", over=1.0)
     ct = C("CAM_TO_SLAB")
     # right-hand column (x >= 296): the ISO render over the parts table; the height labels keep x 229..292 free at every height
-    h = sh.image(REPO / "docs" / "img" / "phase0_jig.png", 342.0, 174.0, 76.0)
-    sh.text(342.0, 174.0 + h + 1.5, "ISO (render; not to scale)", weight="bold")
+    h = sh.image(REPO / "docs" / "img" / "phase0_jig.png", 342.0, 166.0, 76.0)
+    sh.text(342.0, 166.0 + h + 1.5, "ISO (render; not to scale)", weight="bold")
     stub = G("jig arm stub length", ("bb", "p0/p0_arm_stub", "zlen"), "p0_arm_stub Z")
     sp = {n: _sheet_of_part(plan, n) for n in ("phase0_base", "phase0_tray", "phase0_top", "phase0_occluder_mount", "head_foot")}
     rows = [["Part", "Type", "Qty", "Sheet"],
@@ -2728,7 +2749,7 @@ def sheet_jig(sh: Sheet, geo: Geo, plan):
             [f"2020 arm stub, {stub.text} (C-09)", "C", "1", "D-02"],
             ["probe flag (C-07)", "S", "1", "D-06"],
             ["cameras, LED rings, SMC buffer + cup + elbow, endstop board", "B", "-", "BOM.csv"]]
-    yb, cells = sh.table(296.0, 168.0, rows, [80.0, 10.0, 10.0, 21.8])
+    yb, cells = sh.table(296.0, 160.0, rows, [80.0, 10.0, 10.0, 21.8])
     _attach({i: [a for r_, c_, a in cells if r_ == i] for i in (6, 7)}, [{"recs": []}] * 6 + [{"recs": [post]}, {"recs": [stub]}])
     sh.wrap_recs(NOTE_AREA[0], NOTE_AREA[3] - 1.0,
                  f"The posts set the bridge height: cut them square. Both lens-to-slab distances (SECTION A-A) equal CAM_TO_SLAB = {ct.text} "
