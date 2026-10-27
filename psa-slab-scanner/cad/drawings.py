@@ -2101,7 +2101,7 @@ def sheet_ga(sh: Sheet, geo: Geo, plan):
     rows.append(["Z used (cup face c)", f"{r14.text} to {r15.text}", "layout"])
     r16, r17 = C("C_HARD_BOTTOM"), C("C_HARD_TOP")
     rows.append(["Z hard stops (c)", f"{r16.text} / {r17.text}", "layout"])
-    yb, cells = sh.table(tx, ty, rows, [47.0, 38.0, 18.0])
+    yb, cells = sh.table(tx, ty, rows, [46.0, 42.0, 15.0])
     allr = [[], [r1, r2], [r3, r4], [r5, r6], [r7, r8], [r9, r10], [r11, r12, r13], [r14, r15], [r16, r17]]
     _attach({ri: [a for rr, cc, a in cells if rr == ri] for ri in range(1, len(rows))}, [{"recs": x} for x in allr])
     h = sh.image(REPO / "docs" / "img" / "machine_iso.png", 250.0, 160.0, 168.0)
