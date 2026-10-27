@@ -2650,19 +2650,19 @@ def sheet_jig(sh: Sheet, geo: Geo, plan):
     vf.dim((g("p0_post_-1", "xmin"), g("p0_post_-1", "zmin")), (g("p0_post_-1", "xmin"), g("p0_post_-1", "zmax")), "v",
            -(g("p0_post_-1", "xmin") - b[0]) / 2 - 6.0, post)
     pc = G("jig post centres", s_sub(("bb", "p0/p0_post_1", "xmid"), ("bb", "p0/p0_post_-1", "xmid")), "p0_post_1 centre X - p0_post_-1 centre X")
-    vf.dim((g("p0_post_-1", "xmid"), b[2]), (g("p0_post_1", "xmid"), b[2]), "h", -8.0, pc, post=" post centres", text_du=-30.0)  # text clear of the A-A line
+    vf.dim((g("p0_post_-1", "xmid"), b[2]), (g("p0_post_1", "xmid"), b[2]), "h", -14.0, pc, post=" post centres")  # below the A-A arrow
     for n in ("p0_post_-1", "p0_post_1"):
         vf.centerline((g(n, "xmid"), b[2] - 4.0), (g(n, "xmid"), b[5] + 4.0))
     lv = [
         (G("jig socket floor Z", ("bb", "p0/p0_post_1", "zmin"), "p0_post_1 Z min (socket floor)"), "post bottoms (socket floor)"),
         (G("jig station lens front Z", ("bb", "p0/p0_station_camera", "zmax"), "p0_station_camera Z max (lens front)"), "station lens front"),
-        (G("jig slab front face Z", ("bb", "p0/p0_slab", "zmin"), "p0_slab Z min (front face, on the ledges)"), "slab front face (on the ledges)"),
+        (G("jig slab front face Z", ("bb", "p0/p0_slab", "zmin"), "p0_slab Z min (front face, on the ledges)"), "slab front face (ledges)"),
         (G("jig slab back Z", ("bb", "p0/p0_slab", "zmax"), "p0_slab Z max"), "slab back"),
         (G("jig bridge underside Z", ("bb", "p0/p0_top", "zmin"), "p0_top Z min"), "bridge underside"),
         (G("jig head lens front Z", ("bb", "p0/p0_head_camera", "zmin"), "p0_head_camera Z min (lens front)"), "head lens front"),
         (G("jig post tops Z", ("bb", "p0/p0_post_1", "zmax"), "p0_post_1 Z max"), "post tops"),
     ]
-    ordinates_v(vr, [(r.value, f"Z {r.text}  {t}", [r]) for r, t in lv], vr.u1, vr.x + vr.w + 12.0, gap=4.6, lo=146.0, hi=TOP - 12.0)
+    ordinates_v(vr, [(r.value, f"Z {r.text}  {t}", [r]) for r, t in lv], vr.u1, vr.x + vr.w + 12.0, gap=4.6, lo=58.0, hi=TOP - 12.0)
     sh.text(vr.x + vr.w + 12.0, TOP - 9.0, "Heights above the base underside", weight="bold", va="top")
     d1 = G("jig station lens to slab front", s_sub(("bb", "p0/p0_slab", "zmin"), ("bb", "p0/p0_station_camera", "zmax")), "p0_slab Z min - p0_station_camera Z max")
     d2 = G("jig slab back to head lens", s_sub(("bb", "p0/p0_head_camera", "zmin"), ("bb", "p0/p0_slab", "zmax")), "p0_head_camera Z min - p0_slab Z max")
@@ -2672,8 +2672,9 @@ def sheet_jig(sh: Sheet, geo: Geo, plan):
     vr.dim((-r_sl, g("p0_station_camera", "zmax")), (-20.0, g("p0_slab", "zmin")), "v", 0.0, d1, text_at="left", over=1.0)
     vr.dim((-15.5, g("p0_slab", "zmax")), (M.CAM_DY - r_hl, g("p0_head_camera", "zmin")), "v", 0.0, d2, text_at="left", over=1.0)
     ct = C("CAM_TO_SLAB")
-    h = sh.image(REPO / "docs" / "img" / "phase0_jig.png", 334.0, 146.0, 84.0)
-    sh.text(334.0, 146.0 + h + 1.5, "ISO (render; not to scale)", weight="bold")
+    # right-hand column (x >= 296): the ISO render over the parts table; the height labels keep x 229..292 free at every height
+    h = sh.image(REPO / "docs" / "img" / "phase0_jig.png", 342.0, 174.0, 76.0)
+    sh.text(342.0, 174.0 + h + 1.5, "ISO (render; not to scale)", weight="bold")
     stub = G("jig arm stub length", ("bb", "p0/p0_arm_stub", "zlen"), "p0_arm_stub Z")
     sp = {n: _sheet_of_part(plan, n) for n in ("phase0_base", "phase0_tray", "phase0_top", "phase0_occluder_mount", "head_foot")}
     rows = [["Part", "Type", "Qty", "Sheet"],
@@ -2686,10 +2687,10 @@ def sheet_jig(sh: Sheet, geo: Geo, plan):
             [f"2020 arm stub, {stub.text} (C-09)", "C", "1", "D-02"],
             ["probe flag (C-07)", "S", "1", "D-06"],
             ["cameras, LED rings, SMC buffer + cup + elbow, endstop board", "B", "-", "BOM.csv"]]
-    yb, cells = sh.table(229.0, 138.0, rows, [118.0, 14.0, 12.0, 40.0])
+    yb, cells = sh.table(296.0, 168.0, rows, [80.0, 10.0, 10.0, 21.8])
     _attach({i: [a for r_, c_, a in cells if r_ == i] for i in (6, 7)}, [{"recs": []}] * 6 + [{"recs": [post]}, {"recs": [stub]}])
     sh.wrap_recs(NOTE_AREA[0], NOTE_AREA[3] - 1.0,
-                 f"The posts set the bridge height: cut them square. Both lens-to-slab distances (RIGHT view) equal CAM_TO_SLAB = {ct.text} "
+                 f"The posts set the bridge height: cut them square. Both lens-to-slab distances (SECTION A-A) equal CAM_TO_SLAB = {ct.text} "
                  f"on the machine (set +/-2, BUILD_GUIDE 1.5). Phase 0 is the go / no-go test before any motion parts are bought.",
                  NOTE_AREA[2] - NOTE_AREA[0], [ct])
 

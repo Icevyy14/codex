@@ -452,7 +452,7 @@ def prepare_fragment(doc: Doc, volume_docs: dict[str, Doc]) -> str:
 # drawing set
 # ---------------------------------------------------------------------------------------------
 
-def read_sheets(pdf_path: Path) -> list[tuple[str, str]]:
+def read_sheets(pdf_path: Path, allow_incomplete: bool = False) -> list[tuple[str, str]]:
     """(sheet number, title) for each page of the drawing PDF, in page order."""
     from pypdf import PdfReader
     if not pdf_path.is_file():
@@ -485,6 +485,15 @@ def read_sheets(pdf_path: Path) -> list[tuple[str, str]]:
     nums = [s[0] for s in sheets]
     if len(set(nums)) != len(nums):
         raise BuildError(f"drawing set: repeated sheet numbers {nums}")
+    last = max(int(m) for m in re.findall(r"SHEET\s+D-\d{2}\s+of\s+D-(\d{2})", "\n".join(texts)))
+    expected = [f"D-{i:02d}" for i in range(last + 1)]
+    if nums != expected:
+        gap = sorted(set(expected) - set(nums))
+        msg = (f"drawing set is incomplete or out of order: {len(nums)} pages, title blocks say D-00 to "
+               f"D-{last:02d}; missing {gap or 'none'}, order {nums}")
+        if not allow_incomplete:
+            raise BuildError(msg + " (use --allow-incomplete-drawings to build anyway)")
+        warn(msg)
     if index and len(index) != len(sheets):
         warn(f"drawing set: the D-00 index lists {len(index)} sheets, the PDF has {len(sheets)} pages")
     for p in r.pages:
@@ -1147,6 +1156,8 @@ def main() -> int:
     ap.add_argument("--keep-work", metavar="DIR", help="keep the intermediate HTML and PDFs in DIR")
     ap.add_argument("--require-clean", action="store_true",
                     help="stop if any input file has uncommitted changes")
+    ap.add_argument("--allow-incomplete-drawings", action="store_true",
+                    help="build even if the drawing set's sheet numbers have gaps (for test builds only)")
     args = ap.parse_args()
 
     t_start = time.time()
@@ -1172,7 +1183,7 @@ def main() -> int:
         workdir = Path(tempfile.mkdtemp(prefix="slabrail_pkg_"))
         cleanup = True
     try:
-        sheets = read_sheets(ROOT / DRAWINGS_PDF)
+        sheets = read_sheets(ROOT / DRAWINGS_PDF, args.allow_incomplete_drawings)
         log(f"  drawing set: {len(sheets)} sheets, {sheets[0][0]} to {sheets[-1][0]}")
         zipres = build_zip(workdir)
         printer = Printer(workdir)
