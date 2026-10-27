@@ -401,6 +401,7 @@ def wbr_html(text: str, code: bool = False) -> dict:
 # "BUILD_GUIDE §6.7", "DESIGN §4", "WIRING.md", "(SHOPPING_LIST)": references to another document.
 DOC_REF = re.compile(r"^(?P<pre>[(\[\"'\u201c\u2018]*)(?P<name>[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*)(?P<md>\.md)?"
                      r"(?P<post>[)\].,;:!?'\"\u201d\u2019]*)$")
+SHEET_REF = re.compile(r"^(?P<pre>[(\[]*)(?P<num>D-\d{2})(?P<post>[)\].,;:]*)$")
 SEC_REF = re.compile(r"^(?P<ref>\u00a7?\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*)(?P<post>.*)$")
 INLINE_TYPES = {"Str", "Space", "SoftBreak", "LineBreak", "Emph", "Strong", "Code", "Link", "Span", "RawInline",
                 "Quoted", "Strikeout", "Superscript", "Subscript", "SmallCaps", "Underline", "Math", "Cite",
@@ -429,7 +430,7 @@ def code_font_pt(code: str, depth: int) -> float | None:
 
 
 def prepare_fragment(doc: Doc, volume_docs: dict[str, Doc], all_docs: dict[str, Doc],
-                     stats: dict) -> str:
+                     stats: dict, sheet_nums: set[str]) -> str:
     """Return the HTML of one document for one volume (ids prefixed with '<key>--')."""
     ast = json.loads(json.dumps(doc.ast))  # deep copy: link targets depend on the volume
     by_path = {d.path: d for d in volume_docs.values()}
@@ -446,7 +447,19 @@ def prepare_fragment(doc: Doc, volume_docs: dict[str, Doc], all_docs: dict[str, 
         out, i, n = [], 0, len(lst)
         while i < n:
             el = lst[i]
-            m = DOC_REF.match(el["c"]) if isinstance(el, dict) and el.get("t") == "Str" else None
+            is_str = isinstance(el, dict) and el.get("t") == "Str"
+            ms = SHEET_REF.match(el["c"]) if is_str and sheet_nums else None
+            if ms and ms.group("num") in sheet_nums:  # "D-05": a drawing sheet in this PDF
+                if ms.group("pre"):
+                    out.append({"t": "Str", "c": ms.group("pre")})
+                out.append({"t": "Link", "c": [["", ["sheetref"], []], [{"t": "Str", "c": ms.group("num")}],
+                                               [SHEET + ms.group("num"), ""]]})
+                if ms.group("post"):
+                    out.append({"t": "Str", "c": ms.group("post")})
+                stats["sheets"] = stats.get("sheets", 0) + 1
+                i += 1
+                continue
+            m = DOC_REF.match(el["c"]) if is_str else None
             tgt = names.get(m.group("name")) if m else None
             if tgt:
                 sec = None
@@ -1030,9 +1043,10 @@ def build_volume(vol: dict, printer: Printer, sheets, git: dict, workdir: Path, 
     if len(keyed) != len(docs):
         raise BuildError("two documents map to the same key")
     stats: dict = {}
-    frags = {p: prepare_fragment(d, keyed, all_docs, stats) for p, d in docs.items()}
-    log(f"  {len(docs)} documents converted to HTML, {stats.get('refs', 0)} document references linked "
-        f"({time.time() - t0:.1f} s)")
+    sheet_nums = {num for num, _t in sheets} if DRAWINGS in vol["parts"] else set()
+    frags = {p: prepare_fragment(d, keyed, all_docs, stats, sheet_nums) for p, d in docs.items()}
+    log(f"  {len(docs)} documents converted to HTML; linked {stats.get('refs', 0)} document and "
+        f"{stats.get('sheets', 0)} drawing-sheet references ({time.time() - t0:.1f} s)")
 
     draw_reader = PdfReader(draw_path)
     n_draw = len(draw_reader.pages)
@@ -1119,8 +1133,9 @@ def build_volume(vol: dict, printer: Printer, sheets, git: dict, workdir: Path, 
     for h in range(1, n_html):
         d = owner[h]
         f = html_final[h]
-        items.append(("SlabRail Rev A, draft for design review  \u00b7  ", short_title(d.title) if d else "Contents",
-                      f"  \u00b7  {d.path}" if d else "", f"Page {f + 1} of {total}"))
+        sep = "\u00a0\u00a0\u00b7\u00a0\u00a0"  # no-break spaces: a flex item drops plain ones at its ends
+        items.append((f"SlabRail Rev A, draft for design review{sep}", short_title(d.title) if d else "Contents",
+                      f"{sep}{d.path}" if d else "", f"Page {f + 1} of {total}"))
         targets.append(f)
     if items:
         foot = PdfReader(printer.pdf(footer_html(items), f"{Path(vol['file']).stem}_footer", outline=False))
@@ -1345,8 +1360,9 @@ ZIP_GROUPS = [
      "Flat outline of the bent aluminium probe flag (DXF) and its dimensioned drawing (SVG, 1:1 at 100 %)."),
     ("Geometry checks", lambda p: p.endswith("checks.txt"),
      "Output of the last geometry-check run: one line per check."),
-    ("Drawing set", lambda p: p == DRAWINGS_PDF, "The dimensioned drawings, Rev A, draft for design review."),
-    ("Bill of materials", lambda p: p.endswith("BOM.csv"), "Every part to buy, one line each."),
+    ("Drawing set", lambda p: p == DRAWINGS_PDF, "the dimensioned drawings, Rev A, draft for design review."),
+    ("Bill of materials", lambda p: p.endswith("BOM.csv"),
+     "The line-by-line parts list with links (explained in docs/BOM.md in the repo)."),
     ("CAD notes", lambda p: p == CAD_README,
      "The full CAD README as it is in the repo. It also describes the Python sources and commands, which "
      "are in the repo, not in this zip."),
@@ -1388,7 +1404,7 @@ def zip_readme(entries: list[str], git: dict, sheets) -> str:
             continue
         left = [e for e in left if e not in hit]
         if title == "Drawing set":
-            what = f"{drawing_label(sheets)}: {what}"
+            what = f"{drawing_label(sheets)}, {len(sheets)} sheets: {what}"
         if len(hit) > 3:
             folder = PurePosixPath(hit[0]).parent.as_posix()
             names = ", ".join(PurePosixPath(h).stem for h in hit)
@@ -1563,7 +1579,9 @@ def write_readme(results: dict, zipres: dict, sheets, git: dict, versions: dict,
              "(every manifest file present, sizes and CRCs) before it replaces the old outputs.\n")
     L.append("What it does: each Markdown file is converted by pandoc with `-f gfm-tex_math_dollars` (dollar "
              "amounts are not math); images are embedded from the document's folder; links between documents in "
-             "the same PDF become PDF links; links to files that are not in the PDF point to the repository. "
+             "the same PDF become PDF links; links to files that are not in the PDF point to the repository; "
+             "mentions such as \"BUILD_GUIDE §6.7\" or \"D-05\" become links to that section or drawing sheet. "
+             "A document whose last page would hold only a few lines is set slightly tighter. "
              "Chromium (through Playwright) prints the documents on US Letter; pypdf inserts the drawing set "
              "unchanged, adds the footers, bookmarks and contents page numbers (laid out twice so they are "
              "right). The PDF metadata date is the package date, so a rebuild from the same inputs with the "
