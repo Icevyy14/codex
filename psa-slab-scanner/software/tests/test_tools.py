@@ -8,8 +8,8 @@ import urllib.error
 
 import pytest
 
-from slabscan import psa_api
-from slabscan.config import dumps, from_layout, load, write_overrides
+from slabscan import config, psa_api
+from slabscan.config import Config, dumps, from_layout, load, write_overrides
 from tools import enrich, gen_config
 
 
@@ -26,6 +26,22 @@ def test_gen_config_round_trip(tmp_path):
 
 def test_committed_machine_toml_matches_layout():
     assert gen_config.main(["--check"]) == 0, "config/machine.toml is stale: run python -m tools.gen_config"
+
+
+def test_config_defaults_match_the_layout():
+    """A key missing from machine.toml falls back to the dataclass default, so every default must be the CAD's value
+    (the round-3 card window stayed behind as the face_down_window_mm default after the round-4 CAD shrank it)."""
+    lay = from_layout()  # puts cad/ on sys.path
+    import layout as L
+
+    for f in dataclasses.fields(Config):
+        default = f.default if f.default_factory is dataclasses.MISSING else f.default_factory()
+        if default is not dataclasses.MISSING:
+            assert default == getattr(lay, f.name), f"Config.{f.name} default {default!r} != from_layout() {getattr(lay, f.name)!r}"
+    # CAD values that from_layout() does not take from the CAD (calibration keys, a slab class bound, module constants)
+    fd = {f.name: f.default for f in dataclasses.fields(Config)}
+    assert (fd["buffer_trip_mm"], fd["buffer_trip_tol_mm"], fd["t_thick_max"]) == (L.CUP_HANG, L.PROBE_TRIP_TOL, L.SLAB_T_THICK_MAX)
+    assert (config.DESIGN_CUP_HANG, config.CARRY_BAND_MM) == (L.CUP_HANG, L.CARRY_BAND)
 
 
 def test_toml_writer_escapes_strings(tmp_path):

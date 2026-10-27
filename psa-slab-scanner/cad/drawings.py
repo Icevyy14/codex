@@ -99,11 +99,21 @@ DASH_CTR = (0, (14.0, 3.0, 2.5, 3.0))
 DASH_PHANTOM = (0, (14.0, 3.0, 2.5, 3.0, 2.5, 3.0))
 
 
+MODEL_SOURCES = ["cad/model.py", "cad/layout.py", "cad/dims.py", "cad/build.py"]  # what the geometry is built from
+
+
 def git_hash() -> str:
+    """HEAD's short hash, plus '+uncommitted' when the model sources in the working tree differ from HEAD (the sheets then
+    show geometry that is not in that commit)."""
     try:
-        return subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=REPO, capture_output=True, text=True, check=True).stdout.strip()
+        h = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=REPO, capture_output=True, text=True, check=True).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         return "unknown"
+    try:
+        dirty = subprocess.run(["git", "status", "--porcelain", "--", *MODEL_SOURCES], cwd=REPO, capture_output=True, text=True, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        dirty = ""
+    return h + ("+uncommitted" if dirty else "")
 
 
 # ------------------------------------------------------------------------------------------------------------- scales
@@ -570,9 +580,11 @@ def hlr(shape, view: str, defl: float) -> tuple[list[np.ndarray], list[np.ndarra
 
 # -------------------------------------------------------------------------------------------------- dimension records
 def fmt(v: float) -> str:
-    if abs(v - round(v)) < 0.005:
+    """Shown to 0.1 when the measured value is within 0.012 of it (the model's 0.01 mm overlaps, e.g. 9.99 -> 10), else
+    to 0.01. The self-check still holds every shown value to 0.05 of the geometry."""
+    if abs(v - round(v)) < 0.012:
         s = f"{round(v):d}"
-    elif abs(v - round(v, 1)) < 0.005:
+    elif abs(v - round(v, 1)) < 0.012:
         s = f"{v:.1f}"
     else:
         s = f"{v:.2f}"

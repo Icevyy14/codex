@@ -23,7 +23,8 @@ class Config:
     pockets: list[PocketCfg]
     station_xy: tuple[float, float]
     station_read_c: float
-    # defaults = cad/layout.py (machine.toml always sets them; a stale default must never be unsafe)
+    # defaults = cad/layout.py (machine.toml always sets them; a stale default must never be unsafe; tests/test_tools.py
+    # test_config_defaults_match_the_layout compares every default with from_layout())
     c_safe_empty: float = 248.0
     c_safe_loaded: float = 248.0
     c_max: float = 250.0
@@ -84,7 +85,7 @@ class Config:
     # foot in the frame from above. = cad/layout.py face_down_window_cam(): the CAD's FACE_DOWN_WINDOW_MM (from the cup
     # axis) moved by HEAD_CAM_DY, because the lens sits 5 mm toward the label end. The CAD checks it against every head
     # part at hover and held (nothing in view), and against the card top measured on 27 real PSA backs [Likely].
-    face_down_window_mm: tuple = ((-27.5, -22.5, 27.5, -11.0),)
+    face_down_window_mm: tuple = ((-27.5, -18.5, 27.5, -13.0),)
     psa_cert_digits: tuple = ()  # PSA cert lengths seen in Phase 0, e.g. [8, 9]; an 'ok' of another length -> needs_review
     frames_per_read: int = 2
     custom_regex: str | None = None

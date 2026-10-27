@@ -256,7 +256,10 @@ def camera_mast(z_bottom: float) -> cq.Workplane:
     body = mast.union(station_ring_seat())
     boss_top = L.STATION_LENS_Z - CM3_H  # 11.5: the CM3 board back rests here
     for x, y in CM3_HOLES:  # M2 standoff bosses rising from the mast floor
-        body = body.union(cyl((x, y, CAM_FLOOR_Z - 0.5), 5, boss_top - CAM_FLOOR_Z + 0.5))
+        # Each boss carries a 3 mm web 0.5 mm into the wall: a bare 5 mm boss at x +/-10.5 only touches the wall (x +/-13) along a
+        # line, a non-manifold edge in the STL. The web lies outside the 25 mm board, so the board still rests on the boss tops.
+        web = box(min(x, math.copysign(13.5, x)), y - 1.5, CAM_FLOOR_Z - 0.5, max(x, math.copysign(13.5, x)), y + 1.5, boss_top)
+        body = body.union(cyl((x, y, CAM_FLOOR_Z - 0.5), 5, boss_top - CAM_FLOOR_Z + 0.5).union(web))
     body = holes_z(body, CM3_HOLES, 1.8)  # M2 self-tapping
     body = body.cut(box(-9, 12, CAM_FLOOR_Z + 0.5, 9, STATION_SEAT[0] / 2 + STATION_SEAT[1] + 1, 13.5))  # FPC exit through the mast wall AND the ring seat
     return body
@@ -1413,7 +1416,9 @@ def phase0_tray() -> cq.Workplane:
     frame = box(-ow / 2, -ol / 2, -4, ow / 2, ol / 2, 4)
     frame = frame.cut(box(-aw / 2, -al / 2, -5, aw / 2, al / 2, 5))
     frame = frame.cut(box(-rw / 2, -rl / 2, 0, rw / 2, rl / 2, 5))
-    frame = frame.cut(cq.Workplane("XY").workplane(offset=3.0).rect(rw, rl).extrude(1.01, taper=-45))  # 1 mm lead-in
+    # 1 mm lead-in, 45 deg. The taper starts 0.5 mm below Z 3 and 0.5 mm inset, inside the recess, so its faces cross the recess walls
+    # at Z 3; started on the walls it left 0.2 mm sliver faces at the corners (bad STL). Its rounded corners grow by 0.5 mm.
+    frame = frame.cut(cq.Workplane("XY").workplane(offset=2.5).rect(rw - 1, rl - 1).extrude(1.51, taper=-45))
     frame = frame.cut(cq.Workplane("XY").workplane(offset=-4.01).rect(aw + 4, al + 4).extrude(2.01, taper=45))  # 45-deg underside chamfer: the 4 mm ledge doesn't shade the label edge
     frame = frame.cut(box(-25, -ol / 2 - 10, 0, 25, -ol / 2 + 10, 5))  # finger notch at the front to lift the slab out
     for sx in (-1, 1):  # clamps onto the 2020 posts; the M5 goes through a pad on the outer wall (P0_M5_WALL in all)

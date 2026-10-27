@@ -63,8 +63,9 @@ GLB each part is one named mesh, with kind, group and note in the node's glTF `e
 - `_L` / `_R` mean the left (−X) and right (+X) side.
 - Numbered parts: `pad_N`, `stack_N` and `labels_N` are pocket N (0–12). `rod_00`…`rod_81` are the 82 guide rods.
   `base_rail_0`/`_1` are the two base rails.
-- `fx_…` are fastener heads (63 of them). Only heads that could foul another part are modelled. In the GLB they are merged
-  into one mesh, `fasteners`, whose extras list the 63 names.
+- Fastener heads (63 of them) are named by group: `fx_…` static (18), `fc_…` on the carriage (31), `fh_…` on the head (10),
+  plus the probe board's `probe_m3…` and `probe_nut…` (4). Only heads that could foul another part are modelled. In the
+  GLB they are merged into one mesh, `fasteners`, whose extras list the 63 names.
 - `held_slab` and `held_label` are the slab on the cup, in the `carry` and `station` poses.
 - Counts: 239 parts in `home` and `pick_bottom`, 243 in `carry`, 241 in `station`.
 
@@ -122,7 +123,7 @@ light roof and rear brace (`model.machine(roof=True)` adds a roof envelope; no e
 | `drawings/SlabRail_drawings.pdf` | The drawing set. `drawings/png/` holds previews and `drawings/dims.json` lists every dimension shown and its source. |
 | `heads_cad.json` | Head shadow boxes and camera offsets for the software simulator. Not a review file. |
 | `renders/` | OpenSCAD renders and their temporary STLs (not in git). |
-| `printed_sheet.scad`, `export.log`, `render_docs.log` | Leftovers of earlier runs. Not needed. |
+| `export.log`, `render_docs.log` | Logs of earlier runs (not in git). Not needed. |
 
 ## Opening the files
 
@@ -162,19 +163,28 @@ deflection, the side load the strikers put on the switch levers, and the corner 
 
 ## Export check (27 Oct 2026)
 
-These exports were checked against the current model before packaging:
+All exports were re-made on 27 Oct 2026 after the mesh fix below, then checked against the current model:
 
 - **Assembly STEP files are current.** For each pose, the STEP re-imported with CadQuery has the same number of solids
   as `build.assembly(pose)` (home 241, pick_bottom 241, carry 245, station 243). The bounding box and volume of every
-  solid also match.
-- **GLB files**: 177 meshes (home) and 181 (carry). Each is one mesh per non-fastener part plus the merged `fasteners`
-  mesh. Bounds reloaded with trimesh equal the STEP bounding box (0.0 mm difference).
-- **Printed parts**: all 25 have a STEP that is one valid solid. Each STL's bounding box equals `print_list.json`
-  `size_mm` within 0.05 mm. **Three STLs are not clean closed meshes**, and `build.py` reproduces them exactly:
-  - `station_mount` and `phase0_base`: closed, but non-manifold along four 7.5 mm vertical lines. The cause is in
-    `camera_mast()`: the four M2 camera bosses (5 mm diameter, centres 10.5 mm from the lens axis in X) touch the inside
-    of the mast wall (13 mm from the axis) along a line.
-  - `phase0_tray`: four degenerate triangles about 0.2 mm long at the corners of the slab recess, where the 1 mm 45° lead-in
-    starts on the recess wall. trimesh reports them as four zero-volume pieces, so the file is not watertight.
+  solid also match. Compared with the previous export, the only changed solid is `station` (`station_mount`): +14.3 mm³.
+- **GLB files**: 177 meshes (home) and 181 (carry), 55,814 and 55,862 triangles. Each is one mesh per non-fastener part
+  plus the merged `fasteners` mesh. Bounds reloaded with trimesh equal the STEP bounding box (0.0 mm difference).
+- **Printed parts**: all 25 STLs are closed (watertight), one body each, with no non-manifold edges. Each STL's bounding
+  box equals `print_list.json` `size_mm` within 0.05 mm (`size_mm` is rounded to 0.1 mm; the largest difference, 0.05 mm,
+  is on `x_bracket` and `z_motor_mount`), and each STL's volume rounds to the listed `volume_cm3`. All 25 STEPs are one
+  valid solid. `print_list.json` did not change.
 
-  Check these three in the slicer's preview before printing. Fixing them means a change to `model.py`.
+**Mesh fix.** The earlier `station_mount`, `phase0_base` and `phase0_tray` STLs were not clean meshes. The STEPs were
+valid; the cause was in the model, and `model.py` now avoids it without moving any functional feature:
+
+- `camera_mast()` (`station_mount`, `phase0_base`): the four 5 mm M2 bosses (centres at X ±10.5) touched the inside of
+  the mast wall (X ±13) along a line, which left four non-manifold edges. Each boss now has a 3 mm wide web that runs
+  0.5 mm into the wall. The web lies at |X| ≥ 12.5, outside the 25 mm camera board, so the board sits on the same boss
+  tops. +14.3 mm³ per part.
+- `phase0_tray`: the 45° lead-in taper started on the recess wall, which left four 0.2 mm sliver faces at the recess
+  corners (the STL split into 5 bodies). The taper now starts 0.5 mm lower and 0.5 mm inset, inside the recess, so the
+  same 45° faces run from Z 3 to the top. The lead-in's rounded corners are 0.5 mm larger in radius (+0.6 mm³ in all).
+
+The camera, hole positions, mast outline, recess size and depth, the lead-in angle and every size and volume in
+`print_list.json` are unchanged.

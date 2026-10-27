@@ -33,7 +33,7 @@ than PSA/CGC, goes to the **exception pocket** at the right end.
 | Slotted racks, lift-and-read in place (concept A) | Rejected | [Certain, panel geometry] A straight lift hits the neighbouring slab. It only works if every slab leans at 10°, which leaves 2.2 mm margins. Loading is one slot at a time. |
 | Desktop robot arm (concept D) | Rejected | [Likely] Reach covers about 80–160 slabs. The arm that reaches 300 costs about twice the budget. |
 | **Short stacks + top pick by vacuum, one-pocket shuffle (concept B)** | **Chosen** | Two research agents and the design panel arrived at it independently. No slab ever slides on another. The cup touches only the back. Loading is fast because you drop in handfuls. |
-| B on a 2-D grid (4 motors) vs **one row (2 motors)** | **One row** | You asked for the fewest moving parts. One row removes the whole Y axis: 2 motors, 2 rails and the gantry squaring. Cost: a 1.42 m × 0.32 m footprint. The grid version is in git (`grid-variant-v1`). |
+| B on a 2-D grid (4 motors) vs **one row (2 motors)** | **One row** | You asked for the fewest moving parts. One row removes the whole Y axis: 2 motors, 2 rails and the gantry squaring. Cost: a footprint of about 1.44 m × 0.29 m (CAD, feet included; the bed is 1416 × 289.5 mm). The grid version is in git (`grid-variant-v1`). |
 
 ### 2a. What the independent design panel said (and what changed because of it)
 
@@ -142,23 +142,39 @@ each through one lens: slab safety, reliability/buildability, and practical valu
 
 | Quantity | Value | Margin |
 |---|---|---|
-| Cup holding force, Ø25 mm at −50 kPa (78% effective area) | 19.1 N | Slab weighs 0.64 N → **SF 30** vertical [Certain] |
-| Lateral grip vs X acceleration 2 m/s² | ~9.5 N vs 0.13 N | **SF 70** [Certain] |
-| Z load (0.75 kg head, 1.2 m/s²) | 8.3 N → 0.026 N·m on T8×8 at 40% efficiency | A 1.5–2.0 A NEMA17 at 750 rpm on 24 V gives ≈ 0.15–0.2 N·m at full current, but Z runs at 0.8 A (40–55% of rating) → ≈ 0.06–0.1 N·m, **SF ≈ 2–4** [Likely]. The carry-height sensor catches a stall before the next sideways move but does not prevent it, so the 100-lift test (BUILD_GUIDE §7.8) must pass. A high-impedance 0.4–0.6 A "integrated" motor would stall: the BOM excludes it. |
-| Z back-drive when unpowered | ~0.005 N·m | NEMA17 detent ≈ 0.015 N·m → holds [Likely]. Hold current is kept on anyway. |
-| X drive (1.9 kg moving, 2 m/s² + 2 N friction) | 5.8 N belt → 0.037 N·m | NEMA17 at 375 rpm ≈ 0.3 N·m → **SF ≈ 8** [Likely] |
-| X beam sag, 4040 over 1.42 m, 20 N at midspan | 0.18 mm | Pocket play 1.75 mm [Certain, beam formula] |
-| X beam twist from the 127 mm head overhang | ≈ 0.8 mm at the cup, worst at midspan [Guessing on J] | Within pocket play. Measure it during build (BUILD_GUIDE §6). Add a rear brace if > 1 mm. |
+| Cup holding force, Ø25 mm at −50 kPa (78% effective area) | 19.1 N | Slab weighs 0.64 N → **SF 30** vertical [Certain, arithmetic; the 78% effective area is an estimate] |
+| Cup holding force at the software's seal level, −35 kPa (`vac_seal_kpa`) | 13.4 N | **SF 21** on the 0.64 N slab, 19 with the 1.2 m/s² Z acceleration [Certain, arithmetic; same 78% area]. A grip counts as sealed only at this level or deeper. |
+| Cup holding force at the transit alarm, −25 kPa (`vac_transit_alarm_kpa`) | 9.6 N | **SF 15**, 13 with the Z acceleration [Certain, arithmetic; same 78% area]. A carry that has not raised the alarm holds at least this. The slab falls off at about −1.7 kPa (BUILD_GUIDE §13.4). |
+| Lateral grip vs X acceleration 2 m/s², at −50 / −35 / −25 kPa | ~9.3 / 6.4 / 4.5 N vs 0.13 N | **SF ≈ 70 / 49 / 34** [Certain, arithmetic: friction on the clamp force less the slab's weight; the friction coefficient of about 0.5 between cup lip and slab is a guess] |
+| Z load (0.75 kg head, 1.2 m/s²) | 8.3 N → 0.026 N·m on T8×8 at 40% efficiency (conservative: the screw's 20° lead angle gives about 50–65% at a friction coefficient of 0.15–0.25 [Likely]) | A 1.5–2.0 A NEMA17 at 750 rpm on 24 V gives ≈ 0.15–0.2 N·m at full current, but Z runs at 0.8 A (40–55% of rating) → ≈ 0.06–0.1 N·m, **SF ≈ 2–4** [Likely]. Spinning up the rotor and screw adds about 0.006–0.009 N·m at 1.2 m/s² [Guessing: a 60–80 g·cm² rotor]; the CAD mass row below shows that the 0.75 kg covers it. The carry-height sensor catches a stall before the next sideways move but does not prevent it, so the 100-lift test (BUILD_GUIDE §7.8) must pass. A high-impedance 0.4–0.6 A "integrated" motor would stall: the BOM excludes it. |
+| Z back-drive when unpowered | ~0.005 N·m (0.75 kg at a back-drive efficiency of about 0.5; 0.4–0.7 for a friction coefficient of 0.2–0.1 gives 0.004–0.0065 N·m) | NEMA17 detent ≈ 0.015 N·m → holds [Likely]. Hold current is kept on anyway. |
+| X drive (1.9 kg moving, 2 m/s² + 2 N friction) | 5.8 N belt → 0.037 N·m on the 20T pulley (+ about 0.003 N·m for the rotor [Guessing]) | The 17HS19-2004S1 (0.59 N·m holding at 2.0 A) runs at 1.0 A: about 0.3 N·m holding, less at 375 rpm, so ≈ 0.15–0.3 N·m → **SF ≈ 4–8** [Likely; no torque curve read] |
+| X beam sag, 4040 resting on the uprights (1376 mm between their centres), 20 N at midspan | 0.18 mm (simply supported; E 69 GPa; I = 8.89 cm⁴, Misumi's catalog value for HFS5-4040 [Likely, read from a catalog extract]) | Vertical: every set-down is probed, so it uses none of the pocket play; BUILD_GUIDE §4.5 checks ≤ 0.3 mm. The beam's slope under the moving load tilts the head by under 0.02°, under 0.1 mm at the cup in X against ±1.85 mm of play. The beam's own weight (1.28 kg/m) adds a fixed 0.10 mm at midspan. [Certain, beam formula] |
+| X beam twist from the head overhang (cup axis 127 mm in front of the beam centre) | ≈ 0.5 mm in Y at the cup near the pad, worst at midspan; 0.3–0.8 mm for a torsion constant J of 2.5–1.0 cm⁴ [Guessing on J: no published value found for a slot-6 4040] | θ = T·L / (4·G·J) with both ends fixed in torsion: T = 1.93 kg × g × 77 mm = 1.46 N·m (the CAD puts the carriage's centre of mass 77 mm in front of the beam centre, not 127), L = 1.376 m, G = 26 GPa, times the 400 mm from the beam axis to the cup face. The earlier 0.8 mm put all 1.9 kg on the cup axis. The corner brackets and the rail block's play are not included. Within pocket play. Measure it during build (BUILD_GUIDE §6.7). Add a rear brace if > 1 mm. |
 | Spring buffer force at trip (2 mm) / end of a probe window (14 mm) / bottomed (20 mm) | about 1.2 / 2.4 / 3.0 N [Likely: SMC lists 1.0 N at rest and 3.0 N at full stroke for ø10–32 buffers] | The software never probes more than 12 mm past contact; a trip at 6000 mm/min squeezes about 6 mm. The `ZPT25UUK20-B5-A10` has 20 mm of stroke: SMC sells no 25 mm stroke on a 25 mm pad. [Certain, SMC ZP catalog Table 2] |
-| Stack height, 30 PSA slabs at 6.25–6.9 mm | 188–207 mm | MAX line 210, beam at 214, rod tops 218 |
+| Stack height, 30 PSA slabs at 6.25–6.9 mm | 188–207 mm | MAX line 210, overfill beam at 214, rod tops 218 |
 | Carry height (cup), loaded and empty | 248 mm | A **double pick** of two 11.5 mm thick holders still clears the rods by 5 mm, counting the free cup's 2 mm hang below its calibrated height [Certain, CAD]. The carry sensor trips at 246.5: a head it still sees as "up" (≥ 245.5) clears them by 2.5 mm. |
+| Moving mass, Z head (CAD: `build.assembly('carry')`, parts in group `head`) | 0.40 kg from CAD volumes and catalog masses; ≈ 0.46 kg with the T8 nut and the head's share of cables and tube [Guessing]; ≈ 0.53 kg with a 65 g slab | Under the 0.75 kg used above. With 0.53 kg: 0.0185 N·m + 0.006–0.009 N·m of rotor and screw inertia = 0.025–0.027 N·m, so **SF ≈ 2–4** at 0.8 A still holds [Likely]. The 0.75 kg plus that inertia would need 0.033–0.035 N·m (SF ≈ 1.7–3). Back-drive with 0.53 kg: 0.003–0.005 N·m. |
+| Moving mass, X carriage (groups `carriage` + `head`) | 1.62 kg from CAD volumes and catalog masses; ≈ 1.87 kg with T-nuts, screw shanks, the belt and the drag chain's moving share [Guessing]; ≈ 1.94 kg with a slab | Matches the 1.9 kg used above (5.9 N, 0.037 N·m): the X margin is unchanged. Its centre of mass sits 77 mm in front of the beam centre (twist row). |
+
+**Mass rollup inputs.** Volumes are the solids of `build.assembly('carry')` (`cad/build.py`), summed by
+`Part.group`. Printed parts: PETG at 1.27 g/cm³ × 0.71, the solid fraction BOM.csv gives for the listed
+walls and infill (about 720 g of 1020 g solid) [Guessing for each part]; belt clamps at 100%. The
+aluminium flags, the steel buffer and lead screw (a solid Ø8 in the CAD) and the fastener heads (the only
+part of a screw that is modelled) use their CAD volume at 2.70 and 7.85 g/cm³. Extrusions, rails and
+carriage blocks are solid envelopes in the CAD, so catalog values replace them: the 2040 and 2020 at
+Misumi's 324 and 183 mm² sections × 2.70 g/cm³, the MGNR12 rail at 0.65 kg/m, each MGN12H block about
+0.05 kg [Likely]. Z motor body 0.36 kg; head camera 20 g, LED ring 5 g, cup 9 g, each sensor board 4 g,
+M5 elbow 3 g [Guessing]. Heaviest items: Z motor 0.36 kg, Z spine 0.30, Z rail 0.22, drop arm 0.14, lead
+screw 0.13, printed parts 0.22 (0.15–0.31 kg for a solid fraction of 0.5–1.0).
 
 ## 5. Reading the label
 
 - **Glare geometry.** The station camera sits on the slab's centre axis, the head camera 5 mm from
   it toward the label end, each with a small LED ring around the lens. **[Certain, mirror
   geometry]** The mirror reflection of a ring of radius r lands within r/2 of the lens axis, so
-  within ~12 mm. The label band sits about 40–65 mm off the lens axis, so it is glare-free without
+  within about 10 mm for the head's 40 mm ring (11 mm for a 42.5 mm one) and about 16 mm for the
+  station's 63 mm ring. The label band sits about 40–65 mm off the lens axis, so it is glare-free without
   polarisers. That avoids the slab plastic's stress-birefringence "rainbow" risk that
   cross-polarisation has. [Likely] Room lights reflecting off the slab plastic are a minor effect.
   The LED ring is several times brighter on the label than a ceiling light's reflection, so contrast
