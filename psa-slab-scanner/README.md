@@ -1,11 +1,20 @@
 # SlabRail: unattended PSA / CGC slab cert scanner
 
-Load up to **330 graded slabs** (11 stacks of 30) and walk away. About 80 minutes later you have
-`certs.csv` with every cert number, where each slab ended up, and a photo of each label.
+Load up to **330 graded slabs** (11 stacks of 30) and walk away. About 80 minutes later (in the
+simulator: nothing has been built yet) you have `certs.csv` with every cert number, where each slab
+ended up, and a photo of each label.
 The machine has **two motors**: one moves the head left and right along a single beam, the
 other moves it up and down.
 
-**Engineers reviewing the design:** start with [docs/REVIEWER_BRIEF.md](docs/REVIEWER_BRIEF.md); the drawing set (PDF) and the CAD bundle are in `package/`.
+**For engineers reviewing the design:**
+- Start with [docs/REVIEWER_BRIEF.md](docs/REVIEWER_BRIEF.md): what is checked and what isn't, what is
+  missing, and the review questions.
+- [`package/`](package/): the review PDF, all the docs in one PDF, and the CAD zip (STEP, GLB, STL,
+  drawing set).
+- [`web/`](web/): an overview page, an interactive 3D model and a replay of a simulated run. GitHub
+  shows them as source: download a file and open it in a browser.
+- [`docs/history/`](docs/history/): the design-round reports and the real-label evaluation. They are
+  historical, so their numbers may be out of date.
 
 ![How a run works](docs/img/storyboard.png)
 
@@ -23,7 +32,8 @@ other moves it up and down.
   (below). Real cameras through the slab plastic and real cup behaviour still need to be tested.
   That is why the build starts with **two Phase 0 gates** before you buy any motion parts:
   - **0A, camera test:** can the cameras read *your* labels? About $281 with a borrowed school
-    Raspberry Pi, about $470 if you buy one. One or two evenings plus printing.
+    Raspberry Pi, about $470 if you buy one. About 6–7 h of hands-on work plus about 17 h of
+    printing (BUILD_GUIDE §0.1).
   - **0B, cup test:** does the cup seal on your holders, and does it leave a mark after 24 h? This
     is the only part that touches your inventory. About $155 with a spare SMC cup (the one shop
     that lists the exact code shows it back-ordered), a hand vacuum pump on the bench, no mains
@@ -83,7 +93,7 @@ The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
 | | |
 |---|---|
 | Capacity | 330 per load (11 × 30 PSA). CGC reads too. BGS (its label has no code) and TAG go to pocket 12, but only load them if they measure ≤ 82.6 mm wide. SGC (≈ 86 mm) does not fit. |
-| Footprint | about 1.42 m × 0.32 m × 0.65 m tall (fits a 6 ft bench) |
+| Footprint | about 1.44 m × 0.29 m × 0.72 m tall (1436 × 289.5 × 720 mm, the CAD assembly's bounding box over the feet, bed and Z motor; cables and drag chain not modelled). Fits a 6 ft bench. |
 | Moving parts | X belt axis, Z lead-screw axis, a spring-loaded cup, 2 valves, 1 pump |
 | Cycle | about 14 s per slab in the timing simulation: 79 min for a 330-slab load with the default label mix, including homing and the stack survey. Older front-only labels can take up to 30 s more each (OCR on the Pi), and each slab without a back-label code stops the run until the learned check is active, unless you use `--all-face-down`. Real speed will be measured in the acceptance tests. |
 | Touches the slab | cup on the **back** only; edges against wooden dowels; slabs rest on each other as in any stack |
@@ -100,13 +110,17 @@ The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
 | `docs/SHOPPING_LIST.md` | The same parts as the three orders you place (Phase 0A, Phase 0B, machine), with links |
 | `docs/WIRING.md`, `docs/img/wiring.svg` | Wiring tables and diagram |
 | `docs/FIRMWARE.md`, `firmware/fluidnc/config.yaml` | Motion controller (FluidNC) setup |
+| `docs/REVIEWER_BRIEF.md` | For engineers: the review brief and questions |
 | `docs/DESIGN.md` | Why this design, the damage analysis and the calculations |
+| `docs/CONTRACT.md` | The interface contract: layout, axes, heights, pins |
 | `docs/RESEARCH.md` | Existing products, PSA slab facts, the real PSA and CGC label formats, PSA API limits |
 | `cad/` | Parametric CadQuery model. `layout.py` is the master dimensions file. |
 | `cad/out/printed/` | **STL + STEP for every 3D-printed part**, plus `print_list.json` |
-| `cad/out/assembly/slabrail_home.step` | Full assembly; opens in Fusion 360, Onshape or FreeCAD |
+| `cad/out/assembly/slabrail_<pose>.step`, `.glb` | Full assembly in four poses (STEP opens in Fusion 360, Onshape or FreeCAD); `home` and `carry` also as GLB meshes for viewing. See `cad/README.md`. |
+| `cad/out/drawings/` | The dimensioned drawing set (18 sheets, draft for design review) |
 | `cad/out/cut_list.csv`, `cad/out/probe_flag_blank.svg` | Extrusion, dowel and flag-blank cut lengths; the 1:1 drawing of the probe flag |
 | `software/` | Raspberry Pi software: run loop, decoding, simulator, CLI, web page, and `tools/real_eval.py` (the real-label check) |
+| `package/`, `web/`, `docs/history/` | The engineering package; the overview, 3D and replay pages; the design-round history |
 
 ## Verification done so far (no hardware)
 
@@ -167,14 +181,14 @@ The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
   studio scans have no slab-plastic reflections; Phase 0 on your own slabs is the real test.
 - **[Certain, synthetic labels in the real formats] Decode sweep.**
   - The back QR reads through blur and strong glare.
-  - The front barcode needs 0.05 mm per pixel; the station camera gives 0.039.
+  - The front barcode needs 0.05–0.08 mm per pixel or finer; the station camera gives 0.039.
   - Not a single wrong cert was produced in any test.
 
 ## Build order
 
 1. **Phase 0, two gates. Order the machine only if both pass.** (BOM order 1 ≈ $626 in all.)
-   - **1a. Camera test, ≈ $281 with a borrowed Pi (≈ $470 buying one), one or two evenings plus
-     printing.** Build the camera test jig (`docs/img/phase0_jig.png`) and run
+   - **1a. Camera test, ≈ $281 with a borrowed Pi (≈ $470 buying one), 6–7 h of hands-on work
+     plus about 17 h of printing.** Build the camera test jig (`docs/img/phase0_jig.png`) and run
      `python -m tools.phase0` on 30–50 of your own slabs. Go on only if at least 95% read, 0 come
      out wrong, and `python -m tools.real_eval --phase0 phase0_results` shows 0 wrong certs and 0
      false face-down proofs.

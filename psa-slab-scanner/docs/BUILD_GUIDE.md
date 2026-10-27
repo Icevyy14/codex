@@ -94,7 +94,7 @@ in [OPERATING.md §4](OPERATING.md#4-what-the-machine-does).
 
 | Item | Value | Source |
 |---|---|---|
-| Footprint | 1416 × 290 mm bed, about 0.65 m tall | `cad/model.py` [Certain] |
+| Footprint | 1416 × 290 mm bed; about 1.44 × 0.29 × 0.72 m overall, feet included | `cad/model.py` (assembly bounding box) [Certain] |
 | Motors | X: NEMA17 on a GT2 belt. Z: NEMA17 with a T8×8 lead screw, cut to 340 mm. | CONTRACT [Certain] |
 | Rails | X: MGN12 1300 mm on a 4040 beam. Z: MGN12 330 mm on a 2040 spine. | CONTRACT [Certain] |
 | Pocket | 84 × 139 mm inside, made by 5/16 in (7.94 mm) dowels 218 mm tall | `cad/layout.py` [Certain] |

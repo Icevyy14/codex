@@ -299,6 +299,29 @@ class Doc:
                 warn(f"{self.path}: pandoc found {len(v)} {k} span(s), e.g. {v[0]!r}")
 
 
+LONG_TOKEN = 22          # a word longer than this in a table cell may break anywhere
+CODE_PT = 7.8            # code block font size, made smaller for long lines
+CODE_MIN_PT = 5.6
+MONO_ADVANCE = 0.602     # DejaVu Sans Mono advance width, in em
+TEXT_WIDTH_PT = 612 - 2 * 72 * 1.8 / 2.54  # US Letter less the side margins
+
+
+def long_token(text: str) -> bool:
+    return any(len(w) > LONG_TOKEN for w in text.split())
+
+
+def code_font_pt(code: str, depth: int) -> float | None:
+    """Font size that fits the longest line of a code block on the page, or None for the default."""
+    longest = max((len(line.rstrip()) for line in code.split("\n")), default=0)
+    if not longest:
+        return None
+    avail = (TEXT_WIDTH_PT - 2 - 16 * depth) * 0.97
+    size = avail / (MONO_ADVANCE * longest + 1.2)  # 1.2 em of padding
+    if size >= CODE_PT:
+        return None
+    return max(CODE_MIN_PT, int(size * 10) / 10)
+
+
 def prepare_fragment(doc: Doc, volume_docs: dict[str, Doc]) -> str:
     """Return the HTML of one document for one volume (ids prefixed with '<key>--')."""
     ast = json.loads(json.dumps(doc.ast))  # deep copy: link targets depend on the volume
@@ -369,13 +392,21 @@ def prepare_fragment(doc: Doc, volume_docs: dict[str, Doc]) -> str:
             return None
         return text  # not real HTML (e.g. a "<where>" placeholder): show it as text
 
-    def walk(x, extra_after):
+    def walk(x, extra_after, in_table=False, depth=0):
         if isinstance(x, dict):
             t = x.get("t")
             if t == "Link":
                 fix_link(x, extra_after)
+                if in_table and long_token(stringify(x["c"][1])):
+                    x["c"][0][1] = list(x["c"][0][1]) + ["brk"]
             elif t == "Image":
                 fix_image(x)
+            elif t == "Code" and in_table and long_token(x["c"][1]):
+                x["c"][0][1] = list(x["c"][0][1]) + ["brk"]
+            elif t == "CodeBlock":
+                size = code_font_pt(x["c"][1], depth)
+                if size is not None:
+                    x["c"][0][2] = list(x["c"][0][2]) + [["style", f"font-size: {size:.1f}pt"]]
             elif t == "RawInline":
                 txt = raw_to_text(x)
                 if txt is not None:
@@ -389,11 +420,17 @@ def prepare_fragment(doc: Doc, volume_docs: dict[str, Doc]) -> str:
                 attr[1] = list(attr[1]) + [f"cols-{len(colspecs)}"]
                 for cs in colspecs:  # let the browser size the columns
                     cs[1] = {"t": "ColWidthDefault"}
+                in_table = True
+            if t in ("BulletList", "OrderedList", "BlockQuote", "DefinitionList"):
+                depth += 1
             for v in list(x.values()):
-                walk(v, extra_after)
+                walk(v, extra_after, in_table, depth)
         elif isinstance(x, list):
-            for v in x:
-                walk(v, extra_after)
+            for i, v in enumerate(x):
+                if in_table and isinstance(v, dict) and v.get("t") == "Str" and long_token(v["c"]):
+                    x[i] = {"t": "Span", "c": [["", ["brk"], []], [v]]}
+                else:
+                    walk(v, extra_after, in_table, depth)
 
     blocks = []
     for b in ast["blocks"]:
@@ -476,7 +513,8 @@ h1 { font-size: 18pt; margin: 0 0 0.6em 0; padding-bottom: 0.2em; border-bottom:
 h2 { font-size: 13.5pt; margin: 1.2em 0 0.45em 0; padding-bottom: 0.1em; border-bottom: 0.5px solid #bbb; }
 h3 { font-size: 11.5pt; margin: 1.0em 0 0.35em 0; }
 h4, h5, h6 { font-size: 10.5pt; margin: 0.9em 0 0.3em 0; }
-ul, ol { margin: 0 0 0.6em 0; padding-left: 1.5em; }
+ul, ol { margin: 0 0 0.6em 0; padding-left: 1.6em; }
+ol { padding-left: 2.1em; }
 li { margin: 0.1em 0; }
 li > p { margin: 0 0 0.25em 0; }
 blockquote { margin: 0.4em 0 0.7em 0; padding: 0.1em 0.8em; border-left: 3px solid #bbb; color: #333; }
@@ -496,11 +534,13 @@ table.cols-7, table.cols-8, table.cols-9, table.cols-10 { font-size: 7.3pt; }
 thead { display: table-header-group; }
 tr { break-inside: avoid; page-break-inside: avoid; }
 th, td { border: 0.5px solid #b8b8b8; padding: 2.5px 4px; vertical-align: top; text-align: left;
-         overflow-wrap: anywhere; word-break: normal; hyphens: manual; }
+         overflow-wrap: break-word; word-break: normal; hyphens: manual; }
+td a, th a, td code, th code { overflow-wrap: break-word; }
+.brk, td a.brk, th a.brk, td code.brk, th code.brk { overflow-wrap: anywhere; word-break: break-all; }
 th { background: #e9edf3; font-weight: 650; }
 tbody tr:nth-child(even) td { background: #fafafa; }
 td code, th code { font-size: 0.92em; }
-img { max-width: 100%%; max-height: 8.2in; height: auto; display: block; margin: 0.3em auto 0.6em auto;
+img { max-width: 100%%; max-height: 7.6in; height: auto; display: block; margin: 0.3em auto 0.6em auto;
       break-inside: avoid; }
 p > img:only-child { margin-bottom: 0.2em; }
 .linked-figure { break-inside: avoid; margin: 0.4em 0 0.8em 0; }
@@ -510,11 +550,13 @@ section.doc:first-of-type { break-before: auto; }
 
 /* cover */
 .cover { page: cover; break-after: page; page-break-after: always; text-align: center;
-         height: 9.6in; display: flex; flex-direction: column; }
+         height: 9.3in; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
+.cover > * { flex: 0 0 auto; }
 .cover .kicker { font-size: 10pt; letter-spacing: 0.12em; text-transform: uppercase; color: #555; margin-top: 0.4in; }
 .cover .title { font-size: 27pt; font-weight: 700; margin: 0.25in 0 0.12in 0; color: #111; }
 .cover .subtitle { font-size: 14pt; color: #333; margin-bottom: 0.25in; }
-.cover img { max-height: 4.1in; margin: 0.15in auto 0.2in auto; border: 0.5px solid #ccc; }
+.cover img { width: auto; height: auto; max-width: 100%%; max-height: 4.0in; margin: 0.15in auto 0.2in auto;
+              border: 0.5px solid #ccc; }
 .cover .status { display: inline-block; margin: 0.1in auto 0.2in auto; padding: 0.45em 1.1em;
                  border: 1.2px solid #8a1c1c; color: #8a1c1c; font-weight: 650; font-size: 11.5pt; }
 .cover .volume { font-size: 11pt; color: #222; margin: 0.1in 0.6in 0.15in 0.6in; }
@@ -819,11 +861,11 @@ def build_volume(vol: dict, printer: Printer, sheets, git: dict, workdir: Path) 
     flat = flatten_outline(reader)
     seq = [(d, lvl, hid, txt) for _s, d in starts for (lvl, hid, txt) in d.headings]
     h2_pos: dict[tuple[str, str], tuple[int, float | None]] = {}
-    # Chromium names outline items after the heading text (an h1 sometimes comes out doubled), so
-    # match the two lists in order, by text.
+    # Chromium names outline items after the heading text, but repeats parts of it when the heading
+    # holds inline elements, so match the two lists in order and only loosely by text.
     def same(outline_title: str, text: str) -> bool:
         a, b = norm(outline_title), norm(text)
-        return a == b or (bool(b) and a == b * 2)
+        return a == b or (bool(a) and bool(b) and (b in a or a in b))
 
     if len(flat) == len(seq) and all(same(a[0], b[3]) for a, b in zip(flat, seq)):
         for (title, pg, top), (d, lvl, hid, txt) in zip(flat, seq):
@@ -880,7 +922,10 @@ def build_volume(vol: dict, printer: Printer, sheets, git: dict, workdir: Path) 
         "/CreationDate": date,
         "/ModDate": date,
     })
-    writer.compress_identical_objects(remove_identicals=True, remove_orphans=True)
+    try:  # drop the objects that merging left behind
+        writer.compress_identical_objects(remove_duplicates=True, remove_unreferenced=True)
+    except TypeError:  # pypdf < 5.x
+        writer.compress_identical_objects(remove_identicals=True, remove_orphans=True)
     tmp = workdir / vol["file"]
     with open(tmp, "wb") as fh:
         writer.write(fh)

@@ -137,8 +137,12 @@ sits **in the +24 V line straight after the supply**. Pressing it cuts:
   resistance, and that inrush can weld a small contact closed. [Likely] A welded NC E-stop is
   invisible: the button is down and the machine is still live. With two blocks in series, one
   welded block still leaves the other to open.
-- Use blocks rated for **at least 5 A at 24 V DC** if you can find the rating. Many 22 mm blocks
-  only list AC ratings. [Guessing on what you'll receive]
+- The target is blocks rated for **at least 5 A at 24 V DC**. The BOM's ECX1030 blocks are rated
+  **DC-13 1.5 A at 24 V** [Certain, AutomationDirect], below that target and below the bus's ≈3.4 A
+  peak (§1.2) [Guessing on the peak]; no 22 mm block rated ≥ 5 A at 24 V DC was found. DC-13 is the
+  inductive-load category, so the resistive rating is probably higher [Guessing], but it is not
+  listed. Two blocks in series and the monthly E-stop check are the mitigation for now. **Open
+  issue for review:** the mains-side E-stop below, or a force-guided safety relay, removes it.
 - **Do not "fix" this with an ordinary 24 V relay** switched by the E-stop: its contacts see the
   same inrush and can weld the same way. Only a force-guided safety relay would help.
 - The alternative is to put the E-stop in the supply's mains feed (AC-rated contacts, and the LRS's
@@ -830,8 +834,10 @@ Do this with everything wired, **mains unplugged**, and the E-stop released.
    common output types safe, but measure before wiring.
 2. **[Likely] Sensor output direction.** It is assumed to be 0.5 V at −100 kPa. Check about 4.5 V
    at atmosphere on first power-up.
-3. **[Guessing] E-stop DC rating.** Two NC blocks in series are required anyway (§1.3); confirm
-   ≥ 5 A at 24 V DC if the blocks list it, and do the monthly E-stop check.
+3. **[Certain] E-stop DC rating is below target.** The BOM's blocks are rated DC-13 1.5 A at 24 V,
+   against the ≥ 5 A target and the ≈3.4 A bus peak (§1.2, §1.3). Two NC blocks in series and the
+   monthly E-stop check stay required; a mains-side E-stop or a force-guided safety relay is the
+   fix to decide before unattended use.
 4. **[Guessing] Head USB at about 4 m.** It works on paper. A cheap extension in a moving chain
    is the weakest cable in the machine. Watch for camera dropouts in the soak test.
 5. **[Guessing] Whether Adafruit #5648 has a SIG pull-down.** Measured in §14 step 13 before the
