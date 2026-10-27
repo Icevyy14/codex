@@ -2184,12 +2184,18 @@ def sheet_bed(sh: Sheet, geo: Geo, plan):
     last_k, last_near = rod_at(xs_l[-1], ys_l[1])
     vp.leader((xs_l[-1] + 4.0 * 0.707, ys_l[1] - 4.0 * 0.707), 22.0, -16.0, [f"{nr2.text}x Ø{rdc.text} x {emc.text} deep", "rod holes:", "see ROD HOLES note"], [nr2, rdc, emc])
     f0 = rod_c("rod holes: first side-rod line X", xs_l[0], ys_l[1], "x")
-    pit = G("rod holes: side-rod line pitch", s_sub(("cyl", rod_at(xs_l[1], ys_l[1])[0], "z", L.ROD_D, rod_at(xs_l[1], ys_l[1])[1], "x", False),
-                                                    ("cyl", rod_at(xs_l[0], ys_l[1])[0], "z", L.ROD_D, rod_at(xs_l[0], ys_l[1])[1], "x", False)),
+    wall_xs = sorted(x for x, y in rods if abs(y - ys_l[1]) < 1e-6)  # the side rods of one row = the cell wall lines
+    k1, n1 = rod_at(wall_xs[1], ys_l[1])
+    k0_, n0_ = rod_at(wall_xs[0], ys_l[1])
+    pit = G("rod holes: side-rod line pitch", s_sub(("cyl", k1, "z", L.ROD_D, n1, "x", False), ("cyl", k0_, "z", L.ROD_D, n0_, "x", False)),
             "second minus first side-rod line X")
     sr = rod_c("rod holes: side-rod row Y (back)", xs_l[0], ys_l[2], "y")
     fr = rod_c("rod holes: front/back-rod row Y (back)", xs_l[0] + L.WALL / 2 + L.ROD_INSET, ys_l[3], "y")
-    fp = G("rod holes: front/back pair X", s_sub(s_lcyl(n, "z", 8.3, (30, 73.5, 6), "x"), s_lcyl(n, "z", 8.3, (-30, 73.5, 6), "x")), "drill_template front/back-rod holes X")
+    xa_ = xs_l[0] + L.WALL / 2 + L.ROD_INSET  # pocket 0's back rods: locators
+    ka_, na_ = rod_at(xa_, ys_l[3])
+    kb_, nb_ = rod_at(xa_ + L.POCKET_W - 2 * L.ROD_INSET, ys_l[3])
+    fp = G("rod holes: front/back pair X", s_sub(("cyl", kb_, "z", L.ROD_D, nb_, "x", False), ("cyl", ka_, "z", L.ROD_D, na_, "x", False)),
+           "pocket 0 back rods: right rod X - left rod X")
     stc2 = C("STATION_CELL", unit="count")
     sh.wrap_recs(tx, t - 2.5,
                  f"ROD HOLES: {nr2.text}x Ø{rdc.text} (CAD ROD_D; drill with the brad-point bit that matches the dowels: 5/16 in for the BOM's 7.94 "

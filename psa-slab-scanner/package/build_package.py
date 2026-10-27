@@ -880,6 +880,7 @@ def build_volume(vol: dict, printer: Printer, sheets, git: dict, workdir: Path) 
         "/CreationDate": date,
         "/ModDate": date,
     })
+    writer.compress_identical_objects(remove_identicals=True, remove_orphans=True)
     tmp = workdir / vol["file"]
     with open(tmp, "wb") as fh:
         writer.write(fh)

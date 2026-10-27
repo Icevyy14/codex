@@ -74,7 +74,7 @@ The next step is two bench gates that decide whether it gets built:
 | X axis | NEMA17, GT2 20T belt, 80 steps/mm; one MGN12H block on a 1300 rail; soft limits 22…1253, printed hard stops at cup X 15 and 1262; 15000 mm/min, 2000 mm/s²; 1.0 A | CONTRACT, FIRMWARE |
 | Z axis | NEMA17 (1.5–2.0 A, ≤ 4 mH), integrated T8×8 screw cut to 340; one MGN12H block on a 330 rail; c = −12…250 used, hard stops c = −14 and 262; 6000 mm/min, 1200 mm/s²; run 0.8 A, hold 0.5 A | CONTRACT, FIRMWARE |
 | Drivers | TMC2160, 1/16 microstepping, spreadCycle, no StallGuard; never switched off when idle; `must_home: true`. `r_sense_ohms` ships at 0.022 until the board's resistors are read: the wrong value gives 3.4 × or 0.29 × the set current. | FIRMWARE "Read this first", "What config.yaml sets" |
-| Cup, vacuum | SMC `ZPT25UUK20-B5-A10`: Ø25 urethane cup, M10 spring buffer, 20 mm stroke; probe trips at 2.0 ± 0.5 of travel (about 1.2 N [Likely]). 19.1 N at −50 kPa with a 78% effective area, SF 30 on a 0.64 N slab [Certain, arithmetic]; seal accepted at −35 kPa within 0.4 s. Pump, reservoir, valves: BUILD_GUIDE §8.1. | DESIGN §4, `config.py`, BUILD_GUIDE §8.1 |
+| Cup, vacuum | SMC `ZPT25UUK20-B5-A10`: Ø25 urethane cup, M10 spring buffer, 20 mm stroke; probe trips at 2.0 ± 0.5 of travel (about 1.2 N [Likely]). 19.1 N at −50 kPa, SF 30 on a 0.64 N slab; 13.4 N, SF 21 at the −35 kPa seal level (reached within 0.4 s) [Certain, arithmetic; the 78% effective area is an estimate]. Pump, reservoir, valves: BUILD_GUIDE §8.1. | DESIGN §4, `config.py`, BUILD_GUIDE §8.1 |
 | Sensors | Fail-safe optical contact probe (Rodent input); carry-height sensor (Pi GPIO 6, blocked from c = 246.5 up); vacuum sensor; overfill laser gate (GPIO 5); X home and Z top NC microswitches; optional lid switch (GPIO 25) | CONTRACT, WIRING §5–8 |
 | Cameras | Head: ELP 8 MP USB, 3.6 mm lens, 140 above the held slab, 5 toward the label from the cup axis, 0.055 mm/px. Station: Pi Camera Module 3, 140 below, 0.039 mm/px. The LED rings' mirror image misses the label band, so no polarisers [Certain, mirror geometry; real glare untested until Phase 0A]. | CONTRACT, DESIGN §5 |
 | Control, power | BTT Rodent (FluidNC v4.1.1+) over USB to a Raspberry Pi 5 4 GB, which switches the pump, valves and rings. LRS-150-24 at 24.5 V behind a fused IEC inlet; E-stop in the +24 V line; fuses 5 / 3 / 1 A; Pi on its own supply. | CONTRACT, WIRING §1, `img/wiring.svg` |
@@ -128,7 +128,7 @@ assessment exists. What the docs have:
 | Item | Where | State |
 |---|---|---|
 | System block diagram | Electrical and control: `docs/img/wiring.svg`, WIRING §1. Vacuum: BUILD_GUIDE §8.1. Software: CONTRACT. Sequence: §5. | No single system diagram. |
-| Moving-mass breakdown | DESIGN §4 totals: 0.75 kg head, 1.9 kg X carriage | **Missing:** no per-part list, CAD mass roll-up or centre of gravity. |
+| Moving-mass breakdown | DESIGN §4: CAD roll-up, 0.40 kg head and 1.62 kg X carriage, centre of mass 77 in front of the beam centre; the calculations use 0.75 / 1.9 kg | Heaviest items only, several masses [Guessing]; no full per-part list. |
 | Motor and driver settings | FIRMWARE "What config.yaml sets"; `config.yaml` | Complete on paper; no torque curve for the BOM Z motor. |
 | Power budget | WIRING §1.2 | [Guessing] until parts are measured. |
 | Failure modes | §6; DESIGN §3, §7; OPERATING §8.1 (every stop message) | No FMEA with severity or occurrence. |
@@ -146,13 +146,13 @@ assessment exists. What the docs have:
 | Input | Value used | Tag, source | Feeds |
 |---|---|---|---|
 | Slab mass | ≤ 65 g (0.64 N) | `dims.py` | Cup SF, drop |
-| Cup effective area | 78% of Ø25 | DESIGN §4 | 19.1 N |
+| Cup area, lip friction | 78% of Ø25 effective; friction coefficient about 0.5 | an estimate; a guess (DESIGN §4) | Hold 19.1 / 13.4 / 9.6 N; lateral SF |
 | Buffer spring | SMC: 1.0 N at rest, 3.0 N at full stroke → about 1.2 / 2.4 / 3.0 N at 2 / 14 / 20 mm | [Likely], DESIGN §4 | Trip, contact force |
-| Moving masses | 0.75 kg head, 1.9 kg X carriage | DESIGN §4; no CAD roll-up | Torque, twist |
-| Screw, friction | T8×8 at 40% efficiency; 2 N X friction | DESIGN §4 | Torque |
-| Motor torque | Z ≈ 0.15–0.2 N·m at 750 rpm, full current; X ≈ 0.3 N·m at 375 rpm | [Likely], DESIGN §4; no curve | SF ≈ 2–4 (Z), ≈ 8 (X) |
+| Moving masses | 0.75 / 1.9 kg assumed (head / X carriage); CAD roll-up 0.40 / 1.62 kg, about 0.53 / 1.94 kg with allowances and a slab | DESIGN §4; allowances [Guessing] | Torque, twist |
+| Screw, rotor | T8×8 at 40% efficiency (50–65% [Likely]); 2 N X friction; 60–80 g·cm² rotor | DESIGN §4; rotor [Guessing] | Torque |
+| Motor torque | Z ≈ 0.15–0.2 N·m at 750 rpm at full current; X ≈ 0.15–0.3 N·m at 375 rpm at the 1.0 A run current | [Likely], DESIGN §4; no curve read | SF ≈ 2–4 (Z), ≈ 4–8 (X) |
 | Detent, back-drive | ≈ 0.015 vs ≈ 0.005 N·m | [Likely], DESIGN §4 | Z hold unpowered |
-| Beam torsion | J not stated | [Guessing], DESIGN §4 | ≈ 0.8 mm twist |
+| Beam torsion | J 1.0–2.5 cm⁴, G 26 GPa, both ends fixed | [Guessing on J], DESIGN §4 | ≈ 0.5 mm twist |
 | Belt tension | 15–25 N | [Guessing], BUILD_GUIDE §6.6 | PETG loads |
 | Load current | ≈ 1.2 A typical, ≈ 3.4 A peak | [Guessing], WIRING §1.2 | Fuses, E-stop |
 | Bought parts | Catalog or listing envelopes; head camera 32 mm hole pattern and 20 mm board-to-lens | [Guessing] for the camera, BUILD_GUIDE | Clearances |
@@ -167,22 +167,28 @@ A short answer with the question number is enough. Label and face-down risks are
 1. **Frame joints.** The CAD has no brackets. BUILD_GUIDE §4.3 proposes [Guessing on the layout] two
    4040 L brackets in each beam-to-upright corner, a back plate (none in front: the X rail ends
    18 mm from each upright), and uprights held by L brackets bolted M5×30 through the 18 mm plywood
-   into the back base rail. These joints react the head's overhang; nothing calculates their
-   stiffness. Enough, or end-tap and bolt the uprights? (D-01, D-02)
-2. **Beam twist.** ≈ 0.8 mm at the cup at midspan from the 127 mm overhang [Guessing on J] (DESIGN
-   §4); its derivation and end conditions are not in the repo. The build check hangs 0.75 kg on the
-   cup over pocket 6 and adds a rear brace above 1.0 mm (BUILD_GUIDE §6.7). Twist also turns the head
-   camera in the plane of the aim limits (Q11), and it varies along X while the aim check looks over
-   one pocket (an inference; no doc relates them). Credible? Measure angle too? (D-04)
+   into the back base rail. These joints react the head's overhang, and the twist estimate (Q2)
+   assumes they fix the beam ends in torsion; nothing calculates their stiffness. Enough, or
+   end-tap and bolt the uprights? (D-01, D-02)
+2. **Beam twist.** ≈ 0.5 mm in Y at the cup at midspan (0.3–0.8 for J 2.5–1.0 cm⁴) [Guessing on
+   J]: θ = T·L/(4GJ), ends fixed, T 1.46 N·m from the CAD centre of mass, G 26 GPa; brackets and
+   rail-block play not included (DESIGN §4). The build check hangs 0.75 kg on the cup over pocket 6
+   (0.93 N·m [arithmetic: 0.75 kg × g × 127 mm], about 64% of the carriage's own 1.46 N·m), so its
+   reading is not directly the estimate; a rear brace goes on above 1.0 mm (BUILD_GUIDE §6.7). Twist
+   also tilts the head camera in the plane of the aim limits (Q11) and varies along X, while the aim
+   check looks over one pocket (an inference; no doc relates them). Credible? Measure angle? (D-04)
 3. **Rail loads.** Each axis runs on one MGN12H block (generic rails; the X listing states no
-   preload). The X block carries the Z stack (motor top at Z 671) with the head 127 in front of the
-   beam. No moment-load, deflection or life check exists. One block enough? (D-04, D-05)
-4. **Z torque at 0.8 A.** 0.026 N·m on the T8×8 (DESIGN §4 lists only the 0.75 kg head at
-   1.2 m/s²); at 0.8 A (40–55% of rating) SF ≈ 2–4 [Likely]; no torque curve. The test passes if a
+   preload). The X block carries the 1.62 kg carriage (CAD; about 1.94 kg with hardware and a slab),
+   centre of mass 77 in front of the beam centre, Z motor top at Z 671. No moment-load, deflection
+   or life check exists. One block enough? (D-04, D-05)
+4. **Z torque at 0.8 A.** 0.026 N·m on the T8×8 for 0.75 kg at 1.2 m/s² without rotor inertia;
+   with the CAD's 0.53 kg plus inertia, 0.025–0.027 N·m (DESIGN §4). At 0.8 A (40–55% of rating)
+   SF ≈ 2–4 [Likely]; no torque curve. The test passes if a
    bare-pad probe agrees within 0.1 mm after 100 full-speed lifts; the fixes are 3000 mm/min, then
    about 60% of rated current (BUILD_GUIDE §7.8). More margin from the start? Is 100 lifts enough
    for a 330-slab run? (D-05)
-5. **Z hold, power off.** Back-drive about 0.005 N·m against about 0.015 N·m detent [Likely]. The
+5. **Z hold, power off.** Back-drive about 0.005 N·m (0.003–0.005 with the CAD mass) against about
+   0.015 N·m detent [Likely]. The
    test hangs 200 g on the cup, presses the E-stop and watches 1 minute; any creep means a brake or
    counterweight, whose mount is not in the CAD (BUILD_GUIDE §7.8). Design it in now? (D-05)
 6. **Switch side load.** Each home switch is worked by a striker sliding across its hinge lever (a
@@ -193,9 +199,9 @@ A short answer with the question number is enough. Label and face-down risks are
    and the belt (15–25 N [Guessing]) beside motors allowed about 50 °C. No doc gives a PETG
    temperature limit; nothing checks creep or stiffness. Which would you change? (D-08
    `x_motor_mount`, D-09 `x_bracket`, D-10 `z_plate`, `z_motor_mount`, D-12 `head_foot`)
-8. **Cup margin, marking, power-cut hold.** 19.1 N at −50 kPa, SF 30 [Certain, arithmetic], but the
-   software accepts a seal at −35 kPa and alarms only above −25 kPa; the margin there is not
-   computed. Marking: 24 h on a hand pump, then 300 cycles + 24 h at mean ≤ −40 kPa (BUILD_GUIDE
+8. **Cup margin, marking, power-cut hold.** At the software's thresholds: 13.4 N, SF 21 at the
+   −35 kPa seal; 9.6 N, SF 15 at the −25 kPa transit alarm; lateral SF 49 / 34 on a guessed
+   friction coefficient of 0.5 [Certain, arithmetic; 78% area an estimate] (DESIGN §4). Marking: 24 h on a hand pump, then 300 cycles + 24 h at mean ≤ −40 kPa (BUILD_GUIDE
    §1.10, §13.2). After a power cut the slab hangs on the closed cup line only, ≥ 60 s [Guessing
    target], with a cup-side reservoir as the fallback (BUILD_GUIDE §8.2). Enough? (D-17)
 9. **E-stop and mains.** The blocks are rated DC-13 1.5 A at 24 V [Certain, BOM.csv]; WIRING §1.3
