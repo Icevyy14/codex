@@ -1,0 +1,314 @@
+[
+ {
+  "sheet": "D-07",
+  "label": "station_mount hole d1.8 along z: diameter",
+  "value_mm": 1.8,
+  "unit": "mm",
+  "drawn": "1.8",
+  "source": "geometry:station_mount hole group along z: diameter"
+ },
+ {
+  "sheet": "D-07",
+  "label": "station_mount hole d1.8 along z: depth",
+  "value_mm": 11.5,
+  "unit": "mm",
+  "drawn": "11.5",
+  "source": "geometry:station_mount blind hole along z: cylinder length"
+ },
+ {
+  "sheet": "D-07",
+  "label": "printed/station_mount 4x d1.8 along z: centre span in X",
+  "value_mm": 21.0,
+  "unit": "mm",
+  "drawn": "21",
+  "source": "geometry:station_mount 4 holes d1.8 along z: centre span X"
+ },
+ {
+  "sheet": "D-07",
+  "label": "printed/station_mount 4x d1.8 along z: centre span in Y",
+  "value_mm": 12.5,
+  "unit": "mm",
+  "drawn": "12.5",
+  "source": "geometry:station_mount 4 holes d1.8 along z: centre span Y"
+ },
+ {
+  "sheet": "D-07",
+  "label": "station_mount hole d4.5 along z: diameter",
+  "value_mm": 4.5,
+  "unit": "mm",
+  "drawn": "4.5",
+  "source": "geometry:station_mount hole group along z: diameter"
+ },
+ {
+  "sheet": "D-07",
+  "label": "printed/station_mount 4x d4.5 along z: centre span in X",
+  "value_mm": 68.0,
+  "unit": "mm",
+  "drawn": "68",
+  "source": "geometry:station_mount 4 holes d4.5 along z: centre span X"
+ },
+ {
+  "sheet": "D-07",
+  "label": "printed/station_mount 4x d4.5 along z: centre span in Y",
+  "value_mm": 116.0,
+  "unit": "mm",
+  "drawn": "116",
+  "source": "geometry:station_mount 4 holes d4.5 along z: centre span Y"
+ },
+ {
+  "sheet": "D-07",
+  "label": "station_mount hole d64.0 along z: diameter",
+  "value_mm": 64.0,
+  "unit": "mm",
+  "drawn": "64",
+  "source": "geometry:station_mount hole group along z: diameter"
+ },
+ {
+  "sheet": "D-07",
+  "label": "station_mount hole d64.0 along z: depth",
+  "value_mm": 26.0,
+  "unit": "mm",
+  "drawn": "26",
+  "source": "geometry:station_mount blind hole along z: cylinder length"
+ },
+ {
+  "sheet": "D-07",
+  "label": "station_mount boss d5.0 along z: diameter",
+  "value_mm": 5.0,
+  "unit": "mm",
+  "drawn": "5",
+  "source": "geometry:station_mount outer cylinder along z: diameter"
+ },
+ {
+  "sheet": "D-07",
+  "label": "station_mount boss d5.0 along z: length",
+  "value_mm": 7.5,
+  "unit": "mm",
+  "drawn": "7.5",
+  "source": "geometry:station_mount outer cylinder along z: length"
+ },
+ {
+  "sheet": "D-07",
+  "label": "station_mount boss d70.0 along z: diameter",
+  "value_mm": 70.0,
+  "unit": "mm",
+  "drawn": "70",
+  "source": "geometry:station_mount outer cylinder along z: diameter"
+ },
+ {
+  "sheet": "D-07",
+  "label": "station_mount boss d70.0 along z: length",
+  "value_mm": 26.0,
+  "unit": "mm",
+  "drawn": "26",
+  "source": "geometry:station_mount outer cylinder along z: length"
+ },
+ {
+  "sheet": "D-07",
+  "label": "station_mount: ring shelf above the base-plate top",
+  "value_mm": 20.0,
+  "unit": "mm",
+  "drawn": "20",
+  "source": "geometry:station_mount ring shelf Z - base plate top Z"
+ },
+ {
+  "sheet": "D-07",
+  "label": "station_mount: camera boss tops above the base-plate top",
+  "value_mm": 11.5,
+  "unit": "mm",
+  "drawn": "11.5",
+  "source": "geometry:station_mount M2 boss top Z - base plate top Z"
+ },
+ {
+  "sheet": "D-07",
+  "label": "STATION_LENS_Z",
+  "value_mm": 23.0,
+  "unit": "mm",
+  "drawn": "23",
+  "source": "layout.STATION_LENS_Z"
+ },
+ {
+  "sheet": "D-07",
+  "label": "station_mount: overall X",
+  "value_mm": 80.0,
+  "unit": "mm",
+  "drawn": "80",
+  "source": "geometry:station_mount exported shape bounding box X"
+ },
+ {
+  "sheet": "D-07",
+  "label": "station_mount: overall Y",
+  "value_mm": 130.0,
+  "unit": "mm",
+  "drawn": "130",
+  "source": "geometry:station_mount exported shape bounding box Y"
+ },
+ {
+  "sheet": "D-07",
+  "label": "station_mount: overall Z",
+  "value_mm": 29.0,
+  "unit": "mm",
+  "drawn": "29",
+  "source": "geometry:station_mount exported shape bounding box Z"
+ },
+ {
+  "sheet": "D-07",
+  "label": "gate_post_L hole d7.2 along x: diameter",
+  "value_mm": 7.2,
+  "unit": "mm",
+  "drawn": "7.2",
+  "source": "geometry:gate_post_L hole group along x: diameter"
+ },
+ {
+  "sheet": "D-07",
+  "label": "gate_post_L hole d2.5 along y: diameter",
+  "value_mm": 2.5,
+  "unit": "mm",
+  "drawn": "2.5",
+  "source": "geometry:gate_post_L hole group along y: diameter"
+ },
+ {
+  "sheet": "D-07",
+  "label": "gate_post_L slot along z: width",
+  "value_mm": 4.5,
+  "unit": "mm",
+  "drawn": "4.5",
+  "source": "geometry:gate_post_L slot (paired half-cylinders) along z: width"
+ },
+ {
+  "sheet": "D-07",
+  "label": "gate_post_L slot along z: length",
+  "value_mm": 10.5,
+  "unit": "mm",
+  "drawn": "10.5",
+  "source": "geometry:gate_post_L slot along z: end-centre distance + width"
+ },
+ {
+  "sheet": "D-07",
+  "label": "gate_post_L slots along z: centre span Y",
+  "value_mm": 36.0,
+  "unit": "mm",
+  "drawn": "36",
+  "source": "geometry:gate_post_L slot centres along z: span Y"
+ },
+ {
+  "sheet": "D-07",
+  "label": "gate_post_L: bore axis above the foot underside",
+  "value_mm": 217.0,
+  "unit": "mm",
+  "drawn": "217",
+  "source": "geometry:gate_post_L barrel bore axis Z - foot underside Z"
+ },
+ {
+  "sheet": "D-07",
+  "label": "GATE_Z",
+  "value_mm": 214.0,
+  "unit": "mm",
+  "drawn": "214",
+  "source": "layout.GATE_Z"
+ },
+ {
+  "sheet": "D-07",
+  "label": "gate_post_L: overall X",
+  "value_mm": 22.0,
+  "unit": "mm",
+  "drawn": "22",
+  "source": "geometry:gate_post_L exported shape bounding box X"
+ },
+ {
+  "sheet": "D-07",
+  "label": "gate_post_L: overall Y",
+  "value_mm": 50.0,
+  "unit": "mm",
+  "drawn": "50",
+  "source": "geometry:gate_post_L exported shape bounding box Y"
+ },
+ {
+  "sheet": "D-07",
+  "label": "gate_post_L: overall Z",
+  "value_mm": 229.0,
+  "unit": "mm",
+  "drawn": "229",
+  "source": "geometry:gate_post_L exported shape bounding box Z"
+ },
+ {
+  "sheet": "D-07",
+  "label": "gate_post_R hole d6.2 along x: diameter",
+  "value_mm": 6.2,
+  "unit": "mm",
+  "drawn": "6.2",
+  "source": "geometry:gate_post_R hole group along x: diameter"
+ },
+ {
+  "sheet": "D-07",
+  "label": "gate_post_R hole d2.5 along y: diameter",
+  "value_mm": 2.5,
+  "unit": "mm",
+  "drawn": "2.5",
+  "source": "geometry:gate_post_R hole group along y: diameter"
+ },
+ {
+  "sheet": "D-07",
+  "label": "gate_post_R slot along z: width",
+  "value_mm": 4.5,
+  "unit": "mm",
+  "drawn": "4.5",
+  "source": "geometry:gate_post_R slot (paired half-cylinders) along z: width"
+ },
+ {
+  "sheet": "D-07",
+  "label": "gate_post_R slot along z: length",
+  "value_mm": 10.5,
+  "unit": "mm",
+  "drawn": "10.5",
+  "source": "geometry:gate_post_R slot along z: end-centre distance + width"
+ },
+ {
+  "sheet": "D-07",
+  "label": "gate_post_R slots along z: centre span Y",
+  "value_mm": 36.0,
+  "unit": "mm",
+  "drawn": "36",
+  "source": "geometry:gate_post_R slot centres along z: span Y"
+ },
+ {
+  "sheet": "D-07",
+  "label": "gate_post_R: bore axis above the foot underside",
+  "value_mm": 217.0,
+  "unit": "mm",
+  "drawn": "217",
+  "source": "geometry:gate_post_R barrel bore axis Z - foot underside Z"
+ },
+ {
+  "sheet": "D-07",
+  "label": "GATE_Z",
+  "value_mm": 214.0,
+  "unit": "mm",
+  "drawn": "214",
+  "source": "layout.GATE_Z"
+ },
+ {
+  "sheet": "D-07",
+  "label": "gate_post_R: overall X",
+  "value_mm": 22.0,
+  "unit": "mm",
+  "drawn": "22",
+  "source": "geometry:gate_post_R exported shape bounding box X"
+ },
+ {
+  "sheet": "D-07",
+  "label": "gate_post_R: overall Y",
+  "value_mm": 50.0,
+  "unit": "mm",
+  "drawn": "50",
+  "source": "geometry:gate_post_R exported shape bounding box Y"
+ },
+ {
+  "sheet": "D-07",
+  "label": "gate_post_R: overall Z",
+  "value_mm": 229.0,
+  "unit": "mm",
+  "drawn": "229",
+  "source": "geometry:gate_post_R exported shape bounding box Z"
+ }
+]
