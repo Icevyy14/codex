@@ -6,6 +6,9 @@ change the Python, then regenerate. Do not edit the exports by hand.
 
 Nothing has been built yet. The model is checked against itself (177 geometry checks, below), not against real parts.
 
+Paths below are relative to this `cad/` folder. In `SlabRail_CAD.zip` that folder is `SlabRail_CAD/cad/`, and this file is
+also copied to the top of the zip.
+
 ## Units
 
 - Millimetres everywhere: the Python, the STEP, STL and DXF files, `print_list.json` and `cut_list.csv`.

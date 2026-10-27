@@ -27,7 +27,6 @@ TAIL = "\n</body>\n</html>\n"
 
 
 def wrap(body: str, name: str) -> Path:
-    body = "\n".join(line for line in body.splitlines() if 'name="claude:viewport-fit-sides"' not in line)
     out = WEB / name
     out.write_text(HEAD + body + TAIL)
     print(f"wrote {out} ({out.stat().st_size / 1e6:.2f} MB)")

@@ -6,7 +6,7 @@ Everything in this folder except `build_package.py` and `cad_manifest.txt` is ge
 
 - Package date: 2026-10-27
 - Inputs from git commit: `1b3535e` (`1b3535e53d9a1dffb79e0c84d1b41eda23d19c73`)
-- **The inputs had uncommitted changes when this was built** (2 file(s): `package/build_package.py`, `sa-slab-scanner/cad/out/drawings/SlabRail_drawings.pdf`). Commit them and rebuild for a package that matches a commit exactly.
+- **The inputs had uncommitted changes when this was built** (2 file(s): `cad/out/drawings/SlabRail_drawings.pdf`, `package/build_package.py`). Commit them and rebuild for a package that matches a commit exactly.
 - Repository: https://github.com/Icevyy14/codex/tree/claude/psa-slab-batch-scanner-w2e2m9/psa-slab-scanner
 
 ## Files
@@ -78,9 +78,9 @@ Everything in this folder except `build_package.py` and `cad_manifest.txt` is ge
 ## Checksums (SHA-256)
 
 ```
-2380a1c9e02ec57fbfda3cdce415a3072614266fce397b5b28a1671f3095af29  SlabRail_Design_Review.pdf
-12682c1d338d3403f8b53283ad93a282ae92ebf4d57c8b30f2909f7a3317f327  SlabRail_Complete_Documentation.pdf
-b6a039aa73ed6dfcf32f4ae114c6cf9109554adce004e1b79d261064807c66d4  SlabRail_CAD.zip
+96beef8bc61fa268e83bce27f6b343032e7b205ba8ce30976d6d15e717957793  SlabRail_Design_Review.pdf
+caadad344d83d95dbc0cadfb1e3e1c326b3a0dc1275d06a9f14f3c6576d3d92d  SlabRail_Complete_Documentation.pdf
+91244f29a1f7db0c9c8b79535fe7c20ac30d0ecb0ab7a07ca96527849d03523a  SlabRail_CAD.zip
 ```
 
 ## How to rebuild
@@ -102,4 +102,3 @@ Last built with pandoc 3.1.3, pypdf 6.17.0, Pillow 12.3.0, Chromium 141.0.7390.3
 Build warnings:
 
 - SlabRail_Complete_Documentation.pdf (HTML) contains 1 e-mail address(es) from the source documents
-- cad/out/drawings/SlabRail_drawings.pdf changed while the package was being built; the package holds the copy read at the start. Rebuild once it is final.
