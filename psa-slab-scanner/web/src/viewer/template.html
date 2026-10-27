@@ -1,0 +1,228 @@
+<title>SlabRail 3D Model</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@112,600;112,800&family=Public+Sans:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: the 3D view takes the left, the parts list the right; on phones the list drops below the view. */
+:root {
+  --paper: #eef1f0;
+  --sheet: #fbfcfc;
+  --ink: #18201e;
+  --muted: #59645f;
+  --rule: #cfd7d3;
+  --accent: #c75a1b;
+  --stage: #e4e9e7;
+  --f-display: "Archivo", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Public Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --paper: #0f1514; --sheet: #151c1b; --ink: #e1e8e5; --muted: #97a39f; --rule: #2a3431; --accent: #e47a3c; --stage: #1a2321; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --paper: #0f1514; --sheet: #151c1b; --ink: #e1e8e5; --muted: #97a39f; --rule: #2a3431; --accent: #e47a3c; --stage: #1a2321; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink); font: 400 14px/1.45 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0.9rem 1rem; display: flex; flex-direction: column; gap: 0.7rem;
+}
+header { display: flex; flex-wrap: wrap; gap: 0.3rem 1.2rem; align-items: baseline; }
+h1 { font: 800 1.6rem/1.05 var(--f-display); font-stretch: 112%; margin: 0; }
+.sub { color: var(--muted); margin: 0; }
+.main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 0.8rem; }
+@media (max-width: 820px) { body { height: auto; } .main { grid-template-columns: minmax(0, 1fr); } .view { height: 62vh; min-height: 360px; } .side { max-height: none; } }
+.view { position: relative; background: var(--stage); border: 1px solid var(--rule); min-height: 420px; overflow: hidden; }
+.view canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.tools { position: absolute; top: 10px; left: 10px; display: flex; flex-wrap: wrap; gap: 6px; max-width: calc(100% - 20px); }
+button { font: 600 0.82rem/1 var(--f-body); color: var(--ink); background: var(--sheet); border: 1px solid var(--rule); border-radius: 4px; padding: 0.45rem 0.65rem; cursor: pointer; }
+button.on { border-color: var(--accent); color: var(--accent); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.info { position: absolute; left: 10px; bottom: 10px; right: 10px; max-width: 460px; background: var(--sheet); border: 1px solid var(--rule); padding: 0.7rem 0.85rem; display: grid; gap: 0.25rem; }
+.info b { font: 800 1.05rem/1.2 var(--f-display); font-stretch: 112%; }
+.info .meta { font: 400 0.8rem/1.4 var(--f-mono); color: var(--muted); }
+.hint { position: absolute; right: 10px; top: 10px; font: 400 0.75rem/1.3 var(--f-mono); color: var(--muted); text-align: right; }
+.side { background: var(--sheet); border: 1px solid var(--rule); overflow-y: auto; min-height: 0; padding: 0.4rem 0; }
+.cat { padding: 0.55rem 0.8rem 0.25rem; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+.cat span { font: 500 0.72rem/1.2 var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.cat button { padding: 0.25rem 0.45rem; font-size: 0.72rem; }
+.row { display: grid; grid-template-columns: 18px 12px minmax(0, 1fr) auto; gap: 0.5rem; align-items: center; padding: 0.3rem 0.8rem; cursor: pointer; border-left: 3px solid transparent; }
+.row:hover { background: var(--paper); }
+.row.sel { border-left-color: var(--accent); background: var(--paper); }
+.row input { margin: 0; accent-color: var(--accent); }
+.row i { width: 12px; height: 12px; border-radius: 2px; border: 1px solid var(--rule); }
+.row .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .ct { font: 400 0.75rem/1 var(--f-mono); color: var(--muted); }
+.err { padding: 2rem; color: var(--muted); }
+</style>
+
+<header>
+  <h1>SlabRail 3D model</h1>
+  <p class="sub">The full assembly from the CAD model, mid-run: the cup is carrying a slab from pocket 1 to pocket 0. Drag to rotate, scroll or pinch to zoom, right-drag to pan. Click any part to see what it is.</p>
+</header>
+<div class="main">
+  <div class="view" id="view">
+    <div class="tools" role="group" aria-label="Views">
+      <button type="button" data-view="iso">Machine</button>
+      <button type="button" data-view="front">Front</button>
+      <button type="button" data-view="top">Top</button>
+      <button type="button" data-view="head">Head close-up</button>
+      <button type="button" id="all">Show all</button>
+    </div>
+    <div class="info" id="info"><b>Click a part</b><span class="meta">or pick one from the list. Clicking a row isolates that part; click it again to show everything.</span></div>
+  </div>
+  <aside class="side" id="side" aria-label="Parts"></aside>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+const META = /*MODEL_JSON*/null;
+const B64 = "/*MODEL_B64*/";
+(function () {
+  const view = document.getElementById("view");
+  if (!window.THREE || !THREE.OrbitControls) { view.insertAdjacentHTML("beforeend", '<p class="err">The 3D library did not load. Check your connection and reload the page.</p>'); return; }
+  const bin = Uint8Array.from(atob(B64), c => c.charCodeAt(0)).buffer;
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  view.prepend(renderer.domElement);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(32, 1, 5, 20000);
+  camera.up.set(0, 0, 1);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true; controls.dampingFactor = 0.12; controls.screenSpacePanning = true;
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f8c, 0.85));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.75); sun.position.set(900, -1400, 1800); scene.add(sun);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.3); fill.position.set(-1200, 900, 600); scene.add(fill);
+  const setBg = () => { scene.background = new THREE.Color(css("--stage") || "#e4e9e7"); };
+  setBg();
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", setBg);
+  new MutationObserver(setBg).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  const lo = META.lo, sc = META.scale, objs = [];
+  for (const m of META.meshes) {
+    const q = new Int16Array(bin, m.v, m.nv * 3), pos = new Float32Array(m.nv * 3);
+    for (let k = 0; k < m.nv * 3; k++) pos[k] = (q[k] + 32767) * sc[k % 3] + lo[k % 3];
+    const idx = m.i32 ? new Uint32Array(bin, m.i, m.nt * 3) : new Uint16Array(bin, m.i, m.nt * 3);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    g.setIndex(new THREE.BufferAttribute(idx, 1));
+    g.computeVertexNormals(); g.computeBoundingBox(); g.computeBoundingSphere();
+    const [r, gg, b, a] = m.color, transparent = a < 0.99 || m.kind === "slab";
+    const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(r, gg, b), roughness: 0.62, metalness: m.kind === "purchased" ? 0.25 : 0.05,
+      transparent, opacity: transparent ? Math.min(a, 0.55) : 1, depthWrite: !transparent, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(g, mat);
+    mesh.userData = m;
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(g, 28), new THREE.LineBasicMaterial({ color: 0x1b2120, transparent: true, opacity: m.kind === "slab" ? 0.18 : 0.32 }));
+    mesh.add(edges);
+    scene.add(mesh);
+    objs.push({ m, mesh, mat, edges, base: mat.opacity });
+  }
+  const box = new THREE.Box3(); objs.forEach(o => box.expandByObject(o.mesh));
+  const center = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+  const head = objs.find(o => o.m.key === "cup");
+  const VIEWS = {
+    iso: () => [new THREE.Vector3(center.x + 1250, center.y - 1500, center.z + 950), center.clone()],
+    front: () => [new THREE.Vector3(center.x, center.y - 2900, center.z + 80), center.clone()],
+    top: () => [new THREE.Vector3(center.x, center.y - 1, center.z + 2700), center.clone()],
+    head: () => { const c = head.mesh.geometry.boundingBox.getCenter(new THREE.Vector3()); c.z += 130; return [new THREE.Vector3(c.x + 380, c.y - 480, c.z + 230), c]; },
+  };
+  let anim = null;
+  function go(name) {
+    const [p, t] = VIEWS[name]();
+    anim = { p0: camera.position.clone(), t0: controls.target.clone(), p, t, s: performance.now() };
+  }
+  function frame(obj) {
+    const s = obj.mesh.geometry.boundingSphere, c = s.center.clone(), d = Math.max(140, s.radius * 3.2);
+    anim = { p0: camera.position.clone(), t0: controls.target.clone(), p: new THREE.Vector3(c.x + d * 0.7, c.y - d * 0.9, c.z + d * 0.55), t: c, s: performance.now() };
+  }
+  document.querySelectorAll("[data-view]").forEach(b => b.addEventListener("click", () => go(b.dataset.view)));
+
+  // parts list
+  const side = document.getElementById("side"), info = document.getElementById("info");
+  const order = ["3D-printed parts", "Head (moves up and down)", "Z axis (rides on the X rail)", "Frame, X axis and electronics", "Bed and guide rods", "Slabs", "Fasteners"];
+  const rows = new Map();
+  let isolated = null, selected = null;
+  for (const cat of order) {
+    const items = objs.filter(o => o.m.category === cat).sort((a, b) => a.m.name.localeCompare(b.m.name));
+    if (!items.length) continue;
+    const h = document.createElement("div"); h.className = "cat";
+    h.innerHTML = `<span>${cat}</span>`;
+    const tb = document.createElement("button"); tb.type = "button"; tb.textContent = "Hide";
+    tb.addEventListener("click", e => { e.stopPropagation(); const show = tb.textContent === "Show"; items.forEach(o => setVisible(o, show)); tb.textContent = show ? "Hide" : "Show"; });
+    h.appendChild(tb); side.appendChild(h);
+    for (const o of items) {
+      const r = document.createElement("div"); r.className = "row"; r.tabIndex = 0;
+      const [cr, cg, cb] = o.m.color;
+      r.innerHTML = `<input type="checkbox" checked aria-label="Show ${o.m.name}"><i style="background:rgb(${cr * 255 | 0},${cg * 255 | 0},${cb * 255 | 0})"></i><span class="nm" title="${o.m.name}">${o.m.name}</span><span class="ct">${o.m.count > 1 ? "×" + o.m.count : ""}</span>`;
+      const cb_ = r.querySelector("input");
+      cb_.addEventListener("click", e => { e.stopPropagation(); setVisible(o, cb_.checked); });
+      r.addEventListener("click", () => toggleIsolate(o));
+      r.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleIsolate(o); } });
+      side.appendChild(r); rows.set(o, r);
+    }
+  }
+  function setVisible(o, v) { o.mesh.visible = v; const r = rows.get(o); if (r) r.querySelector("input").checked = v; }
+  function describe(o) {
+    const m = o.m, bits = [];
+    bits.push(m.category + (m.count > 1 ? ` · ${m.count} pieces` : ""));
+    if (m.print) {
+      if (m.print.size_mm) bits.push(`print size ${m.print.size_mm.map(v => Math.round(v)).join(" × ")} mm` + (m.print.volume_cm3 ? `, ${m.print.volume_cm3} cm³ of filament` : ""));
+      if (m.print.note) bits.push(m.print.note);
+    }
+    if (m.note) bits.push(m.note);
+    info.innerHTML = `<b></b><span class="meta"></span>`;
+    info.querySelector("b").textContent = m.name;
+    info.querySelector(".meta").textContent = bits.join(" — ");
+  }
+  function select(o) {
+    if (selected) { selected.mat.emissive.setHex(0x000000); rows.get(selected)?.classList.remove("sel"); }
+    selected = o;
+    if (o) { o.mat.emissive.set(css("--accent") || "#c75a1b"); o.mat.emissiveIntensity = 0.35; rows.get(o)?.classList.add("sel"); rows.get(o)?.scrollIntoView({ block: "nearest" }); describe(o); }
+  }
+  function toggleIsolate(o) {
+    if (isolated === o) { showAll(); return; }
+    isolated = o; select(o);
+    objs.forEach(x => { x.mat.transparent = true; x.mat.opacity = x === o ? Math.max(x.base, 0.95) : 0.07; x.mat.depthWrite = x === o; x.edges.material.opacity = x === o ? 0.45 : 0.03; x.mat.needsUpdate = true; });
+    frame(o);
+  }
+  function showAll() {
+    isolated = null;
+    objs.forEach(x => { const t = x.base < 0.99; x.mat.transparent = t; x.mat.opacity = x.base; x.mat.depthWrite = !t; x.edges.material.opacity = x.m.kind === "slab" ? 0.18 : 0.32; x.mat.needsUpdate = true; setVisible(x, true); });
+    document.querySelectorAll(".cat button").forEach(b => b.textContent = "Hide");
+  }
+  document.getElementById("all").addEventListener("click", () => { showAll(); select(null); go("iso"); info.innerHTML = '<b>Click a part</b><span class="meta">or pick one from the list.</span>'; });
+
+  // picking (ignore drags)
+  const ray = new THREE.Raycaster(), ptr = new THREE.Vector2(); let down = null;
+  renderer.domElement.addEventListener("pointerdown", e => { down = [e.clientX, e.clientY]; });
+  renderer.domElement.addEventListener("pointerup", e => {
+    if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5) return;
+    const r = renderer.domElement.getBoundingClientRect();
+    ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ptr, camera);
+    const hits = ray.intersectObjects(objs.filter(o => o.mesh.visible && (!isolated || o === isolated)).map(o => o.mesh), false);
+    const hit = hits.find(h => !(h.object.userData.kind === "slab" && hits.length > 1)) || hits[0];
+    if (hit) select(objs.find(o => o.mesh === hit.object));
+  });
+
+  function resize() {
+    const w = view.clientWidth, h = view.clientHeight;
+    renderer.setSize(w, h, false); camera.aspect = w / Math.max(1, h); camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(view); resize();
+  const [p0, t0] = VIEWS.iso(); camera.position.copy(p0); controls.target.copy(t0);
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  (function tick(now) {
+    if (anim) {
+      const u = reduce ? 1 : Math.min(1, (now - anim.s) / 650), k = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+      camera.position.lerpVectors(anim.p0, anim.p, k); controls.target.lerpVectors(anim.t0, anim.t, k);
+      if (u >= 1) anim = null;
+    }
+    controls.update(); renderer.render(scene, camera); requestAnimationFrame(tick);
+  })(performance.now());
+})();
+</script>

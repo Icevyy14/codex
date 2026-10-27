@@ -1,0 +1,306 @@
+<title>SlabRail Run Replay</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@112,600;112,800&family=Public+Sans:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: control bar, then the machine's front elevation full width, then the live readout beside the cert log. */
+:root {
+  --paper: #eef1f0;
+  --sheet: #fbfcfc;
+  --ink: #18201e;
+  --muted: #59645f;
+  --rule: #cfd7d3;
+  --alu: #9aa3a8;
+  --alu-dark: #6d767b;
+  --wood: #c8a06a;
+  --dowel: #b8935e;
+  --slab: #d6e4ef;
+  --slab-edge: #8ea7ba;
+  --head: #c75a1b;
+  --ok: #2b7149;
+  --ok-fill: #cfe6d7;
+  --warn: #8d5c00;
+  --warn-fill: #f3e2bd;
+  --bad: #a3302a;
+  --bad-fill: #f2d2ce;
+  --flash: rgba(255, 214, 102, 0.55);
+  --f-display: "Archivo", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Public Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f1514; --sheet: #151c1b; --ink: #e1e8e5; --muted: #97a39f; --rule: #2a3431;
+    --alu: #7c858a; --alu-dark: #a7b0b5; --wood: #8a6a40; --dowel: #a5814f;
+    --slab: #2c3f4e; --slab-edge: #6f8ea6; --head: #e47a3c;
+    --ok: #74c491; --ok-fill: #1d3a27; --warn: #e2b35a; --warn-fill: #3d3015; --bad: #ef8b81; --bad-fill: #45201c;
+    --flash: rgba(255, 214, 102, 0.35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f1514; --sheet: #151c1b; --ink: #e1e8e5; --muted: #97a39f; --rule: #2a3431;
+  --alu: #7c858a; --alu-dark: #a7b0b5; --wood: #8a6a40; --dowel: #a5814f;
+  --slab: #2c3f4e; --slab-edge: #6f8ea6; --head: #e47a3c;
+  --ok: #74c491; --ok-fill: #1d3a27; --warn: #e2b35a; --warn-fill: #3d3015; --bad: #ef8b81; --bad-fill: #45201c;
+  --flash: rgba(255, 214, 102, 0.35);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--paper); color: var(--ink);
+  font: 400 15px/1.5 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 1.2rem 2.5rem;
+}
+.wrap { max-width: 1200px; margin: 0 auto; display: grid; gap: 1rem; }
+h1 { font: 800 1.9rem/1.05 var(--f-display); font-stretch: 112%; margin: 0; }
+.sub { color: var(--muted); max-width: 70ch; margin: 0.3rem 0 0; }
+.label { font: 500 0.75rem/1.3 var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.controls { display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; align-items: center; background: var(--sheet); border: 1px solid var(--rule); padding: 0.6rem 0.8rem; }
+button, select { font: 600 0.9rem/1 var(--f-body); color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: 4px; padding: 0.5rem 0.8rem; cursor: pointer; }
+button.primary { background: var(--head); border-color: var(--head); color: #fff; min-width: 5.5rem; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--head); outline-offset: 2px; }
+.scrub { flex: 1 1 260px; display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
+.scrub input { flex: 1; min-width: 0; accent-color: var(--head); }
+.clock { font: 500 0.9rem/1 var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stage { background: var(--sheet); border: 1px solid var(--rule); overflow-x: auto; }
+.stage svg { display: block; width: 100%; min-width: 760px; height: auto; }
+.below { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 1rem; }
+@media (max-width: 760px) { .below { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--sheet); border: 1px solid var(--rule); padding: 0.9rem 1rem; display: grid; gap: 0.7rem; align-content: start; min-width: 0; }
+.now { font: 800 1.35rem/1.2 var(--f-display); font-stretch: 112%; }
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+.tiles div { background: var(--sheet); padding: 0.5rem 0.6rem; display: grid; gap: 0.1rem; }
+.tiles b { font: 800 1.3rem/1.1 var(--f-display); font-stretch: 112%; font-variant-numeric: tabular-nums; }
+.tiles span { font: 500 0.68rem/1.2 var(--f-mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; font-size: 0.85rem; color: var(--muted); }
+.legend i { display: inline-block; width: 12px; height: 12px; border: 1px solid var(--slab-edge); vertical-align: -2px; margin-right: 0.35rem; }
+.log { max-height: 340px; overflow-y: auto; border-top: 1px solid var(--rule); }
+table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+th, td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th { font: 500 0.7rem/1.2 var(--f-mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); position: sticky; top: 0; background: var(--sheet); }
+td.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.chip { display: inline-block; font: 500 0.7rem/1 var(--f-mono); text-transform: uppercase; letter-spacing: 0.04em; padding: 0.25rem 0.4rem; border-radius: 3px; }
+.chip.ok { color: var(--ok); background: var(--ok-fill); }
+.chip.needs_review, .chip.no_read { color: var(--warn); background: var(--warn-fill); }
+.chip.conflict, .chip.other_grader { color: var(--bad); background: var(--bad-fill); }
+.note { color: var(--muted); font-size: 0.85rem; max-width: 75ch; }
+svg text { font-family: var(--f-mono); fill: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .flash { display: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="label">Simulated batch · synthetic labels · timing from the motion model</div>
+    <h1>SlabRail run replay</h1>
+    <p class="sub">A full simulated 330-slab load: the cup lifts the top slab of each stack, reads its back label from above, and sets it on the next pocket to the left. Every move below comes from the simulator's recorded run of the real machine software.</p>
+  </header>
+
+  <div class="controls" role="group" aria-label="Playback">
+    <button class="primary" id="play" type="button">Play</button>
+    <label class="label" for="speed">Speed</label>
+    <select id="speed">
+      <option value="10">10×</option>
+      <option value="30" selected>30×</option>
+      <option value="100">100×</option>
+      <option value="300">300×</option>
+    </select>
+    <div class="scrub">
+      <input id="scrub" type="range" min="0" max="1000" step="1" value="0" aria-label="Position in the run">
+      <span class="clock" id="clock">0:00:00</span>
+    </div>
+  </div>
+
+  <div class="stage"><svg id="svg" viewBox="0 0 1340 520" role="img" aria-label="Front view of the machine with the head moving slabs between pockets"></svg></div>
+
+  <div class="below">
+    <div class="panel">
+      <div class="label">Now</div>
+      <div class="now" id="now">Homing</div>
+      <div class="tiles">
+        <div><b id="nRead">0</b><span>read</span></div>
+        <div><b id="nOk">0</b><span>ok</span></div>
+        <div><b id="nRev">0</b><span>review</span></div>
+        <div><b id="nExc">0</b><span>pocket 12</span></div>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--slab)"></i>not read yet</span>
+        <span><i style="background:var(--ok-fill);border-color:var(--ok)"></i>read ok</span>
+        <span><i style="background:var(--warn-fill);border-color:var(--warn)"></i>needs review</span>
+        <span><i style="background:var(--bad-fill);border-color:var(--bad)"></i>set aside</span>
+      </div>
+      <p class="note">The yellow flash is a camera frame: downward for the head camera reading the back label, upward at the station for slabs whose back can't be read. Slabs go from pocket N to pocket N−1, so each stack ends one pocket to the left, in reverse order.</p>
+      <p class="note" id="finalNote"></p>
+    </div>
+    <div class="panel">
+      <div class="label">certs.csv as it's written</div>
+      <div class="log"><table>
+        <thead><tr><th>#</th><th>Cert</th><th>Status</th><th>From → to</th><th>Read by</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const D = /*DATA*/null;
+const NS = "http://www.w3.org/2000/svg";
+const svg = document.getElementById("svg");
+const W = 1340, H = 520, X0 = 20, SX = 1300 / 1300;           // 1 mm = 1 unit in X
+const ZBED = 470, SZ = 0.8;                                    // bed top at y=470, 0.8 units per mm in Z
+const zy = z => ZBED - z * SZ;
+const xx = x => X0 + x * SX;
+const el = (tag, attrs, parent = svg) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+// static machine
+const g0 = el("g", {});
+el("rect", { x: xx(-10), y: ZBED, width: 1320, height: 18, fill: "var(--wood)" }, g0);
+for (const p of D.pockets) {
+  for (const dx of [-46, 46]) el("rect", { x: xx(p.x + dx - 4), y: zy(D.post_h), width: 8, height: D.post_h * SZ, fill: "var(--dowel)", rx: 3 }, g0);
+  const t = el("text", { x: xx(p.x), y: ZBED + 34, "text-anchor": "middle", "font-size": 13 }, g0);
+  t.textContent = p.index === 12 ? "12 set aside" : p.index;
+}
+const st = el("g", {}, g0);
+el("rect", { x: xx(D.station_x - 22), y: zy(26), width: 44, height: 26 * SZ, fill: "var(--alu-dark)", rx: 3 }, st);
+el("text", { x: xx(D.station_x), y: ZBED + 34, "text-anchor": "middle", "font-size": 13 }, g0).textContent = "camera";
+// gantry beam and uprights
+el("rect", { x: xx(-12), y: zy(425), width: 1324, height: 34 * SZ, fill: "var(--alu)" }, g0);
+el("rect", { x: xx(-14), y: zy(425), width: 22, height: 425 * SZ, fill: "var(--alu)" }, g0);
+el("rect", { x: xx(1292), y: zy(425), width: 22, height: 425 * SZ, fill: "var(--alu)" }, g0);
+el("line", { x1: xx(0), y1: zy(D.post_h + 5), x2: xx(1300), y2: zy(D.post_h + 5), stroke: "var(--muted)", "stroke-dasharray": "4 6", "stroke-width": 1 }, g0);
+el("text", { x: xx(1250), y: zy(D.post_h + 9), "text-anchor": "end", "font-size": 11 }, g0).textContent = "rod tops + 5 mm";
+
+const stackG = el("g", {});
+const flashG = el("g", {});
+const headG = el("g", {});
+// head: carriage on beam, drop arm, foot, buffer, cup, held slab
+const carriage = el("rect", { y: zy(430), width: 60, height: 44 * SZ, fill: "var(--alu-dark)", rx: 3 }, headG);
+const arm = el("rect", { width: 12, fill: "var(--alu)" }, headG);
+const foot = el("rect", { width: 34, height: 14 * SZ, fill: "var(--head)", rx: 2 }, headG);
+const buffer = el("rect", { width: 10, fill: "var(--alu-dark)" }, headG);
+const cup = el("rect", { width: 26, height: 6, fill: "#2a2f2e", rx: 2 }, headG);
+const camBox = el("rect", { width: 36, height: 12, fill: "var(--head)", rx: 2 }, headG);
+const held = el("rect", { width: 80, fill: "var(--slab)", stroke: "var(--slab-edge)", "stroke-width": 1, rx: 1 }, headG);
+
+const thick = c => (D.slabs[c] && D.slabs[c].t) || 6.6;
+const statusOf = {};
+const fill = s => s === "ok" ? ["var(--ok-fill)", "var(--ok)"] : (s === "needs_review" || s === "no_read") ? ["var(--warn-fill)", "var(--warn)"] : s ? ["var(--bad-fill)", "var(--bad)"] : ["var(--slab)", "var(--slab-edge)"];
+
+// time index
+const F = D.frames, E = D.events, T = D.total_s;
+const stackEv = E.filter(e => e.type === "stacks");
+const readEv = E.filter(e => e.type === "read");
+const photoEv = E.filter(e => e.type === "photo");
+const bs = (arr, t, key) => { let lo = 0, hi = arr.length - 1, r = -1; while (lo <= hi) { const m = (lo + hi) >> 1; if (key(arr[m]) <= t) { r = m; lo = m + 1; } else hi = m - 1; } return r; };
+const pX = {}; for (const p of D.pockets) pX[p.index] = p.x;
+
+let lastStackIdx = -2, lastReadCount = -1;
+function drawStacks(stacks) {
+  stackG.replaceChildren();
+  for (const k in stacks) {
+    let z = 0;
+    for (const c of stacks[k]) {
+      const t = thick(c), [f, s] = fill(statusOf[c]);
+      el("rect", { x: xx(pX[k] - 40), y: zy(z + t), width: 80, height: Math.max(1, t * SZ - 0.6), fill: f, stroke: s, "stroke-width": 0.8 }, stackG);
+      z += t;
+    }
+  }
+}
+const rowsEl = document.getElementById("rows");
+const counts = () => {
+  let ok = 0, rev = 0, exc = 0;
+  for (let i = 0; i < lastReadCount; i++) { const r = readEv[i]; if (r.status === "ok") ok++; else if (r.status === "needs_review" || r.status === "no_read") rev++; if (r.out_pocket === 12) exc++; }
+  document.getElementById("nRead").textContent = lastReadCount; document.getElementById("nOk").textContent = ok;
+  document.getElementById("nRev").textContent = rev; document.getElementById("nExc").textContent = exc;
+};
+function updateReads(t) {
+  const n = bs(readEv, t, e => e.t) + 1;
+  if (n === lastReadCount) return false;
+  for (const c in statusOf) delete statusOf[c];
+  for (let i = 0; i < n; i++) if (readEv[i].cert) statusOf[readEv[i].cert] = readEv[i].status;
+  rowsEl.replaceChildren();
+  for (let i = n - 1; i >= Math.max(0, n - 60); i--) {
+    const r = readEv[i], tr = document.createElement("tr");
+    const by = (r.sources || "").replace(/back_qr/g, "back QR").replace(/back_barcode/g, "back barcode").replace(/front_barcode/g, "front barcode").replace(/front_ocr/g, "front OCR").replace(/\+/g, " + ");
+    tr.innerHTML = `<td class="mono">${r.position}</td><td class="mono">${r.cert || "—"}</td><td><span class="chip ${r.status}">${(r.status || "").replace("_", " ")}</span></td><td class="mono">${r.source_pocket} → ${r.out_pocket}</td><td>${by}</td>`;
+    rowsEl.appendChild(tr);
+  }
+  lastReadCount = n; counts();
+  return true;
+}
+function frameAt(t) {
+  const i = bs(F, t, f => f[0]);
+  if (i < 0) return F[0];
+  const a = F[i], b = F[Math.min(i + 1, F.length - 1)];
+  if (b[0] <= a[0]) return a;
+  const u = Math.min(1, (t - a[0]) / (b[0] - a[0]));
+  return [t, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u, a[3]];
+}
+const nowEl = document.getElementById("now");
+function render(t) {
+  const changedReads = updateReads(t);
+  const si = bs(stackEv, t, e => e.t);
+  if (si !== lastStackIdx || changedReads) { drawStacks(si < 0 ? D.initial : stackEv[si].stacks); lastStackIdx = si; }
+  const [, x, z, h] = frameAt(t);
+  const cx = xx(x);
+  carriage.setAttribute("x", cx - 30);
+  arm.setAttribute("x", cx + 10); arm.setAttribute("y", zy(z + 300)); arm.setAttribute("height", (300 - 70) * SZ);
+  foot.setAttribute("x", cx - 10); foot.setAttribute("y", zy(z + 76));
+  buffer.setAttribute("x", cx - 5); buffer.setAttribute("y", zy(z + 64)); buffer.setAttribute("height", 58 * SZ);
+  cup.setAttribute("x", cx - 13); cup.setAttribute("y", zy(z + 6));
+  camBox.setAttribute("x", cx - 16); camBox.setAttribute("y", zy(z + 146));
+  if (h.length) {
+    const t0 = h.reduce((s, c) => s + thick(c), 0), [f, s] = fill(statusOf[h[0]]);
+    held.setAttribute("x", cx - 40); held.setAttribute("y", zy(z)); held.setAttribute("height", t0 * SZ);
+    held.setAttribute("fill", f); held.setAttribute("stroke", s); held.style.display = "";
+  } else held.style.display = "none";
+  // camera flash within 0.6 s after a photo
+  flashG.replaceChildren();
+  const pi = bs(photoEv, t, e => e.t);
+  if (pi >= 0 && t - photoEv[pi].t < 0.6) {
+    if (photoEv[pi].camera === "head") el("polygon", { class: "flash", points: `${cx},${zy(z + 140)} ${cx - 55},${zy(z + 2)} ${cx + 55},${zy(z + 2)}`, fill: "var(--flash)" }, flashG);
+    else el("polygon", { class: "flash", points: `${xx(D.station_x)},${zy(26)} ${xx(D.station_x) - 50},${zy(z - 8)} ${xx(D.station_x) + 50},${zy(z - 8)}`, fill: "var(--flash)" }, flashG);
+  }
+  // status line
+  const firstRead = readEv.length ? readEv[0].t : T;
+  let msg;
+  if (t < firstRead - 20) msg = "Homing, then surveying every stack's height";
+  else if (t >= T - 1) msg = "Done: every slab read, every stack one pocket left";
+  else {
+    const next = readEv[lastReadCount] || readEv[readEv.length - 1];
+    msg = h.length ? `Carrying slab ${next.position}: pocket ${next.source_pocket} → ${next.out_pocket}` : `Picking slab ${next.position} from pocket ${next.source_pocket}`;
+  }
+  nowEl.textContent = msg;
+  const s = Math.floor(t), hh = Math.floor(s / 3600), mm = Math.floor(s / 60) % 60, ss = s % 60;
+  document.getElementById("clock").textContent = `${hh}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")} / ${fmt(T)}`;
+}
+function fmt(T) { const s = Math.floor(T); return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; }
+
+let t = 0, playing = false, last = null;
+const scrub = document.getElementById("scrub"), playBtn = document.getElementById("play"), speedSel = document.getElementById("speed");
+function loop(ts) {
+  if (!playing) { last = null; return; }
+  if (last != null) t = Math.min(T, t + (ts - last) / 1000 * Number(speedSel.value));
+  last = ts;
+  scrub.value = Math.round(t / T * 1000);
+  render(t);
+  if (t >= T) { playing = false; playBtn.textContent = "Replay"; return; }
+  requestAnimationFrame(loop);
+}
+playBtn.addEventListener("click", () => {
+  if (t >= T) { t = 0; lastReadCount = -1; lastStackIdx = -2; }
+  playing = !playing; playBtn.textContent = playing ? "Pause" : "Play";
+  if (playing) requestAnimationFrame(loop);
+});
+scrub.addEventListener("input", () => { t = Number(scrub.value) / 1000 * T; lastReadCount = -1; lastStackIdx = -2; render(t); });
+const sc = D.summary && D.summary.status_counts ? Object.entries(D.summary.status_counts).map(([k, v]) => `${v} ${k.replace("_", " ")}`).join(", ") : "";
+document.getElementById("finalNote").textContent = `This run: ${readEv.length} slabs, ${sc}, ${fmt(T)} of machine time including homing and the stack survey.`;
+// open on a mid-run frame so the page shows the machine working before Play
+t = Math.min(T, (readEv[40] ? readEv[40].t : 0) + 3);
+scrub.value = Math.round(t / T * 1000);
+render(t);
+</script>

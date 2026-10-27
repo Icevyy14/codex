@@ -1,0 +1,290 @@
+<title>SlabRail</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@112,600;112,800&family=Public+Sans:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one dossier column; on wide screens each section's label sits in a left rail, figures run wider than the text. */
+:root {
+  --paper: #eef2f1;
+  --sheet: #fbfcfc;
+  --ink: #17201e;
+  --muted: #56625e;
+  --rule: #cfd7d4;
+  --accent: #2a5a8a;
+  --ok: #2b7149;
+  --warn: #8d5c00;
+  --bad: #a3302a;
+  --ok-bg: #e2efe6;
+  --warn-bg: #f5ead3;
+  --bad-bg: #f6e2df;
+  --f-display: "Archivo", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Public Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --step--1: 0.84rem;
+  --step-0: 1rem;
+  --step-1: 1.2rem;
+  --step-2: 1.6rem;
+  --step-4: clamp(2.6rem, 7vw, 4.4rem);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f1514; --sheet: #151c1b; --ink: #e1e8e5; --muted: #97a39f; --rule: #2a3431;
+    --accent: #8bb5e2; --ok: #74c491; --warn: #e2b35a; --bad: #ef8b81;
+    --ok-bg: #18301f; --warn-bg: #33280f; --bad-bg: #3a1a17;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f1514; --sheet: #151c1b; --ink: #e1e8e5; --muted: #97a39f; --rule: #2a3431;
+  --accent: #8bb5e2; --ok: #74c491; --warn: #e2b35a; --bad: #ef8b81;
+  --ok-bg: #18301f; --warn-bg: #33280f; --bad-bg: #3a1a17;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 var(--step-0)/1.6 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 4rem;
+}
+.wrap { max-width: 1080px; margin: 0 auto; }
+a { color: var(--accent); text-underline-offset: 2px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+h1, h2, h3 { font-family: var(--f-display); font-stretch: 112%; text-wrap: balance; margin: 0; line-height: 1.1; }
+h2 { font-size: var(--step-2); font-weight: 800; }
+h3 { font-size: var(--step-1); font-weight: 600; }
+p { margin: 0; max-width: 66ch; }
+code, .mono { font-family: var(--f-mono); font-size: 0.9em; }
+.label { font: 500 var(--step--1)/1.3 var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); overflow-wrap: anywhere; }
+
+header.top { padding-block: 3.2rem 2.4rem; border-bottom: 1px solid var(--rule); display: grid; gap: 1.4rem; }
+header.top h1 { font-size: var(--step-4); font-weight: 800; letter-spacing: -0.01em; }
+header.top .lede { font-size: var(--step-1); max-width: 40ch; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); margin: 0; }
+.facts div { background: var(--sheet); padding: 0.8rem 1rem; display: grid; gap: 0.15rem; min-width: 0; }
+.facts dt { font: 500 var(--step--1)/1.3 var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 0; font: 800 var(--step-2)/1.1 var(--f-display); font-stretch: 112%; font-variant-numeric: tabular-nums; }
+.facts dd small { font: 400 var(--step--1)/1.3 var(--f-body); color: var(--muted); display: block; margin-top: 0.2rem; }
+
+section { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 1rem 2.5rem; padding-block: 2.6rem; border-bottom: 1px solid var(--rule); }
+section > .rail { padding-top: 0.35rem; }
+section > .body { display: grid; gap: 1.2rem; min-width: 0; }
+@media (max-width: 760px) {
+  section { grid-template-columns: minmax(0, 1fr); gap: 0.6rem; }
+}
+
+.verdict { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.9rem; }
+.verdict li { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: 0.9rem; align-items: start; }
+.verdict li p { max-width: 62ch; }
+@media (max-width: 480px) { .verdict li { grid-template-columns: minmax(0, 1fr); gap: 0.3rem; } }
+.tag { display: inline-block; justify-self: start; align-self: start; font: 500 0.74rem/1 var(--f-mono); letter-spacing: 0.05em; text-transform: uppercase; padding: 0.38rem 0.5rem; border-radius: 3px; white-space: nowrap; }
+.tag.certain { color: var(--ok); background: var(--ok-bg); }
+.tag.likely { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.tag.guess { color: var(--warn); background: var(--warn-bg); }
+.tag.no { color: var(--bad); background: var(--bad-bg); }
+
+figure { margin: 0; display: grid; gap: 0.5rem; }
+figure img { display: block; width: 100%; height: auto; border: 1px solid var(--rule); background: #fff; border-radius: 2px; }
+figcaption { color: var(--muted); font-size: var(--step--1); max-width: 70ch; }
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
+
+.row-scroll { overflow-x: auto; padding-bottom: 0.3rem; }
+.row { display: grid; grid-template-columns: repeat(14, minmax(52px, 1fr)); gap: 4px; min-width: 760px; }
+.cell { border: 1px solid var(--rule); background: var(--sheet); padding: 0.55rem 0.3rem; display: grid; gap: 0.2rem; align-content: start; text-align: center; min-width: 0; }
+.cell b { font: 800 var(--step-1)/1 var(--f-display); font-stretch: 112%; }
+.cell span { font: 400 0.72rem/1.25 var(--f-mono); color: var(--muted); }
+.cell.out { border-color: var(--ok); }
+.cell.out b { color: var(--ok); }
+.cell.exc { border-color: var(--warn); }
+.cell.exc b { color: var(--warn); }
+.cell.cam { background: transparent; border-style: dashed; border-color: var(--accent); }
+.cell.cam b { color: var(--accent); font-size: 0.95rem; }
+.legend { color: var(--muted); font-size: var(--step--1); }
+
+ol.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: grid; gap: 0.8rem; }
+ol.steps > li { counter-increment: s; display: grid; grid-template-columns: 2.2rem minmax(0, 1fr); gap: 0.8rem; }
+ol.steps > li::before { content: counter(s); font: 800 var(--step-1)/1.3 var(--f-display); font-stretch: 112%; color: var(--accent); }
+ol.steps > li > div { display: grid; gap: 0.2rem; min-width: 0; }
+ol.steps .meta { font: 400 var(--step--1)/1.4 var(--f-mono); color: var(--muted); }
+ol.steps .gate { color: var(--bad); font-weight: 600; }
+
+.tbl { overflow-x: auto; border: 1px solid var(--rule); background: var(--sheet); }
+table { border-collapse: collapse; width: 100%; font-size: 0.94rem; }
+th, td { text-align: left; padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th { font: 500 var(--step--1)/1.3 var(--f-mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td:first-child { white-space: nowrap; }
+
+.costbar { display: flex; height: 22px; border: 1px solid var(--rule); background: var(--sheet); overflow: hidden; }
+.costbar i { display: block; height: 100%; border-right: 1px solid var(--sheet); }
+.cost-legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 0.35rem 1.2rem; margin: 0; padding: 0; list-style: none; font-size: 0.92rem; }
+.cost-legend li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 0.55rem; align-items: center; }
+.cost-legend li i { width: 12px; height: 12px; display: block; }
+.cost-legend li span:last-child { font-variant-numeric: tabular-nums; font-family: var(--f-mono); font-size: 0.86rem; }
+.totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+.totals div { background: var(--sheet); padding: 0.8rem 1rem; display: grid; gap: 0.2rem; }
+.totals b { font: 800 var(--step-2)/1.1 var(--f-display); font-stretch: 112%; font-variant-numeric: tabular-nums; }
+.totals span { color: var(--muted); font-size: var(--step--1); }
+
+.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.7rem; }
+.checks li { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: 0.9rem; }
+@media (max-width: 480px) { .checks li { grid-template-columns: minmax(0, 1fr); gap: 0.3rem; } }
+
+.files { columns: 2 260px; column-gap: 2rem; margin: 0; padding: 0; list-style: none; }
+.files li { break-inside: avoid; padding-block: 0.35rem; border-bottom: 1px solid var(--rule); display: grid; gap: 0.05rem; }
+.files li span { color: var(--muted); font-size: var(--step--1); }
+footer { padding-top: 1.6rem; color: var(--muted); font-size: var(--step--1); }
+@media (prefers-reduced-motion: no-preference) { a { transition: color .15s; } }
+</style>
+
+<div class="wrap">
+<header class="top">
+  <div class="label">Build dossier · branch claude/psa-slab-batch-scanner-w2e2m9 · {{DATE}}</div>
+  <h1>SlabRail</h1>
+  <p class="lede">A two-motor machine that reads the cert number off every graded slab in a 330-slab load while you are somewhere else.</p>
+  <dl class="facts">
+    <div><dt>Per load</dt><dd>330<small>11 stacks of 30, PSA + CGC</small></dd></div>
+    <div><dt>Run time</dt><dd>{{RUN_TIME}}<small>{{SEC_PER_SLAB}} s per slab, simulated</small></dd></div>
+    <div><dt>Parts list</dt><dd>{{BOM_TOTAL_SHORT}}<small>incl. {{ALLOW_PCT}}% allowance; worst case $2,380</small></dd></div>
+    <div><dt>Motors</dt><dd>2<small>X belt, Z lead screw</small></dd></div>
+  </dl>
+</header>
+
+<section id="verdict">
+  <div class="rail"><div class="label">Read first</div></div>
+  <div class="body">
+    <h2>What you should know before spending anything</h2>
+    <ul class="verdict">
+      <li><span class="tag certain">Certain</span><p><strong>It has never touched a real slab.</strong> Everything below was checked in CAD and in a simulator. Real PSA label payloads, real glare and real cup behaviour are still unknown. The label formats were checked on public scans of 64 real slabs, but not through the machine's own camera and plastic. That is why the build starts with two small tests, about $470 for the cameras (about $280 with a borrowed Pi) and $155 for the cup, before any motion parts are bought.</p></li>
+      <li><span class="tag likely">Likely</span><p><strong>Nothing like it is for sale.</strong> No product takes 200–300 slabs and returns cert numbers unattended. Card sorters exclude slabs, and sheet-fed scanners can't take them.</p></li>
+      <li><span class="tag likely">Likely</span><p><strong>A $350–650 hands-free 2D scanner gets you most of the way with no build.</strong> Fed by hand it reads 20–30 slabs a minute, about 10 minutes per 250. The machine buys back those minutes and adds a photo of every label, which helps catch fakes and swapped cards. Loading and unloading still take you about 10 minutes either way.</p></li>
+      <li><span class="tag likely">Likely</span><p><strong>The budget fits, with headroom.</strong> The full list is about {{BOM_TOTAL}} with a {{ALLOW_PCT}}% allowance for shipping and duties. A realistic worst case (tools bought new, the optional parts, guessed prices 20% high) is about $2,380, inside the $2,500–3,000 you said is fine. With the school's filament, wire and screws it is about {{BOM_SCHOOL}}. Spend the headroom only when a test asks for it.</p></li>
+      <li><span class="tag likely">Likely</span><p><strong>The cup never touches a slab it hasn't proven face-down.</strong> A PSA back QR or a CGC back code proves it. Older slabs with no back code pass when their card back matches backs the machine already confirmed; a face-up slab stops untouched. In the simulator 2 of 330 slabs stopped for you to confirm. The card-back match is tuned in Phase 0 on your own slabs, so until then treat it as <em>Guessing</em>.</p></li>
+      <li><span class="tag certain">Certain</span><p><strong>It is a real mechatronics project:</strong> about 60–85 hours of hands-on work plus printing, with the instructor needed for the 120 V wiring, crimp review, squaring the frame and the first power-up.</p></li>
+    </ul>
+  </div>
+</section>
+
+<section id="how">
+  <div class="rail"><div class="label">How a run works</div></div>
+  <div class="body">
+    <h2>The stacks shuffle one pocket to the left</h2>
+    <div class="row-scroll" role="img" aria-label="The row of pockets: pocket 0 starts empty, pockets 1 to 11 hold 30 slabs each, the camera station sits between pockets 6 and 7, pocket 12 collects exceptions.">
+      <div class="row">{{ROW}}</div>
+    </div>
+    <p class="legend">The bed, left to right. 13 pockets of 84 × 139 mm inside 8 mm dowels, 92 mm apart, and the upward camera in the middle cell.</p>
+    <ol class="steps">
+      <li><div><strong>Load face-down, label toward you.</strong><span>Up to 30 slabs in each of pockets 1–11, below the MAX line on the fill gauge. Pockets 0 and 12 stay empty.</span></div></li>
+      <li><div><strong>The cup lifts the top slab straight up.</strong><span>A 25 mm non-marking cup on a spring buffer touches only the slab's back. No slab ever slides on another.</span></div></li>
+      <li><div><strong>The head camera reads the back of the label</strong><span>The QR on 2017+ labels, the barcode on 2016+ labels. The frame is cropped to the slab under the cup so a neighbour's label can't be read by mistake.</span></div></li>
+      <li><div><strong>The slab goes onto the next pocket to the left.</strong><span>Stack 1 rebuilds itself in pocket 0, stack 2 in pocket 1, and so on, so every slab in the load is read, not just the top layer.</span></div></li>
+      <li><div><strong>Unread backs are held over the upward camera</strong><span>for the front label. Anything still unread, or from BGS, SGC or TAG, goes to pocket 12 for you to check.</span></div></li>
+    </ol>
+    <figure>
+      <img src="{{IMG:storyboard}}" alt="Four renders of the machine: loaded, first transfer, halfway, done." loading="lazy">
+      <figcaption>Rendered from the CAD model: loaded, the first transfer, halfway, and done (pocket 11 empty, two exceptions in pocket 12).</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="machine">
+  <div class="rail"><div class="label">The machine</div></div>
+  <div class="body">
+    <h2>One beam, one head, two motors</h2>
+    <figure>
+      <img src="{{IMG:machine_iso}}" alt="Isometric render of SlabRail: an aluminium gantry over a plywood bed with a row of dowel-caged pockets." loading="lazy">
+    </figure>
+    <div class="tbl"><table>
+      <tbody>
+        <tr><td>Footprint</td><td>about 1.42 × 0.32 m, 0.65 m tall; fits a 6 ft bench</td></tr>
+        <tr><td>Motion</td><td>X: GT2 belt on a 1300 mm MGN12 rail on a 4040 beam. Z: NEMA 17 with a T8×8 lead screw on an MGN12 rail.</td></tr>
+        <tr><td>Gripper</td><td>SMC ZPT25UUK20-B5-A10: 25 mm urethane cup on a non-rotating 20 mm spring buffer, optical contact sensor with an anti-rotation flag guide, normally-closed valves, check valve and reservoir</td></tr>
+        <tr><td>Cameras</td><td>USB 8 MP head camera 140 mm above the slab back, 5 mm toward the label so it also sees the card back; Pi Camera Module 3 140 mm below the front at the station; ring lights on the lens axis to keep glare off the label</td></tr>
+        <tr><td>Controller</td><td>FluidNC on a BTT Rodent, Raspberry Pi 5 running the Python software</td></tr>
+        <tr><td>Travel heights</td><td>empty <span class="mono">{{C_EMPTY}}</span> mm, loaded <span class="mono">{{C_LOADED}}</span> mm above the pad: a double pick of two thick holders clears the 218 mm dowels by 5 mm even with the cup hanging free; a second optical sensor confirms the head really reached carry height before every sideways move</td></tr>
+        <tr><td>Graders</td><td>PSA and CGC are read. BGS and TAG are set aside, and fit only if they measure ≤ 82.6 mm wide. SGC (about 86 mm) does not fit the pockets.</td></tr>
+        <tr><td>Touches the slab</td><td>the cup on the back only; edges against wooden dowels; slabs rest on each other as in any stack</td></tr>
+        <tr><td>Output</td><td><span class="mono">certs.csv</span> (cert, grader, status, pocket, position), <span class="mono">certs.txt</span>, <span class="mono">report.html</span> with a photo of each label</td></tr>
+      </tbody>
+    </table></div>
+    <div class="pair">
+      <figure><img src="{{IMG:head_closeup}}" alt="Close-up render of the head: drop arm, camera bracket, ring light and vacuum cup." loading="lazy"><figcaption>The head: camera, ring light and the cup on its spring buffer.</figcaption></figure>
+      <figure><img src="{{IMG:station_read}}" alt="Render of a slab held over the upward station camera." loading="lazy"><figcaption>A slab held over the station camera for its front label.</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section id="cost">
+  <div class="rail"><div class="label">Cost</div></div>
+  <div class="body">
+    <h2>Where the money goes</h2>
+    <div class="costbar" role="img" aria-label="Share of the parts list by category">{{COSTBAR}}</div>
+    <ul class="cost-legend">{{COSTLEGEND}}</ul>
+    <div class="totals">
+      <div><b>{{BOM_TOTAL}}</b><span>full list with {{ALLOW_PCT}}% allowance</span></div>
+      <div><b>{{BOM_SCHOOL}}</b><span>with school stock (filament, wire, glue, fuses, screws)</span></div>
+      <div><b>$470 + $155</b><span>Phase 0A cameras and Phase 0B cup with allowance: the money at risk before the go / no-go</span></div>
+    </div>
+    <p class="legend">Prices are what the product pages showed on 22 October 2026 where they could be opened, and estimates elsewhere (Misumi and some Amazon lines); get the Misumi quote first. Conditional lines (the optional light roof, spare cups) and junk test slabs ($150–400 if they don't come from your stock) are not in the total. Shopping list by order with links: <a href="{{REPO}}/docs/SHOPPING_LIST.md">SHOPPING_LIST.md</a>.</p>
+  </div>
+</section>
+
+<section id="verified">
+  <div class="rail"><div class="label">Verification</div></div>
+  <div class="body">
+    <h2>What has been checked, and what hasn't</h2>
+    <ul class="checks">
+      <li><span class="tag certain">CAD</span><p><strong>{{CHECKS}} geometric checks pass</strong> (<code>cad/checks.py</code>): every pick and travel move, all parts against each other, the held slab up to the hard top stop, both camera lines of sight, the card-back window against 22 real PSA and 27 real CGC backs, the probe flag and buffer stroke, the carry-height sensor, both limit switches, and every printed part a single solid.</p></li>
+      <li><span class="tag certain">Simulator</span><p><strong>{{TESTS}} software tests pass.</strong> The simulator raises a crash on any unsafe move. They cover full batches, real PSA and CGC payload strings, double picks, thick holders, face-up and neighbour stops, a Z stall, a mis-aimed camera, vacuum leaks, sensor faults, E-stop and resume.</p></li>
+      <li><span class="tag certain">Real labels</span><p><strong>Public scans of 64 real PSA and CGC slabs, rescaled to the machine's cameras:</strong> 60 of 61 read confidently, 0 wrong certs, 0 false face-down proofs. The rules were written from these same slabs, and studio scans are easier than the machine's camera through plastic.</p></li>
+      <li><span class="tag no">Not tested</span><p>Your own slabs through the machine's camera, real glare off the plastic, cup marking over hundreds of cycles, belt tension, cable routing, the probe flag, and the real shapes and loads of bought parts. Phase 0 and the acceptance tests in the build guide exist to find these out.</p></li>
+    </ul>
+  </div>
+</section>
+
+<section id="order">
+  <div class="rail"><div class="label">Build order</div></div>
+  <div class="body">
+    <h2>Two go / no-go gates before the big order</h2>
+    <ol class="steps">
+      <li><div><strong>Phase 0A: camera test</strong><span>Print the jig, set up the Pi, scan 30–50 of your own slabs with <code>python -m tools.phase0</code>.</span><span class="meta">5–6 h + about 14 h printing · about $470 (about $280 with a borrowed Pi) · <span class="gate">go only if ≥ 95% read and 0 wrong</span></span></div></li>
+      <li><div><strong>Phase 0B: cup bench test</strong><span>The real cup and buffer on a hand vacuum pump: does it seal on your holders, and does it leave a mark after 24 hours?</span><span class="meta">3–4 h + a 24 h test · about $155 · no mains wiring · <span class="gate">go only if it seals and leaves no mark</span></span></div></li>
+      <li><div><strong>Order and print</strong><span>Order the machine parts from the BOM, print the parts in <code>cad/out/printed/</code>.</span><span class="meta">1–4 weeks delivery · about 26 h printing</span></div></li>
+      <li><div><strong>Build</strong><span>Frame, bed, X axis, Z axis and head, plumbing, electronics, firmware, software. The machine drills its own rod holes through a printed template.</span><span class="meta">about 40–55 h · instructor for squaring, mains and first power-up</span></div></li>
+      <li><div><strong>Calibrate and run the acceptance tests on junk slabs</strong><span>100-cycle dry run, 300-cycle marking test, drop test, power-cut test, double picks, sensor faults, E-stop and resume.</span><span class="meta">about 8–11 h over 3 days</span></div></li>
+      <li><div><strong>First real batch, supervised</strong><span>Stay with it the first time and check every cert in <code>certs.csv</code> against the slabs.</span><span class="meta">about 2 h</span></div></li>
+    </ol>
+    <figure>
+      <img src="{{IMG:phase0_jig}}" alt="Render of the Phase 0 camera jig: a tray between an upward and a downward camera." loading="lazy">
+      <figcaption>The Phase 0 jig puts a slab between the same two cameras at the same 140 mm distances as the machine.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="files">
+  <div class="rail"><div class="label">Files</div></div>
+  <div class="body">
+    <h2>Where everything is</h2>
+    <ul class="files">
+      <li><a href="{{REPO}}/README.md">README.md</a><span>Overview and verification status</span></li>
+      <li><a href="{{REPO}}/docs/BUILD_GUIDE.md">docs/BUILD_GUIDE.md</a><span>Step by step, Phase 0 to the first batch</span></li>
+      <li><a href="{{REPO}}/docs/OPERATING.md">docs/OPERATING.md</a><span>Loading rules, running, results, maintenance</span></li>
+      <li><a href="{{REPO}}/docs/BOM.md">docs/BOM.md</a><span>Every part with price and link (CSV alongside)</span></li>
+      <li><a href="{{REPO}}/docs/WIRING.md">docs/WIRING.md</a><span>Wiring tables and diagram</span></li>
+      <li><a href="{{REPO}}/docs/FIRMWARE.md">docs/FIRMWARE.md</a><span>FluidNC setup for the BTT Rodent</span></li>
+      <li><a href="{{REPO}}/docs/DESIGN.md">docs/DESIGN.md</a><span>Why this design, damage analysis, calculations</span></li>
+      <li><a href="{{REPO}}/docs/RESEARCH.md">docs/RESEARCH.md</a><span>Existing products, slab and label facts, PSA API</span></li>
+      <li><a href="{{TREE}}/cad/out/printed">cad/out/printed/</a><span>STL + STEP for every printed part</span></li>
+      <li><a href="{{TREE}}/cad">cad/</a><span>Parametric CadQuery model; layout.py holds every dimension</span></li>
+      <li><a href="{{TREE}}/software">software/</a><span>Raspberry Pi software, simulator and tests</span></li>
+      <li><a href="{{TREE}}/firmware/fluidnc">firmware/fluidnc/</a><span>Controller config</span></li>
+    </ul>
+  </div>
+</section>
+
+<footer>Generated from the repository on {{DATE}}. Confidence tags: Certain = checked in the model, the code or the arithmetic; Likely = strong inference; Guessing = filling a gap.</footer>
+</div>
