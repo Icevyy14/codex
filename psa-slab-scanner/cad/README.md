@@ -144,7 +144,7 @@ and trimesh 5.1.1.
 |---|---|
 | `python3 build.py` | Re-exports the printed STEP/STL and `print_list.json`, `cut_list.csv`, the probe-flag DXF/SVG, `heads_cad.json` and the four assembly STEPs, **then renders the PNGs in `out/renders/`**. Without OpenSCAD it stops with "openscad not installed" after the exports are written. `--renders` renders only. |
 | `python3 export_glb.py` | Writes `slabrail_home.glb` and `slabrail_carry.glb` and checks them (mesh count, bounds against the STEP). Name poses to export others: `python3 export_glb.py station`. |
-| `python3 checks.py > out/checks.txt` | Runs the 177 geometry checks (about 12–15 min) and prints one line per check. Exit code 1 if any check fails. |
+| `python3 checks.py > out/checks.txt` | Runs the 177 geometry checks (about 12–17 min; 16 min 43 s on 27 Oct on a shared 4-core machine) and prints one line per check. Exit code 1 if any check fails. |
 | `python3 drawings.py` | Writes the drawing set to `out/drawings/`. Re-measures every dimension and exits 1 if one disagrees with the model. |
 
 Every STEP header carries a timestamp, so `build.py` changes every STEP file in git even when the geometry has not
@@ -152,7 +152,8 @@ changed. Re-export only after changing the model.
 
 ## Checks
 
-`checks.py` runs **177 checks; all 177 pass** [Certain, re-run on 23 Oct 2026; the numbers are in `out/checks.txt`]. It
+`checks.py` runs **177 checks; all 177 pass** [Certain, re-run on 27 Oct 2026 after the mesh fix below; the numbers are in
+`out/checks.txt`, unchanged from the 23 Oct run]. It
 measures exact minimum distances and overlap volumes (OpenCascade) at every pick, place, travel, station, hard-stop and
 Phase 0 pose: all-pairs interference, the held slab against everything above it, rail margins, camera sight lines, the
 face-down card window, LED rings, the probe, the carry sensor and home switches, and printed-part walls. `docs/DESIGN.md`
