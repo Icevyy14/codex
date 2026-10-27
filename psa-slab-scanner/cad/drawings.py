@@ -966,3 +966,350 @@ def make_view(sheet: Sheet, shape, vname: str, scale: Scale, x: float, y: float,
     v.polys(vis, lw=lw, color=color)
     v.vis, v.hid = vis, hid
     return v
+
+
+# ------------------------------------------------------------------------------------- printed parts: local-frame specs
+def print_axis(name: str, axis_local: str) -> str:
+    _, ax, deg = PRINTED_LOCAL[name]
+    v = np.zeros(3)
+    v[AX[axis_local]] = 1.0
+    w = _rot(v, ax, deg)
+    return "xyz"[int(np.argmax(np.abs(w)))]
+
+
+def to_local(geo: Geo, name: str, q) -> np.ndarray:
+    _, ax, deg = PRINTED_LOCAL[name]
+    return _rot(np.asarray(q, dtype=float) + geo.printed()[name]["off"], ax, -deg)
+
+
+def _axis_point(f: dict, along: float) -> np.ndarray:
+    k = AX[f["axis"]]
+    oth = [i for i in range(3) if i != k]
+    q = np.zeros(3)
+    q[oth[0]], q[oth[1]] = f["c"]
+    q[k] = along
+    return q
+
+
+def _m_lcyl(geo, name, axis_local, d, p_local, what, hole=True):
+    """A cylinder of a printed part, found near p_local (model.py frame) on the exported shape; what: 'd', 'lo'/'hi'/'len'
+    (its extent along its axis, model.py frame) or 'x'/'y'/'z' (its axis line, model.py frame)."""
+    pa = print_axis(name, axis_local)
+    f = find_cyl(geo, "printed/" + name, pa, d, p_local, hole)
+    if what == "d":
+        return f["d"]
+    ends = sorted(to_local(geo, name, _axis_point(f, e))[AX[axis_local]] for e in (f["lo"], f["hi"]))
+    if what in ("lo", "hi", "len"):
+        return {"lo": ends[0], "hi": ends[1], "len": ends[1] - ends[0]}[what]
+    return float(to_local(geo, name, _axis_point(f, (f["lo"] + f["hi"]) / 2))[AX[what]])
+
+
+def _m_lplane(geo, name, axis_local, p_local):
+    """The model.py-frame coordinate of the printed part's planar face (normal along axis_local) nearest p_local."""
+    pa = print_axis(name, axis_local)
+    f = find_plane(geo, "printed/" + name, pa, p_local)
+    q = geo.to_print(name, p_local).copy()
+    q[AX[pa]] = f["coord"]
+    return float(to_local(geo, name, q)[AX[axis_local]])
+
+
+def _m_cylk(geo, key, axis, d, near, what, hole=True):
+    """As 'cyl', near given in the key's own frame (print frame for printed parts)."""
+    p = np.asarray(near, dtype=float)
+    k = AX[axis]
+    oth = [i for i in range(3) if i != k]
+    best, bd = None, 1e18
+    for f in geo.feats(key):
+        if f["axis"] != axis or f["hole"] != hole or abs(f["d"] - d) > max(0.05, 0.005 * d):
+            continue
+        dist = math.hypot(p[oth[0]] - f["c"][0], p[oth[1]] - f["c"][1])
+        if dist < bd:
+            best, bd = f, dist
+    if best is None:
+        raise LookupError(f"{key}: no cylinder d {d} along {axis} near {near}")
+    if what == "d":
+        return best["d"]
+    if what == "len":
+        return best["hi"] - best["lo"]
+    return best["c"][[c for c in "xyz" if c != axis].index(what)]
+
+
+def _m_hdepth(geo, key, axis, d, near):
+    """Depth of a blind hole (its cylinder's length); a through hole has no depth (error)."""
+    p = np.asarray(near, dtype=float)
+    k = AX[axis]
+    oth = [i for i in range(3) if i != k]
+    f = min((f for f in geo.feats(key) if f["axis"] == axis and f["hole"] and abs(f["d"] - d) <= max(0.05, 0.005 * d)),
+            key=lambda f: math.hypot(p[oth[0]] - f["c"][0], p[oth[1]] - f["c"][1]))
+    dep = hole_depth(geo.shape(key), f)
+    if dep is None:
+        raise ValueError("through hole has no depth")
+    return dep
+
+
+def slots_of(geo: Geo, key: str) -> list[dict]:
+    """Slots: pairs of half-cylinder hole faces with the same diameter, axis and length (round ends of a straight slot)."""
+    parts = [f for f in geo.feats(key) if f["hole"] and 2.5 < f["span"] < 3.8]
+    used, out = set(), []
+    for i, a in enumerate(parts):
+        if i in used:
+            continue
+        best = None
+        for j, b in enumerate(parts):
+            if j <= i or j in used or b["axis"] != a["axis"] or abs(b["d"] - a["d"]) > 1e-3:
+                continue
+            if abs(b["lo"] - a["lo"]) > 0.01 or abs(b["hi"] - a["hi"]) > 0.01:
+                continue
+            sep = math.hypot(b["c"][0] - a["c"][0], b["c"][1] - a["c"][1])
+            if sep < 1e-3:
+                continue
+            if best is None or sep < best[1]:
+                best = (j, sep)
+        if best is not None:
+            j, sep = best
+            used |= {i, j}
+            b = parts[j]
+            out.append({"axis": a["axis"], "d": a["d"], "len": sep + a["d"], "c": ((a["c"][0] + b["c"][0]) / 2, (a["c"][1] + b["c"][1]) / 2),
+                        "lo": a["lo"], "hi": a["hi"], "ends": (a["c"], b["c"])})
+    return out
+
+
+def _m_slot(geo, key, axis, d, near, what):
+    p = np.asarray(near, dtype=float)
+    k = AX[axis]
+    oth = [i for i in range(3) if i != k]
+    cands = [s for s in slots_of(geo, key) if s["axis"] == axis and abs(s["d"] - d) < 0.05]
+    s = min(cands, key=lambda s: math.hypot(p[oth[0]] - s["c"][0], p[oth[1]] - s["c"][1]))
+    if what == "w":
+        return s["d"]
+    if what == "len":
+        return s["len"]
+    return s["c"][[c for c in "xyz" if c != axis].index(what)]
+
+
+def _m_slotpat(geo, key, axis, d, length, coord):
+    """Span (max - min) of the centres of all slots of this width and length, along coord."""
+    cands = [s for s in slots_of(geo, key) if s["axis"] == axis and abs(s["d"] - d) < 0.05 and abs(s["len"] - length) < 0.05]
+    vals = [s["c"][[c for c in "xyz" if c != axis].index(coord)] for s in cands]
+    return max(vals) - min(vals)
+
+
+def all_planes(shape) -> list[dict]:
+    out = []
+    for f in _faces(shape):
+        s = BRepAdaptor_Surface(f, True)
+        if s.GetType() != GeomAbs_Plane:
+            continue
+        pl = s.Plane()
+        n, o = pl.Axis().Direction(), pl.Location()
+        out.append({"n": np.array([n.X(), n.Y(), n.Z()]), "o": np.array([o.X(), o.Y(), o.Z()]), "box": bbox(f)})
+    return out
+
+
+def _m_chamfer(geo, name, p_local, axis_local):
+    """Extent along axis_local of the non-axis-aligned planar face nearest p_local (a chamfer), printed part."""
+    p = geo.to_print(name, p_local)
+    best, bd = None, 1e18
+    for f in all_planes(geo.shape("printed/" + name)):
+        if np.max(np.abs(f["n"])) > 0.999:
+            continue
+        b = f["box"]
+        dist = math.sqrt(sum(max(b[i] - p[i], 0.0, p[i] - b[i + 3]) ** 2 for i in range(3)))
+        if dist < bd:
+            best, bd = f, dist
+    k = AX[print_axis(name, axis_local)]
+    return best["box"][k + 3] - best["box"][k]
+
+
+def _m_ribd(geo, name, axis_local, c_local, zlo_local, zhi_local):
+    """Twice the smallest distance from a seat axis (through c_local along axis_local) to a planar face parallel to it that
+    lies between zlo and zhi along the axis (model.py frame): the diameter the centring ribs leave."""
+    pa = print_axis(name, axis_local)
+    a = np.zeros(3)
+    a[AX[pa]] = 1.0
+    c = geo.to_print(name, c_local)
+    lo, hi = sorted(geo.to_print(name, np.where(np.arange(3) == AX[axis_local], z, np.asarray(c_local, dtype=float)))[AX[pa]] for z in (zlo_local, zhi_local))
+    best = 1e18
+    for f in all_planes(geo.shape("printed/" + name)):
+        if abs(float(f["n"] @ a)) > 1e-6:
+            continue
+        b = f["box"]
+        if b[AX[pa]] < lo - 1e-3 or b[AX[pa] + 3] > hi + 1e-3:
+            continue
+        best = min(best, abs(float(f["n"] @ (f["o"] - c))))
+    return 2 * best
+
+
+def cone_feats(shape) -> list[dict]:
+    from OCP.GeomAbs import GeomAbs_Cone
+
+    out = []
+    for f in _faces(shape):
+        s = BRepAdaptor_Surface(f, True)
+        if s.GetType() != GeomAbs_Cone:
+            continue
+        ap = s.Cone().Apex()
+        out.append({"apex": np.array([ap.X(), ap.Y(), ap.Z()]), "box": bbox(f)})
+    return out
+
+
+def _m_cone(geo, key, near, what):
+    p = geo.frame_point(key, near)
+    f = min(cone_feats(geo.shape(key)), key=lambda f: float(np.linalg.norm(f["apex"][:2] - p[:2])))
+    if what in "xyz":
+        return float(f["apex"][AX[what]])
+    return f["box"][3] - f["box"][0]  # 'd': the cone's largest diameter (along X)
+
+
+MEASURES.update({"lcyl": _m_lcyl, "lplane": _m_lplane, "cylk": _m_cylk, "hdepth": _m_hdepth, "slot": _m_slot, "slotpat": _m_slotpat,
+                 "chamfer": _m_chamfer, "ribd": _m_ribd, "cone": _m_cone})
+
+
+def s_lcyl(name, ax, d, p, what, hole=True):
+    return ("lcyl", name, ax, d, tuple(float(v) for v in p), what, hole)
+
+
+def s_lpl(name, ax, p):
+    return ("lplane", name, ax, tuple(float(v) for v in p))
+
+
+def s_sub(a, b):
+    return ("sub", a, b)
+
+
+# ---------------------------------------------------------------------------------- printed parts: automatic tables
+HOLE_USE = [(1.8, "M2, self-tapping"), (2.2, "M2 screw + nut"), (2.35, "M2"), (2.4, "M2"), (2.5, "M3 self-tapping pilot"),
+            (3.1, "3 mm pin"), (3.2, "M3"), (3.4, "M3 clearance"), (4.5, "wood screw"), (5.3, "M5 axle"), (5.5, "M5 clearance"),
+            (6.4, "M5 heat-set insert pocket"), (6.5, "M3 head counterbore"), (8.3, "dowel drill guide"), (9.5, "M5 head, sunk"),
+            (10.0, "M5 button-head recess"), (10.4, "M10x1 buffer body"), (10.5, "lead-screw / T8 nut clearance"),
+            (23.0, "NEMA 17 pilot clearance"), (25.0, "lens window")]
+PART_USE = {  # (axis in print frame, diameter) -> use, where the generic one is wrong or vague
+    "gate_post_L": {("x", 7.2): "laser barrel bore (7 mm Class 2 laser)", ("y", 2.5): "M3 set screw onto the barrel (tap or self-form)",
+                    ("z", 4.5): "yaw slot, wood screws"},
+    "gate_post_R": {("x", 6.2): "receiver barrel bore (6 mm module)", ("y", 2.5): "M3 set screw onto the barrel (tap or self-form)",
+                    ("z", 4.5): "yaw slot, wood screws"},
+    "station_mount": {("z", 4.5): "#8 wood screws into the bed", ("z", 1.8): "camera board, M2 self-tapping", ("z", 64.0): "station LED ring seat bore",
+                      ("z", 44.0): "ring shelf inner edge"},
+    "phase0_base": {("z", 1.8): "camera board, M2 self-tapping", ("z", 64.0): "station LED ring seat bore", ("z", 44.0): "ring shelf inner edge"},
+    "camera_bracket": {("z", 42.8): "head LED ring seat bore (ribbed)", ("z", 33.0): "ring lip (ring back face rests on it)",
+                       ("z", 2.2): "camera board, M2 + nuts"},
+    "phase0_top": {("z", 42.8): "head LED ring pocket (ribbed)", ("z", 1.8): "M2 standoffs, blind"},
+    "z_plate": {("z", 2.5): "carry_flag_arm, M3x10 self-tapping", ("y", 10.5): "T8 nut body clearance"},
+    "carry_flag_arm": {("y", 2.5): "carry flag, M3x8 self-tapping"},
+    "awl_adapter": {("z", 3.1): "3 mm steel pin, pressed in + CA"},
+    "x_idler_mount": {("y", 5.3): "M5 idler axle (tension travel)"},
+    "head_foot": {("x", 3.4): "endstop board M3 slots (trip adjustment)"},
+}
+BOSS_USE = {5.0: "M2 boss", 14.0: "body", 16.0: "drill-guide boss", 70.0: "ring seat tube", 48.8: "ring seat tube", 49.8: "ring seat tube"}
+
+
+def _use(name: str, axis: str, d: float, hole: bool = True) -> str:
+    for (ax, dd), s in PART_USE.get(name, {}).items():
+        if ax == axis and abs(dd - d) < 0.02:
+            return s
+    if not hole:
+        for dd, s in BOSS_USE.items():
+            if abs(dd - d) < 0.02:
+                return s
+        return "outer cylinder"
+    for dd, s in HOLE_USE:
+        if abs(dd - d) < 0.02:
+            return s
+    return "bore"
+
+
+def _pattern_text(geo, key, axis, d, hs) -> tuple[str, list[Rec]]:
+    oth = [c for c in "xyz" if c != axis]
+    n = len(hs)
+    if n < 2:
+        return "", []
+    us = sorted({round(h["c"][0], 2) for h in hs})
+    vs = sorted({round(h["c"][1], 2) for h in hs})
+    recs = []
+    if len(us) > 1:
+        recs.append(G(f"{key} {n}x d{fmt(d)} along {axis}: centre span in {oth[0].upper()}", ("pat", key, axis, d, oth[0]),
+                      f"{key[8:]} {n} holes d{fmt(d)} along {axis}: centre span {oth[0].upper()}"))
+    if len(vs) > 1:
+        recs.append(G(f"{key} {n}x d{fmt(d)} along {axis}: centre span in {oth[1].upper()}", ("pat", key, axis, d, oth[1]),
+                      f"{key[8:]} {n} holes d{fmt(d)} along {axis}: centre span {oth[1].upper()}"))
+    grid = len(us) * len(vs) == n
+    if len(recs) == 1:
+        lab = oth[0] if len(us) > 1 else oth[1]
+        txt = f"{recs[0].text} apart in {lab.upper()}" if n == 2 else f"over {recs[0].text} in {lab.upper()}"
+    else:
+        txt = f"on {recs[0].text} x {recs[1].text} ({oth[0].upper()} x {oth[1].upper()})" + ("" if grid else ", not a grid")
+    return txt, recs
+
+
+def auto_features(geo: Geo, name: str) -> list[dict]:
+    """Rows for the feature table: hole groups (diameter + axis), slots, bosses; each with its numbers as Recs and a
+    representative feature to balloon."""
+    key = "printed/" + name
+    solid = geo.shape(key)
+    rows = []
+    feats = geo.feats(key)
+    groups: dict = {}
+    for f in feats:
+        if f["hole"] and f["span"] > 4.6:  # full bores (and bores broken only by ribs or a notch)
+            groups.setdefault((f["axis"], round(f["d"], 2)), []).append(f)
+    for (axis, dd), hs in sorted(groups.items(), key=lambda kv: (kv[0][0], kv[0][1])):
+        hs = sorted(hs, key=lambda h: (round(h["c"][0], 2), round(h["c"][1], 2)))
+        rep = hs[0]
+        near = _axis_point(rep, (rep["lo"] + rep["hi"]) / 2)
+        rd = G(f"{name} hole d{dd} along {axis}: diameter", ("cylk", key, axis, rep["d"], tuple(near), "d"), f"{name} hole group along {axis}: diameter")
+        deps = [hole_depth(solid, h) for h in hs]
+        recs = [rd]
+        if all(dp is None for dp in deps):
+            dtxt = "THRU"
+        else:
+            j = next(i for i, dp in enumerate(deps) if dp is not None)
+            hn = _axis_point(hs[j], (hs[j]["lo"] + hs[j]["hi"]) / 2)
+            r = G(f"{name} hole d{dd} along {axis}: depth", ("hdepth", key, axis, rep["d"], tuple(hn)), f"{name} blind hole along {axis}: cylinder length")
+            recs.append(r)
+            dtxt = f"x {r.text} deep" + (" (some THRU)" if any(dp is None for dp in deps) else "")
+        if rep["span"] < 6.2:
+            dtxt += ", interrupted"
+        ptxt, precs = _pattern_text(geo, key, axis, rep["d"], [h for h in hs if h["span"] > 6.2] if len(hs) > 1 else hs)
+        recs += precs
+        n = len(hs)
+        txt = f"{n}x " if n > 1 else ""
+        txt += f"Ø{rd.text} {dtxt}, axis {axis.upper()}" + (f", {ptxt}" if ptxt else "") + f": {_use(name, axis, rep['d'])}"
+        rows.append({"text": txt, "recs": recs, "feat": rep, "axis": axis, "r": rep["d"] / 2})
+    sgroups: dict = {}
+    for s in slots_of(geo, key):
+        sgroups.setdefault((s["axis"], round(s["d"], 2), round(s["len"], 2)), []).append(s)
+    for (axis, dd, ln), ss in sorted(sgroups.items()):
+        ss = sorted(ss, key=lambda s: (round(s["c"][0], 2), round(s["c"][1], 2)))
+        rep = ss[0]
+        near = _axis_point(rep, (rep["lo"] + rep["hi"]) / 2)
+        rw = G(f"{name} slot along {axis}: width", ("slot", key, axis, rep["d"], tuple(near), "w"), f"{name} slot (paired half-cylinders) along {axis}: width")
+        rl = G(f"{name} slot along {axis}: length", ("slot", key, axis, rep["d"], tuple(near), "len"), f"{name} slot along {axis}: end-centre distance + width")
+        recs = [rw, rl]
+        extra = ""
+        if len(ss) > 1:
+            oth = [c for c in "xyz" if c != axis]
+            spans = []
+            for i, o in enumerate(oth):
+                vals = [s["c"][i] for s in ss]
+                if max(vals) - min(vals) > 0.01:
+                    r = G(f"{name} slots along {axis}: centre span {o.upper()}", ("slotpat", key, axis, rep["d"], rep["len"], o), f"{name} slot centres along {axis}: span {o.upper()}")
+                    recs.append(r)
+                    spans.append(f"{r.text} in {o.upper()}")
+            extra = ", centres " + " and ".join(spans) + " apart" if spans else ""
+        n = len(ss)
+        txt = (f"{n}x " if n > 1 else "") + f"slot {rw.text} wide x {rl.text} long, axis {axis.upper()}{extra}: {_use(name, axis, rep['d'])}"
+        rows.append({"text": txt, "recs": recs, "feat": rep, "axis": axis, "r": rep["d"] / 2, "slot": True})
+    bgroups: dict = {}
+    for f in feats:
+        if not f["hole"] and f["span"] > 6.2 and f["d"] >= 4.0:
+            bgroups.setdefault((f["axis"], round(f["d"], 2)), []).append(f)
+    for (axis, dd), bs in sorted(bgroups.items()):
+        bs = sorted(bs, key=lambda h: (round(h["c"][0], 2), round(h["c"][1], 2)))
+        rep = bs[0]
+        near = _axis_point(rep, (rep["lo"] + rep["hi"]) / 2)
+        rd = G(f"{name} boss d{dd} along {axis}: diameter", ("cylk", key, axis, rep["d"], tuple(near), "d", False), f"{name} outer cylinder along {axis}: diameter")
+        rh = G(f"{name} boss d{dd} along {axis}: length", ("cylk", key, axis, rep["d"], tuple(near), "len", False), f"{name} outer cylinder along {axis}: length")
+        n = len(bs)
+        txt = (f"{n}x " if n > 1 else "") + f"Ø{rd.text} x {rh.text} long (outside), axis {axis.upper()}: {_use(name, axis, rep['d'], hole=False)}"
+        rows.append({"text": txt, "recs": [rd, rh], "feat": rep, "axis": axis, "r": rep["d"] / 2, "boss": True})
+    return rows

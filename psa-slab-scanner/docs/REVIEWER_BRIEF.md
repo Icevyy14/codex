@@ -55,7 +55,7 @@ no motion parts are bought before both Phase 0 gates pass (BOM.md).
 | Evidence | What it shows | What it does not show |
 |---|---|---|
 | **CAD checks** `cad/checks.py`: **177/177 pass** [Certain], 23 Oct 2026; numbers in `cad/out/checks.txt` | Clearance and interference at every pick, place, travel, station, hard-stop and Phase 0 pose: last-slab pick clears full neighbours by 14.55, loaded travel clears the rods by 21.4, a double pick of two 11.5 holders by 5.33. Sight lines, switch and sensor trips. | Loads, deflection, belt slack, cables and tube, real shapes of bought parts, switch-lever side load, frame brackets (not in the CAD), print accuracy. |
-| **Software tests**: **299 passed, 1 skipped** (23 Oct 2026; the skip is the real-image test, which passes alone) [Certain] | Parsing of real PSA and CGC payload strings, grader and face-down rules, carry-sensor logic, every stop path with a slab in the cup. | Real cameras, GPIO electrics, serial timing. The bench-test tool has run only on the simulator. |
+| **Software tests**: **299 passed, 1 skipped** (23 Oct 2026; the skip is the real-image test, which passes alone) [Certain] | Parsing of real PSA and CGC payload strings, grader and face-down rules, carry-sensor logic, the stop paths with a slab in the cup. | Real cameras, GPIO electrics, serial timing. The bench-test tool has run only on the simulator. |
 | **Simulator**: 330 slabs, seed 7, default mix [Certain, sim]; raises `Crash` on any unsafe move | `ok` 324, `needs_review` 6, no wrong cert or grader in an `ok`. Face-down: 287 by back QR, 41 learned, 2 confirmed. Double pick, seal failure, overfill, Z stall, sensor faults end safely. | Real physics (air films, slip, leaks, stalls). The mix is [Guessing]. All simulated slabs are face-down: nothing about face-up safety. |
 | **Real labels**: `tools/real_eval.py` on public scans of 64 real slabs [Certain for these images]; a decode sweep on synthetic labels | **0 wrong certs in an `ok`, 0 false face-down proofs.** Native: 60 `ok`, 2 `needs_review`, 2 `no_read` (BGS and SGC carry no code); at machine-camera scale 60 of 61 `ok`. Sweep: back QR reads at ≤ 0.14 mm/px through blur and glare; no misread. | The rules were written from these 64 slabs. Flat scans have no slab-plastic reflections. |
 | **Hardware** | Nothing. | Everything physical. Phase 0 is next; the acceptance tests (BUILD_GUIDE §13) follow the build. |
@@ -109,8 +109,8 @@ A slab whose back reads is in the air about 2 s per cycle (DESIGN §3).
 **Power and E-stop** (WIRING §1). Mains enters a fused IEC inlet in a closed ABS box, checked by an
 instructor. The E-stop has **two NC blocks in series** in the +24 V line: it cuts the Rodent, pump,
 valves and LED buck, not the Pi, which stops the run when the controller vanishes. Two blocks,
-because the release inrush into the capacitors can weld one closed [Likely]; a monthly check is the
-only detection. On an E-stop the motors go limp (Z should hold on detent [Likely]) and both NC
+because the release inrush into the capacitors can weld one closed [Likely]; in service, a monthly
+check is the only detection. On an E-stop the motors go limp (Z should hold on detent [Likely]) and both NC
 valves close, so a held slab hangs only on the cup line's leak; the reservoir, on the pump side,
 does not help (DESIGN §3). Ctrl-C twice halts the motors but leaves them powered.
 
@@ -151,8 +151,8 @@ A short answer with the question number is enough.
 3. **Z torque at 0.8 A.** The lift needs 0.026 N·m on the T8×8; at 0.8 A (40–55% of rating) SF ≈
    2–4 [Likely] (DESIGN §4), and the BOM motor has no published torque curve. Higher current or
    lower speed from the start? Is the 100-lift test (BUILD_GUIDE §7.8) enough? (D-05)
-4. **Z hold, power off.** Back-drive about 0.005 N·m against about 0.015 N·m detent [Likely] (DESIGN §4), an
-   estimate. Design in a constant-force spring or brake now? Its mount is not in the CAD. (D-05)
+4. **Z hold, power off.** Back-drive about 0.005 N·m against about 0.015 N·m detent [Likely]
+   (DESIGN §4), an estimate. Design in a constant-force spring or brake now? Its mount is not in the CAD. (D-05)
 5. **Switch side load.** Each home switch is worked by a striker sliding across its hinge lever (a
    45° lead-in, then a flat holding it 0.6 mm past the click, inside the 1.2 mm overtravel). The
    lead-in pushes the lever sideways about as hard as down; the datasheet rates only a straight
@@ -176,7 +176,8 @@ A short answer with the question number is enough.
 10. **Sensor fail-safety.** The carry-height sensor's "OK to move" state is dark, so a dead emitter
     or cut GND is caught only at the next grip [Certain] (WIRING §6a). The probe flag may chatter
     during the slow peel; the fix is a Schmitt stage [Guessing] (WIRING §6). Acceptable? (D-05, D-06)
-11. **Head camera aim.** The learned check needs the camera within 1.34° toward the cup; on a CGC
+11. **Head camera aim.** The learned check needs the camera within 1.34° toward the cup [Certain,
+    CAD]; on a CGC
     slab in a pocket corner, about 0.01° toward the label puts over 2% of the card window on the
     holder [Likely]. The only adjustment is an M2 washer shim (about 0.5° [Likely]). What can the
     `camera_bracket` / drop-arm stack-up hold, and how would you measure it? (DESIGN §5; D-05)
@@ -268,7 +269,6 @@ cables, the vacuum tube, the electronics panel, the optional light roof and rear
 | **Survey** | Start-of-run probing of every pocket; repeated and compared on resume. |
 | **Contact probe, probe window** | Optical sensor on the head, tripped by a flag on the spring buffer at 2.0 ± 0.5 of travel; fail-safe. A probing move may go at most 12 past the predicted contact (the probe window). |
 | **Carry sensor** | Carry-height sensor on the Z spine, blocked from c = 246.5 up: blocked before every sideways move, clear at every grip. |
-| **Peel** | The slow lift and 0.5 s dwell after the grip that lets a clinging slab fall back. |
 | **Double pick** | Two slabs lifted together, detected by a placement step ≥ 11.6. |
 | **Face-down check** | Before the cup touches a slab, the head frame must prove it face-down. Modes `learned` (default), `stop`, `off`. |
 | **Back-label code** | A code printed only on the back label (PSA back QR, graded CGC QR, CGC 2020–23 back barcode). |
