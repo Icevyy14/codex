@@ -1,314 +1,274 @@
 [
  {
-  "sheet": "D-07",
-  "label": "station_mount hole d1.8 along z: diameter",
-  "value_mm": 1.8,
+  "sheet": "D-06",
+  "label": "probe flag blank width",
+  "value_mm": 24.4,
   "unit": "mm",
-  "drawn": "1.8",
-  "source": "geometry:station_mount hole group along z: diameter"
+  "drawn": "24.4",
+  "source": "geometry:model.flag_blank(): blade outer edge u - neck edge u"
  },
  {
-  "sheet": "D-07",
-  "label": "station_mount hole d1.8 along z: depth",
-  "value_mm": 11.5,
+  "sheet": "D-06",
+  "label": "probe flag neck/tab width",
+  "value_mm": 10.0,
   "unit": "mm",
-  "drawn": "11.5",
-  "source": "geometry:station_mount blind hole along z: cylinder length"
+  "drawn": "10",
+  "source": "geometry:model.flag_blank(): tab edges u"
  },
  {
-  "sheet": "D-07",
-  "label": "printed/station_mount 4x d1.8 along z: centre span in X",
-  "value_mm": 21.0,
+  "sheet": "D-06",
+  "label": "probe flag blade inner edge from the centre line",
+  "value_mm": 12.0,
   "unit": "mm",
-  "drawn": "21",
-  "source": "geometry:station_mount 4 holes d1.8 along z: centre span X"
+  "drawn": "12",
+  "source": "geometry:model.flag_blank(): blade inner edge u (u 0 = neck centre line)"
  },
  {
-  "sheet": "D-07",
-  "label": "printed/station_mount 4x d1.8 along z: centre span in Y",
-  "value_mm": 12.5,
+  "sheet": "D-06",
+  "label": "probe flag blade outer edge from the centre line",
+  "value_mm": 19.4,
   "unit": "mm",
-  "drawn": "12.5",
-  "source": "geometry:station_mount 4 holes d1.8 along z: centre span Y"
+  "drawn": "19.4",
+  "source": "geometry:model.flag_blank(): blade outer edge u"
  },
  {
-  "sheet": "D-07",
-  "label": "station_mount hole d4.5 along z: diameter",
-  "value_mm": 4.5,
+  "sheet": "D-06",
+  "label": "probe flag trip edge below the bend line",
+  "value_mm": 8.5,
   "unit": "mm",
-  "drawn": "4.5",
-  "source": "geometry:station_mount hole group along z: diameter"
+  "drawn": "8.5",
+  "source": "geometry:model.flag_blank(): blade top (trip) edge v, below the bend line"
  },
  {
-  "sheet": "D-07",
-  "label": "printed/station_mount 4x d4.5 along z: centre span in X",
-  "value_mm": 68.0,
+  "sheet": "D-06",
+  "label": "probe flag blade bottom below the bend line",
+  "value_mm": 42.25,
   "unit": "mm",
-  "drawn": "68",
-  "source": "geometry:station_mount 4 holes d4.5 along z: centre span X"
+  "drawn": "42.25",
+  "source": "geometry:model.flag_blank(): blade bottom v, below the bend line"
  },
  {
-  "sheet": "D-07",
-  "label": "printed/station_mount 4x d4.5 along z: centre span in Y",
-  "value_mm": 116.0,
+  "sheet": "D-06",
+  "label": "probe flag band bottom below the bend line",
+  "value_mm": 14.5,
   "unit": "mm",
-  "drawn": "116",
-  "source": "geometry:station_mount 4 holes d4.5 along z: centre span Y"
+  "drawn": "14.5",
+  "source": "geometry:model.flag_blank(): band bottom v"
  },
  {
-  "sheet": "D-07",
-  "label": "station_mount hole d64.0 along z: diameter",
-  "value_mm": 64.0,
+  "sheet": "D-06",
+  "label": "probe flag tab length past the bend line (trim)",
+  "value_mm": 13.0,
   "unit": "mm",
-  "drawn": "64",
-  "source": "geometry:station_mount hole group along z: diameter"
+  "drawn": "13",
+  "source": "geometry:model.flag_blank(): tab end v"
  },
  {
-  "sheet": "D-07",
-  "label": "station_mount hole d64.0 along z: depth",
-  "value_mm": 26.0,
+  "sheet": "D-06",
+  "label": "probe flag hole diameter",
+  "value_mm": 5.2,
   "unit": "mm",
-  "drawn": "26",
-  "source": "geometry:station_mount blind hole along z: cylinder length"
+  "drawn": "5.2",
+  "source": "geometry:probe_flag tab hole diameter"
  },
  {
-  "sheet": "D-07",
-  "label": "station_mount boss d5.0 along z: diameter",
-  "value_mm": 5.0,
+  "sheet": "D-06",
+  "label": "probe flag hole axis to the plate's inner face",
+  "value_mm": 7.0,
   "unit": "mm",
-  "drawn": "5",
-  "source": "geometry:station_mount outer cylinder along z: diameter"
+  "drawn": "7",
+  "source": "geometry:probe_flag plate inner face Y - tab hole axis Y"
  },
  {
-  "sheet": "D-07",
-  "label": "station_mount boss d5.0 along z: length",
-  "value_mm": 7.5,
+  "sheet": "D-06",
+  "label": "probe flag sheet thickness",
+  "value_mm": 1.0,
   "unit": "mm",
-  "drawn": "7.5",
-  "source": "geometry:station_mount outer cylinder along z: length"
+  "drawn": "1",
+  "source": "geometry:probe_flag plate faces Y"
  },
  {
-  "sheet": "D-07",
-  "label": "station_mount boss d70.0 along z: diameter",
-  "value_mm": 70.0,
+  "sheet": "D-06",
+  "label": "probe flag tab end past the hole",
+  "value_mm": 2.0,
   "unit": "mm",
-  "drawn": "70",
-  "source": "geometry:station_mount outer cylinder along z: diameter"
+  "drawn": "2",
+  "source": "geometry:probe_flag hole edge Y - tab end Y"
  },
  {
-  "sheet": "D-07",
-  "label": "station_mount boss d70.0 along z: length",
-  "value_mm": 26.0,
+  "sheet": "D-06",
+  "label": "probe flag bend inside radius",
+  "value_mm": 1.0,
   "unit": "mm",
-  "drawn": "26",
-  "source": "geometry:station_mount outer cylinder along z: length"
+  "drawn": "1",
+  "source": "geometry:probe_flag bend inner cylinder radius"
  },
  {
-  "sheet": "D-07",
-  "label": "station_mount: ring shelf above the base-plate top",
-  "value_mm": 20.0,
+  "sheet": "D-06",
+  "label": "carry flag width",
+  "value_mm": 19.9,
   "unit": "mm",
-  "drawn": "20",
-  "source": "geometry:station_mount ring shelf Z - base plate top Z"
+  "drawn": "19.9",
+  "source": "geometry:carry_flag X"
  },
  {
-  "sheet": "D-07",
-  "label": "station_mount: camera boss tops above the base-plate top",
-  "value_mm": 11.5,
+  "sheet": "D-06",
+  "label": "carry flag height",
+  "value_mm": 36.0,
   "unit": "mm",
-  "drawn": "11.5",
-  "source": "geometry:station_mount M2 boss top Z - base plate top Z"
+  "drawn": "36",
+  "source": "geometry:carry_flag Z"
  },
  {
-  "sheet": "D-07",
-  "label": "STATION_LENS_Z",
-  "value_mm": 23.0,
+  "sheet": "D-06",
+  "label": "carry flag thickness",
+  "value_mm": 1.0,
   "unit": "mm",
-  "drawn": "23",
-  "source": "layout.STATION_LENS_Z"
+  "drawn": "1",
+  "source": "geometry:carry_flag Y"
  },
  {
-  "sheet": "D-07",
-  "label": "station_mount: overall X",
-  "value_mm": 80.0,
+  "sheet": "D-06",
+  "label": "carry flag holes from the outer edge",
+  "value_mm": 4.0,
   "unit": "mm",
-  "drawn": "80",
-  "source": "geometry:station_mount exported shape bounding box X"
+  "drawn": "4",
+  "source": "geometry:carry_flag hole axis X - outer edge X"
  },
  {
-  "sheet": "D-07",
-  "label": "station_mount: overall Y",
+  "sheet": "D-06",
+  "label": "carry flag holes from the inner edge",
+  "value_mm": 15.9,
+  "unit": "mm",
+  "drawn": "15.9",
+  "source": "geometry:carry_flag inner edge X - hole axis X"
+ },
+ {
+  "sheet": "D-06",
+  "label": "carry flag upper hole below the top edge",
+  "value_mm": 6.0,
+  "unit": "mm",
+  "drawn": "6",
+  "source": "geometry:carry_flag top edge Z - upper hole Z"
+ },
+ {
+  "sheet": "D-06",
+  "label": "carry flag lower hole below the top edge",
+  "value_mm": 18.0,
+  "unit": "mm",
+  "drawn": "18",
+  "source": "geometry:carry_flag top edge Z - lower hole Z"
+ },
+ {
+  "sheet": "D-06",
+  "label": "carry flag hole diameter",
+  "value_mm": 3.4,
+  "unit": "mm",
+  "drawn": "3.4",
+  "source": "geometry:carry_flag hole diameter"
+ },
+ {
+  "sheet": "D-17",
+  "label": "jig post length",
+  "value_mm": 312.0,
+  "unit": "mm",
+  "drawn": "312",
+  "source": "geometry:p0_post_1 Z"
+ },
+ {
+  "sheet": "D-17",
+  "label": "jig post centres",
   "value_mm": 130.0,
   "unit": "mm",
   "drawn": "130",
-  "source": "geometry:station_mount exported shape bounding box Y"
+  "source": "geometry:p0_post_1 centre X - p0_post_-1 centre X"
  },
  {
-  "sheet": "D-07",
-  "label": "station_mount: overall Z",
-  "value_mm": 29.0,
+  "sheet": "D-17",
+  "label": "jig socket floor Z",
+  "value_mm": 2.0,
   "unit": "mm",
-  "drawn": "29",
-  "source": "geometry:station_mount exported shape bounding box Z"
+  "drawn": "2",
+  "source": "geometry:p0_post_1 Z min (socket floor)"
  },
  {
-  "sheet": "D-07",
-  "label": "gate_post_L hole d7.2 along x: diameter",
-  "value_mm": 7.2,
+  "sheet": "D-17",
+  "label": "jig station lens front Z",
+  "value_mm": 23.0,
   "unit": "mm",
-  "drawn": "7.2",
-  "source": "geometry:gate_post_L hole group along x: diameter"
+  "drawn": "23",
+  "source": "geometry:p0_station_camera Z max (lens front)"
  },
  {
-  "sheet": "D-07",
-  "label": "gate_post_L hole d2.5 along y: diameter",
-  "value_mm": 2.5,
+  "sheet": "D-17",
+  "label": "jig slab front face Z",
+  "value_mm": 163.0,
   "unit": "mm",
-  "drawn": "2.5",
-  "source": "geometry:gate_post_L hole group along y: diameter"
+  "drawn": "163",
+  "source": "geometry:p0_slab Z min (front face, on the ledges)"
  },
  {
-  "sheet": "D-07",
-  "label": "gate_post_L slot along z: width",
-  "value_mm": 4.5,
+  "sheet": "D-17",
+  "label": "jig slab back Z",
+  "value_mm": 169.6,
   "unit": "mm",
-  "drawn": "4.5",
-  "source": "geometry:gate_post_L slot (paired half-cylinders) along z: width"
+  "drawn": "169.6",
+  "source": "geometry:p0_slab Z max"
  },
  {
-  "sheet": "D-07",
-  "label": "gate_post_L slot along z: length",
-  "value_mm": 10.5,
+  "sheet": "D-17",
+  "label": "jig bridge underside Z",
+  "value_mm": 309.0,
   "unit": "mm",
-  "drawn": "10.5",
-  "source": "geometry:gate_post_L slot along z: end-centre distance + width"
+  "drawn": "309",
+  "source": "geometry:p0_top Z min"
  },
  {
-  "sheet": "D-07",
-  "label": "gate_post_L slots along z: centre span Y",
-  "value_mm": 36.0,
+  "sheet": "D-17",
+  "label": "jig head lens front Z",
+  "value_mm": 309.6,
   "unit": "mm",
-  "drawn": "36",
-  "source": "geometry:gate_post_L slot centres along z: span Y"
+  "drawn": "309.6",
+  "source": "geometry:p0_head_camera Z min (lens front)"
  },
  {
-  "sheet": "D-07",
-  "label": "gate_post_L: bore axis above the foot underside",
-  "value_mm": 217.0,
+  "sheet": "D-17",
+  "label": "jig post tops Z",
+  "value_mm": 314.0,
   "unit": "mm",
-  "drawn": "217",
-  "source": "geometry:gate_post_L barrel bore axis Z - foot underside Z"
+  "drawn": "314",
+  "source": "geometry:p0_post_1 Z max"
  },
  {
-  "sheet": "D-07",
-  "label": "GATE_Z",
-  "value_mm": 214.0,
+  "sheet": "D-17",
+  "label": "jig station lens to slab front",
+  "value_mm": 140.0,
   "unit": "mm",
-  "drawn": "214",
-  "source": "layout.GATE_Z"
+  "drawn": "140",
+  "source": "geometry:p0_slab Z min - p0_station_camera Z max"
  },
  {
-  "sheet": "D-07",
-  "label": "gate_post_L: overall X",
-  "value_mm": 22.0,
+  "sheet": "D-17",
+  "label": "jig slab back to head lens",
+  "value_mm": 140.0,
   "unit": "mm",
-  "drawn": "22",
-  "source": "geometry:gate_post_L exported shape bounding box X"
+  "drawn": "140",
+  "source": "geometry:p0_head_camera Z min - p0_slab Z max"
  },
  {
-  "sheet": "D-07",
-  "label": "gate_post_L: overall Y",
-  "value_mm": 50.0,
+  "sheet": "D-17",
+  "label": "CAM_TO_SLAB",
+  "value_mm": 140.0,
   "unit": "mm",
-  "drawn": "50",
-  "source": "geometry:gate_post_L exported shape bounding box Y"
+  "drawn": "140",
+  "source": "layout.CAM_TO_SLAB"
  },
  {
-  "sheet": "D-07",
-  "label": "gate_post_L: overall Z",
-  "value_mm": 229.0,
+  "sheet": "D-17",
+  "label": "jig arm stub length",
+  "value_mm": 66.0,
   "unit": "mm",
-  "drawn": "229",
-  "source": "geometry:gate_post_L exported shape bounding box Z"
- },
- {
-  "sheet": "D-07",
-  "label": "gate_post_R hole d6.2 along x: diameter",
-  "value_mm": 6.2,
-  "unit": "mm",
-  "drawn": "6.2",
-  "source": "geometry:gate_post_R hole group along x: diameter"
- },
- {
-  "sheet": "D-07",
-  "label": "gate_post_R hole d2.5 along y: diameter",
-  "value_mm": 2.5,
-  "unit": "mm",
-  "drawn": "2.5",
-  "source": "geometry:gate_post_R hole group along y: diameter"
- },
- {
-  "sheet": "D-07",
-  "label": "gate_post_R slot along z: width",
-  "value_mm": 4.5,
-  "unit": "mm",
-  "drawn": "4.5",
-  "source": "geometry:gate_post_R slot (paired half-cylinders) along z: width"
- },
- {
-  "sheet": "D-07",
-  "label": "gate_post_R slot along z: length",
-  "value_mm": 10.5,
-  "unit": "mm",
-  "drawn": "10.5",
-  "source": "geometry:gate_post_R slot along z: end-centre distance + width"
- },
- {
-  "sheet": "D-07",
-  "label": "gate_post_R slots along z: centre span Y",
-  "value_mm": 36.0,
-  "unit": "mm",
-  "drawn": "36",
-  "source": "geometry:gate_post_R slot centres along z: span Y"
- },
- {
-  "sheet": "D-07",
-  "label": "gate_post_R: bore axis above the foot underside",
-  "value_mm": 217.0,
-  "unit": "mm",
-  "drawn": "217",
-  "source": "geometry:gate_post_R barrel bore axis Z - foot underside Z"
- },
- {
-  "sheet": "D-07",
-  "label": "GATE_Z",
-  "value_mm": 214.0,
-  "unit": "mm",
-  "drawn": "214",
-  "source": "layout.GATE_Z"
- },
- {
-  "sheet": "D-07",
-  "label": "gate_post_R: overall X",
-  "value_mm": 22.0,
-  "unit": "mm",
-  "drawn": "22",
-  "source": "geometry:gate_post_R exported shape bounding box X"
- },
- {
-  "sheet": "D-07",
-  "label": "gate_post_R: overall Y",
-  "value_mm": 50.0,
-  "unit": "mm",
-  "drawn": "50",
-  "source": "geometry:gate_post_R exported shape bounding box Y"
- },
- {
-  "sheet": "D-07",
-  "label": "gate_post_R: overall Z",
-  "value_mm": 229.0,
-  "unit": "mm",
-  "drawn": "229",
-  "source": "geometry:gate_post_R exported shape bounding box Z"
+  "drawn": "66",
+  "source": "geometry:p0_arm_stub Z"
  }
 ]
