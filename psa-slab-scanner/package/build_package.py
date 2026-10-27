@@ -782,7 +782,8 @@ def build_volume(vol: dict, printer: Printer, sheets, git: dict, workdir: Path) 
             raise BuildError(f"footer overlay has {len(foot.pages)} pages, expected {len(items)}")
         for fp, f in zip(foot.pages, targets):
             writer.pages[f].merge_page(fp)
-            writer.pages[f].compress_content_streams()
+    for page in writer.pages:  # pypdf leaves merged and inserted page contents uncompressed
+        page.compress_content_streams(level=9)
 
     # ---- links: drawing-sheet links become page links; no placeholder link may remain
     sheet_page = {"first": ins} if has_draw else {}

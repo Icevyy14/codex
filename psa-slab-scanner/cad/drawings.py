@@ -939,10 +939,12 @@ class View:
                 self.arrow((ul, a), (0, 1), own)
                 self.arrow((ul, b), (0, -1), own)
             side = text_at or ("left" if off < 0 else "right")
+            # a short span: the text is taller than the gap between the extension lines, so clear their overshoot
+            tx = over + 1.0 if span < th() + 1.5 and (side == "left") == (sg < 0) else 1.0
             if side == "left":
-                t = self.text(ul - 1.0 * k, (a + b) / 2, s, ha="right", va="center", owner=own)
+                t = self.text(ul - tx * k, (a + b) / 2, s, ha="right", va="center", owner=own)
             else:
-                t = self.text(ul + 1.0 * k, (a + b) / 2, s, ha="left", va="center", owner=own)
+                t = self.text(ul + tx * k, (a + b) / 2, s, ha="left", va="center", owner=own)
         rec.artist, rec.p1, rec.p2, rec.axis, rec.view = t, tuple(p1), tuple(p2), axis, self
         return t
 
@@ -973,7 +975,9 @@ class View:
         vb = (self.x, self.y, self.x + self.w, self.y + self.h)
         angs = prefer or [45, 135, -45, -135, 90, -90, 0, 180, 22, 158, -22, -158, 68, 112, -68, -112]
         best = None
-        for dist in (5.5, 8.0, 11.0, 14.0, 18.0, 23.0):
+        # dimension, leader and centre lines already drawn (not the views' own edges, owner -1): a balloon must not sit on one
+        lines = [pts for o, pts in self.sheet.segs if o != -1]
+        for dist in (5.5, 8.0, 11.0, 14.0, 18.0, 23.0, 30.0, 38.0, 48.0):
             for a in angs:
                 cx = x0 + (r_pap + dist) * math.cos(math.radians(a))
                 cy = y0 + (r_pap + dist) * math.sin(math.radians(a))
@@ -981,6 +985,12 @@ class View:
                 if not (reg[0] <= rr[0] and rr[2] <= reg[2] and reg[1] <= rr[1] and rr[3] <= reg[3]):
                     continue
                 if any(_hit(rr, o) for o in self.sheet.occ if o != vb):
+                    continue
+                if any(_poly_hits_rect(pts, rr) for pts in lines):
+                    continue
+                # nor may its leader cross a dimension's text
+                la, lb = (x0 + r_pap * math.cos(math.radians(a)), y0 + r_pap * math.sin(math.radians(a))), (cx, cy)
+                if any(_seg_rect(la[0], la[1], lb[0], lb[1], o) for o in self.sheet.occ if o != vb and not _hit(o, vb)):
                     continue
                 inview = _hit(rr, vb)
                 score = dist + (40.0 if inview and avoid_view else 0.0)
@@ -1365,7 +1375,8 @@ def _pattern_text(geo, key, axis, d, centres) -> tuple[str, list[Rec]]:
         lab = oth[0] if len(us) > 1 else oth[1]
         txt = f"{recs[0].text} apart in {lab.upper()}" if n == 2 else f"centres over {recs[0].text} in {lab.upper()}"
     else:
-        txt = f"on {recs[0].text} x {recs[1].text} ({oth[0].upper()} x {oth[1].upper()})" + ("" if grid else ", not a grid")
+        txt = (f"on {recs[0].text} x {recs[1].text} ({oth[0].upper()} x {oth[1].upper()})" if grid else
+               f"centres spread over {recs[0].text} x {recs[1].text} ({oth[0].upper()} x {oth[1].upper()}), not a grid")
     return txt, recs
 
 
@@ -1717,7 +1728,9 @@ def printed_cell(sh: Sheet, geo: Geo, name: str, cell, layout="side", table_w=10
     vf = make_view(sh, shape, "front", sc, fx, fy, hidden=hidden)
     vt = make_view(sh, shape, "top", sc, fx, fy + Z / k + GAP, hidden=hidden)
     vr = make_view(sh, shape, "right", sc, fx + X / k + GAP, fy, hidden=hidden)
-    sh.text(vt.x, vt.y + vt.h + 2.0, f"SCALE {sc}", size=FS, weight="bold")
+    sh.text(vt.x, vt.y + vt.h + 2.0, f"TOP     SCALE {sc}", size=FS, weight="bold")
+    sh.text(vf.x + vf.w / 2, vf.y - 10.5, "FRONT", size=FS, weight="bold", ha="center", va="top")
+    sh.text(vr.x + vr.w / 2, vr.y - 10.5, "RIGHT", size=FS, weight="bold", ha="center", va="top")
     rx = G(f"{name}: overall X", ("bb", key, "xlen"), f"{name} exported shape bounding box X")
     ry = G(f"{name}: overall Y", ("bb", key, "ylen"), f"{name} exported shape bounding box Y")
     rz = G(f"{name}: overall Z", ("bb", key, "zlen"), f"{name} exported shape bounding box Z")
@@ -1915,8 +1928,10 @@ def sheet_frame(sh: Sheet, geo: Geo, plan):
     vf = make_view(sh, shape, "front", S110, 40.0, 210.0, hidden=True)
     vr = make_view(sh, shape, "right", S110, 40.0 + vf.w + 30.0, 210.0, hidden=True)
     sh.text(vf.x + vf.w / 2, vf.y - 4.0, "FRAME, FRONT (1:10)", weight="bold", ha="center", va="top")
-    sh.text(vr.x + vr.w + 22.0, vr.y + vr.h / 2, "RIGHT (1:10)", weight="bold", va="center")
+    sh.text(vr.x + vr.w / 2, vr.y - 12.0, "RIGHT (1:10)", weight="bold", ha="center", va="top")
     g = lambda n, w: bb_value(geo.shape(akey(n)), w)  # noqa: E731
+    for n in ("upright_L", "upright_R"):
+        vf.centerline((g(n, "xmid"), g(n, "zmin") - 25.0), (g(n, "xmid"), g("x_beam", "zmax") + 25.0))
     r_in = G("upright inner faces", s_sub(("bb", akey("upright_R"), "xmin"), ("bb", akey("upright_L"), "xmax")), "upright_R X min - upright_L X max")
     vf.dim((g("upright_L", "xmax"), 120.0), (g("upright_R", "xmin"), 120.0), "h", 0.0, r_in, post=" inner faces")
     r_cc = G("upright centres", s_sub(("bb", akey("upright_R"), "xmid"), ("bb", akey("upright_L"), "xmid")), "upright_R centre X - upright_L centre X")
@@ -1924,7 +1939,9 @@ def sheet_frame(sh: Sheet, geo: Geo, plan):
     r_bl = G("X beam length", ("bb", akey("x_beam"), "xlen"), "x_beam bounding box X")
     vf.dim((g("x_beam", "xmin"), g("x_beam", "zmax")), (g("x_beam", "xmax"), g("x_beam", "zmax")), "h", 5.0, r_bl, post=" beam = bed length")
     r_bh = G("bed top to beam bottom", s_sub(("bb", akey("x_beam"), "zmin"), ("bb", akey("bed_plywood"), "zmax")), "x_beam Z min - bed_plywood Z max")
-    vf.dim((900.0, g("bed_plywood", "zmax")), (900.0, g("x_beam", "zmin")), "v", 0.0, r_bh, text_at="right")
+    # outside the frame, off its right end (the beam's underside meets the upright's top there): crosses no other dimension
+    xe = g("bed_plywood", "xmax")
+    vf.dim((xe, g("bed_plywood", "zmax")), (xe, g("x_beam", "zmin")), "v", (g("foot_R", "xmax") - xe) / 10 + 7.0, r_bh, text_at="right")
     r_rc = G("base rail centres", s_sub(("bb", akey("base_rail_1"), "ymid"), ("bb", akey("base_rail_0"), "ymid")), "base_rail_1 centre Y - base_rail_0 centre Y")
     vr.dim((g("base_rail_0", "ymid"), g("base_rail_0", "zmin")), (g("base_rail_1", "ymid"), g("base_rail_0", "zmin")), "h", -5.0, r_rc, text_at="right")
     for n in ("base_rail_0", "base_rail_1"):
@@ -1957,9 +1974,10 @@ def sheet_frame(sh: Sheet, geo: Geo, plan):
         (("bb", akey("base_rail_0"), "xlen"), "base_rail_0 X", 20, S110, {}, "base rail, lying flat under the bed; square ends", [], "+/-0.5"),
         (("bb", akey("upright_L"), "zlen"), "upright_L Z", 40, S110, {}, "upright; square ends", [], "+/-0.5"),
         (("bb", akey("x_beam"), "xlen"), "x_beam X", 40, S110, {}, "X beam, on top of the uprights; square ends", [], "+/-0.5"),
-        (("bb", akey("z_spine"), "zlen"), "z_spine Z", 20, S15, {"tapped": True}, f"Z spine; BOTH ends tapped M5 in the two centre bores, {sp.text} apart", [sp], "+/-0.5"),
+        (("bb", akey("z_spine"), "zlen"), "z_spine Z", 20, S15, {"tapped": True},
+         f"Z spine; BOTH ends: 2x M5 tapped, the two centre bores ({sp.text} apart), for 2x M5x12 button heads (bottom) and 2x M5x16 (top), BUILD_GUIDE 7.1, 7.3", [sp], "+/-0.5"),
         (("bb", akey("drop_arm"), "zlen"), "drop_arm Z", 20, S15, {"holes": [(h19.value, hd.value), (h84.value, hd.value)]},
-         f"head drop arm; 2 x Ø{hd.text} cross holes {h19.text} and {h84.text} from the end in head_foot's socket (match-drill, BUILD_GUIDE 7.5)", [hd, h19, h84], "+/-0.5"),
+         f"head drop arm; 2x Ø{hd.text} THRU across the arm (machine X), {h19.text} and {h84.text} from the end in head_foot's socket: match-drill (BUILD_GUIDE 7.5)", [hd, h19, h84], "+/-0.5"),
         (("bb", akey("z_leadscrew"), "zlen"), "z_leadscrew Z", 8, S15, {"rod": True}, "T8x8 Z screw, length below the motor face: cut the motor's 400 mm screw; 311-356 works (cut_list.csv)", [], "311-356"),
         (None, None, None, None, None, "probe flag blank: D-06", [], "D-06"),
         (("bb", "p0/p0_post_1", "zlen"), "p0_post_1 Z", 20, S15, {}, "Phase 0 jig post; cut square", [], "+/-0.5"),
@@ -1971,7 +1989,8 @@ def sheet_frame(sh: Sheet, geo: Geo, plan):
     x0, ytop = 16.0, 192.0
     widths = [14.0, 156.0, 30.0, 150.0, 14.0, 34.0]
     hdr = ["Item", "Bar (length from the CAD; scale per row)", "Profile / stock", "Use, ends, holes", "Qty", "Tolerance"]
-    sh.text(x0, ytop + 1.5, f"CUT LIST (cad/out/cut_list.csv; extrusion cuts +/-0.5 with square ends, BUILD_GUIDE 4.1)", weight="bold")
+    sh.text(x0, ytop + 1.5, "CUT LIST (cad/out/cut_list.csv; extrusion cuts +/-0.5 with square ends, BUILD_GUIDE 4.1)", weight="bold")
+    sh.text(x0 + sum(widths), ytop + 1.5, "Extrusions: 20-series, slot 6 (Misumi HFS5, BOM.csv)", ha="right")
     xs = np.cumsum([x0] + widths)
     hh = 7.0
     for i, t in enumerate(hdr):
@@ -1990,6 +2009,7 @@ def sheet_frame(sh: Sheet, geo: Geo, plan):
             v = _bar(sh, xs[1] + 3.0, yc - 1.8, r, depth, sc, **opts)
             sh.text(xs[1] + 3.0 + v.w + 4.0, yc - 1.8, str(sc), va="center", color=GREY)
         lines = textwrap.wrap(use, int((widths[3] - 2.4) / (0.53 * FS * PT)))
+        assert len(lines) <= 2, f"cut list row C-{i + 1:02d}: use text longer than two lines"
         arts = []
         for j, ln in enumerate(lines[:2]):
             arts.append(sh.text(xs[3] + 1.2, yc + (len(lines[:2]) - 1) * 2.3 - j * 4.6, ln, va="center"))
@@ -2022,7 +2042,7 @@ def sheet_bed(sh: Sheet, geo: Geo, plan):
     vp.seg((-12.0, 0.0), (12.0, 0.0), lw=0.6, owner=-3)
     vp.seg((0.0, -12.0), (0.0, 12.0), lw=0.6, owner=-3)
     vp.ax.add_patch(Circle((0.0, 0.0), 4.0, fill=False, lw=0.6, clip_on=False))
-    vp.text(6.0, -16.0, "O", weight="bold", va="top", ha="left")
+    vp.text(6.0, -16.0, "DATUM O", weight="bold", va="top", ha="left")  # inside pad 0's outline, clear of its lines
     vp.centerline((b[0] - 20, 0.0), (b[3] + 20, 0.0), lw=0.35)
     # pocket centres along the top
     items = []
@@ -2157,6 +2177,25 @@ def sheet_bed(sh: Sheet, geo: Geo, plan):
     for a in sh.pg.texts[-8:]:
         if f"cell {stc.text}," in a.get_text():
             stc.artist = a
+    # rod holes: callout on the plan + the pattern in words (the bed itself has no holes in the CAD: the rods pass into it)
+    rdc = C("ROD_D")
+    emc = C("ROD_EMBED")
+    nr2 = G("rod hole count", ("count", "asm:home", "rod_"), "number of rod_ parts (one hole each)", unit="count")
+    last_k, last_near = rod_at(xs_l[-1], ys_l[1])
+    vp.leader((xs_l[-1] + 4.0 * 0.707, ys_l[1] - 4.0 * 0.707), 22.0, -16.0, [f"{nr2.text}x Ø{rdc.text} x {emc.text} deep", "rod holes:", "see ROD HOLES note"], [nr2, rdc, emc])
+    f0 = rod_c("rod holes: first side-rod line X", xs_l[0], ys_l[1], "x")
+    pit = G("rod holes: side-rod line pitch", s_sub(("cyl", rod_at(xs_l[1], ys_l[1])[0], "z", L.ROD_D, rod_at(xs_l[1], ys_l[1])[1], "x", False),
+                                                    ("cyl", rod_at(xs_l[0], ys_l[1])[0], "z", L.ROD_D, rod_at(xs_l[0], ys_l[1])[1], "x", False)),
+            "second minus first side-rod line X")
+    sr = rod_c("rod holes: side-rod row Y (back)", xs_l[0], ys_l[2], "y")
+    fr = rod_c("rod holes: front/back-rod row Y (back)", xs_l[0] + L.WALL / 2 + L.ROD_INSET, ys_l[3], "y")
+    fp = G("rod holes: front/back pair X", s_sub(s_lcyl(n, "z", 8.3, (30, 73.5, 6), "x"), s_lcyl(n, "z", 8.3, (-30, 73.5, 6), "x")), "drill_template front/back-rod holes X")
+    stc2 = C("STATION_CELL", unit="count")
+    sh.wrap_recs(tx, t - 2.5,
+                 f"ROD HOLES: {nr2.text}x Ø{rdc.text} (CAD ROD_D; drill with the brad-point bit that matches the dowels: 5/16 in for the BOM's 7.94 "
+                 f"dowels), {emc.text} deep (ROD_EMBED), square to the bed (guide block, BUILD_GUIDE 5.6). Side rods on the cell wall lines, first "
+                 f"X {f0.text}, then every {pit.text}, at Y ±{sr.text}; front/back rods in pairs {fp.text} apart about each pocket centre, at "
+                 f"Y ±{fr.text}; none front/back in the station cell {stc2.text}.", PW - 14.0 - tx, [nr2, rdc, emc, f0, pit, sr, fr, fp, stc2])
 
 
 SHEET_FUNCS["bed"] = sheet_bed

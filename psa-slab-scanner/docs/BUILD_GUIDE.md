@@ -1042,16 +1042,18 @@ empty] Use this as a starting point and check it works:
 - Too tight shows up as a motor that runs hot or a pulley that wears. Too loose shows as lost
   position.
 
-**6.7 Beam twist check, and the brace.** DESIGN.md estimates 0.8 mm of twist at the cup at
-midspan from the head's 127 mm overhang. [Guessing in DESIGN] Measure it once the head is on
-(§7):
+**6.7 Beam twist check, and the brace.** DESIGN.md §4 estimates about 0.5 mm of twist at the cup
+at midspan (0.3–0.8 mm, depending on the profile's torsion constant) from the X carriage, whose
+centre of mass sits 77 mm in front of the beam centre. [Guessing in DESIGN] Measure it once the
+head is on (§7):
 1. Park the head over pocket 6 (midspan) with the cup about 20 mm above the pad.
 2. Put a dial indicator on the bed with its tip against the side of the buffer body, reading in Y
    (front–back).
-3. Hang a 0.75 kg weight (a water bottle) from the cup, about the head's own weight. Read the
-   movement.
-- **Up to 1.0 mm: fine.**
-- **More than 1.0 mm: fit the brace** (DESIGN.md's threshold). [Guessing: no CAD for it]
+3. Hang a 0.75 kg weight (a water bottle) from the cup and read the movement. At the cup's
+   127 mm lever the weight twists the beam with about 0.93 N·m, against about 1.46 N·m from the
+   carriage itself (DESIGN.md §4) [Likely], so the carriage's own twist is about 1.6 × the reading.
+- **Up to 0.6 mm read (1.0 mm scaled): fine.**
+- **More than 0.6 mm read: fit the brace** (DESIGN.md's 1.0 mm threshold). [Guessing: no CAD for it]
   - Cut a vertical 2020 post (about 401 mm, from the 600 mm stock) and stand it behind the
     pockets at X ≈ 600, under the beam's rear bottom slot.
   - Fix it to the beam with two 2020 corner brackets, and to the bed with corner brackets bolted

@@ -24,7 +24,6 @@ camera reads the back label, and the cup sets the slab down in the empty pocket 
 every stack ends up one pocket left. A slab whose back can't be read is held over the upward camera
 to read its front label. Anything still unread or doubtful goes to pocket 12, the exception pocket.
 The output is `certs.csv` (cert, grader, status, pocket and position) and a photo of every label.
-There are two motors: X (belt, along the row) and Z (lead screw, up and down).
 
 ![SlabRail, CAD render](img/machine_iso.png)
 
@@ -36,7 +35,7 @@ and adds a photo of every slab.
 
 | Requirement | Where written | How the design answers it |
 |---|---|---|
-| Load 200–300+ slabs, walk away, get every cert number back | README; DESIGN §1–2 | 330 per load, one CSV row per slab, a count check; 79.4 min per load in the simulator. **But** until the learned face-down check is active, every slab without a back-label code stops the run (§5 step 3), and the build guide says not to leave it alone until three full runs pass with no unexplained stop and no wrong cert [Guessing threshold]. |
+| Load 200–300+ slabs, walk away, get every cert number back | README; DESIGN §1–2 | 330 per load, one CSV row per slab, a count check; 79.4 min per load in the simulator. **But** until the learned face-down check is active, every slab without a back-label code stops the run (§5 step 3), and the build guide says not to leave it alone before three clean full runs [Guessing threshold]. |
 | PSA first, CGC too | README; CONTRACT | The rules read and stack both. BGS and TAG go to pocket 12 (only if ≤ 82.6 mm wide). SGC (about 86 mm) does not fit the 84 mm pocket. |
 | Fewest moving parts | DESIGN §2 | One row, no Y axis: 2 motors, a spring-loaded cup, 2 valves, 1 pump. |
 | Budget about \$2,000; \$2,500–3,000 acceptable | CONTRACT | \$2,181.94 with a 15% allowance [Likely ±10%]; worst case about \$2,380 [Guessing] (BOM.md). |
@@ -58,7 +57,7 @@ The next step is two bench gates that decide whether it gets built:
 
 | Evidence | What it shows | What it does not show |
 |---|---|---|
-| **CAD checks** `cad/checks.py`: **177/177 pass** [Certain], 23 Oct 2026; numbers in `cad/out/checks.txt` | Clearance and interference of the model at every pick, place, travel, station, hard-stop and Phase 0 pose: last-slab pick clears full neighbours by 14.55, loaded travel clears the rods by 21.4, a double pick of two 11.5 holders by 5.33. Sight lines, switch and sensor trips. | Loads, deflection, belt slack, cables and tube, real shapes of bought parts, switch-lever side load, frame brackets (not in the CAD), print accuracy. |
+| **CAD checks** `cad/checks.py`: **177/177 pass** [Certain], 23 Oct 2026; numbers in `cad/out/checks.txt` | Clearance and interference of the model at every pick, place, travel, station, hard-stop and Phase 0 pose (last-slab pick 14.55 from full neighbours, loaded travel 21.4 over the rods, a double pick of two 11.5 holders 5.33); sight lines; switch and sensor trips. | Loads, deflection, belt slack, cables and tube, real shapes of bought parts, switch-lever side load, frame brackets (not in the CAD), print accuracy. |
 | **Software tests**: **299 passed, 1 skipped** (23 Oct 2026; the skip is the real-image test, which passes alone) [Certain] | Parsing of real PSA and CGC payload strings, grader and face-down rules, carry-sensor logic, the stop paths with a slab in the cup. | Real cameras, GPIO electrics, serial timing. The bench-test tool has run only on the simulator. |
 | **Simulator**: 330 slabs, seed 7, default mix [Certain, sim]; raises `Crash` on any unsafe move | `ok` 324, `needs_review` 6, no wrong cert or grader in an `ok`. Face-down: 287 by back QR, 41 learned, 2 confirmed. Double pick, seal failure, overfill, Z stall and sensor faults end without a simulated crash. | Real physics (air films, slip, leaks, stalls). The mix is [Guessing]. Every simulated slab is face-down. |
 | **Real labels**: `tools/real_eval.py` on public scans of 64 real slabs [Certain for these images]; a decode sweep on synthetic labels | **0 wrong certs in an `ok`, 0 false face-down proofs.** Native: 60 `ok`, 2 `needs_review`, 2 `no_read` (BGS and SGC carry no code); at machine-camera scale 60 of 61 `ok`. Back QR reads at ≤ 0.14 mm/px through blur and glare. | The rules were written from these 64 slabs. Flat scans have no slab-plastic reflections. |
@@ -70,7 +69,7 @@ The next step is two bench gates that decide whether it gets built:
 |---|---|---|
 | Overall size | **1436 × 289.5 × 720** (X × Y × Z): X −78 … 1358 over the feet, Y −117.5 … 172 (the bed), Z −49 (feet underside) … 671 (Z motor top); the same in every pose [Certain, CAD bounding box of the assembly STEP] | `cad/out/assembly/*.step`; D-01 |
 | Frame | Bed 1416 × 289.5 (18 mm plywood) on two 2040 × 1416 base rails; one portal: two 4040 × 401 uprights on the back base rail and a 4040 × 1416 X beam, centre 400 above the pad; 2040 × 340 Z spine; 2020 × 285 drop arm; joints not in the CAD | `cut_list.csv`, `layout.py`, BUILD_GUIDE §4 |
-| Pockets, slab | 92 pitch, centres X = 42 + 92·cell; inside 84 × 139: ±1.85 / ±1.75 play on an 80.3 × 135.5 × 6.6 slab (design max 82.6 × 136.5 × 7.0, ≤ 65 g; thick holders 11.5). 82 dowels (5/16 in, 7.94), tops 218 above the pad. | `layout.py`, `dims.py` |
+| Pockets, slab | 92 pitch, centres X = 42 + 92·cell; inside 84 × 139: ±1.85 / ±1.75 play on an 80.3 × 135.5 × 6.6 slab (design max 82.6 × 136.5 × 7.0, ≤ 65 g; thick holders 11.5); 82 dowels (5/16 in). | `layout.py`, `dims.py` |
 | Heights | MAX fill line 210, overfill laser 214, rod tops 218; travel c = 248 (empty and loaded); station read c ≈ 171.6 | `layout.py`, `machine.toml` |
 | X axis | NEMA17, GT2 20T belt, 80 steps/mm; one MGN12H block on a 1300 rail; soft limits 22…1253, printed hard stops at cup X 15 and 1262; 15000 mm/min, 2000 mm/s²; 1.0 A | CONTRACT, FIRMWARE |
 | Z axis | NEMA17 (1.5–2.0 A, ≤ 4 mH), integrated T8×8 screw cut to 340; one MGN12H block on a 330 rail; c = −12…250 used, hard stops c = −14 and 262; 6000 mm/min, 1200 mm/s²; run 0.8 A, hold 0.5 A | CONTRACT, FIRMWARE |
@@ -84,7 +83,7 @@ The next step is two bench gates that decide whether it gets built:
 ## 5. One slab's trip
 
 Once per run: home (Z up, then X left), refuse to start if the overfill beam is blocked, survey
-every pocket with the probe, and in learned mode take one head frame over an empty pocket to check
+every pocket with the probe (repeated and compared on resume), and in learned mode take one head frame over an empty pocket to check
 the camera's aim. Then for every slab (`runner.transfer`):
 
 | # | Step | Guarded by |
@@ -128,7 +127,7 @@ assessment exists. What the docs have:
 
 | Item | Where | State |
 |---|---|---|
-| System block diagram | Electrical and control: `docs/img/wiring.svg`, WIRING §1. Vacuum: BUILD_GUIDE §8.1. Software: CONTRACT "Software". Sequence: §5. | No single diagram of mechanics, sensors and software. |
+| System block diagram | Electrical and control: `docs/img/wiring.svg`, WIRING §1. Vacuum: BUILD_GUIDE §8.1. Software: CONTRACT. Sequence: §5. | No single system diagram. |
 | Moving-mass breakdown | DESIGN §4 totals: 0.75 kg head, 1.9 kg X carriage | **Missing:** no per-part list, CAD mass roll-up or centre of gravity. |
 | Motor and driver settings | FIRMWARE "What config.yaml sets"; `config.yaml` | Complete on paper; no torque curve for the BOM Z motor. |
 | Power budget | WIRING §1.2 | [Guessing] until parts are measured. |
@@ -162,23 +161,22 @@ assessment exists. What the docs have:
 
 ## 9. What we'd like you to review
 
-A short answer with the question number is enough. Label, cup-marking and face-down risks are left
-to Phase 0 (DESIGN §7 has the full risk table).
+A short answer with the question number is enough. Label and face-down risks are left to Phase 0
+(DESIGN §7 has the full risk table).
 
 1. **Frame joints.** The CAD has no brackets. BUILD_GUIDE §4.3 proposes [Guessing on the layout] two
-   4040 L brackets inside each beam-to-upright corner, a back plate (none in front: the X rail ends
-   18 mm from each upright), and the uprights held by L brackets bolted M5×30 through the 18 mm
-   plywood into the back base rail, so the plywood is part of the joint. They react the head's
-   overhang; nothing calculates their stiffness. Enough, or end-tap and bolt the uprights? (D-01, D-02)
+   4040 L brackets in each beam-to-upright corner, a back plate (none in front: the X rail ends
+   18 mm from each upright), and uprights held by L brackets bolted M5×30 through the 18 mm plywood
+   into the back base rail. These joints react the head's overhang; nothing calculates their
+   stiffness. Enough, or end-tap and bolt the uprights? (D-01, D-02)
 2. **Beam twist.** ≈ 0.8 mm at the cup at midspan from the 127 mm overhang [Guessing on J] (DESIGN
-   §4); the derivation, J and end conditions are not in the repo. The build check hangs 0.75 kg on
-   the cup over pocket 6; a rear brace goes on above 1.0 mm (BUILD_GUIDE §6.7). Twist also turns the
-   head camera in the plane of the aim limits (Q11) and changes along X, while the aim check looks
-   over one empty pocket (an inference; no doc relates them). Credible? Measure angle too? (D-04)
+   §4); its derivation and end conditions are not in the repo. The build check hangs 0.75 kg on the
+   cup over pocket 6 and adds a rear brace above 1.0 mm (BUILD_GUIDE §6.7). Twist also turns the head
+   camera in the plane of the aim limits (Q11), and it varies along X while the aim check looks over
+   one pocket (an inference; no doc relates them). Credible? Measure angle too? (D-04)
 3. **Rail loads.** Each axis runs on one MGN12H block (generic rails; the X listing states no
-   preload). The X block carries the Z stack, motor top at Z 671, with the head 127 in front of the
-   beam; the Z block carries the drop arm and head. No moment-load, deflection or life check
-   exists. One block enough? (D-04, D-05)
+   preload). The X block carries the Z stack (motor top at Z 671) with the head 127 in front of the
+   beam. No moment-load, deflection or life check exists. One block enough? (D-04, D-05)
 4. **Z torque at 0.8 A.** 0.026 N·m on the T8×8 (DESIGN §4 lists only the 0.75 kg head at
    1.2 m/s²); at 0.8 A (40–55% of rating) SF ≈ 2–4 [Likely]; no torque curve. The test passes if a
    bare-pad probe agrees within 0.1 mm after 100 full-speed lifts; the fixes are 3000 mm/min, then
@@ -204,7 +202,8 @@ to Phase 0 (DESIGN §7 has the full risk table).
    asks for ≥ 5 A at 24 V DC, and the bus feeds capacitive inputs at up to ≈ 3.4 A [Guessing]. A
    weld is found only monthly; the pump restarts on release. The T3.15A fuse [Likely] is not
    checked against inrush; one earth bond crosses anodised joints [Likely]. Acceptable, or the
-   E-stop in the mains feed (the WIRING §1.3 alternative) or a force-guided safety relay?
+   E-stop in the mains feed (the WIRING §1.3 alternative) or a force-guided safety relay (linked
+   contacts that reveal a weld)?
 10. **Sensor fail-safety.** The carry sensor's "OK to move" state is dark, so a dead emitter or cut
     GND is caught only at the next grip [Certain] (WIRING §6a). The probe flag may chatter during
     the slow peel; the fix is a Schmitt stage [Guessing] (WIRING §6). Acceptable? (D-05, D-06, D-11)
@@ -241,16 +240,13 @@ to Phase 0 (DESIGN §7 has the full risk table).
 GitHub shows HTML as source code: download a `web/` file and open it in a browser (it needs an
 internet connection for fonts and, for the 3D model, its 3D library).
 
-**Documents.** `README.md` (overview, verification, build order); `docs/DESIGN.md` (architecture
-§2, slab contacts and crash layers §3, calculations §4, reading logic §5, verification §6, risks
-§7); `docs/CONTRACT.md` (the binding interface: layout, axes, heights, pins); `docs/BUILD_GUIDE.md`
-(Phase 0 §1, printing §3, frame §4, axes §6–7, vacuum §8, acceptance tests §13);
-`docs/WIRING.md` with `docs/img/wiring.svg` (power, E-stop, every wire, open risks §16);
-`docs/FIRMWARE.md` with `firmware/fluidnc/config.yaml`; `docs/OPERATING.md` (loading, run
-sequence §4, every stop message §8.1); `docs/BOM.md`, `BOM.csv`, `SHOPPING_LIST.md`;
-`docs/RESEARCH.md` (existing products, slab facts, label formats); `software/` (run loop,
-decoding, simulator, tests); `cad/README.md` and `cad/layout.py` (units, origin, poses, part
-names; the master dimensions).
+**Documents.** `docs/DESIGN.md` (architecture §2, slab contacts and crash layers §3, calculations
+§4, reading logic §5, verification §6, risks §7); `docs/CONTRACT.md` (the binding interface);
+`docs/BUILD_GUIDE.md` (Phase 0 §1, frame §4, axes §6–7, vacuum §8, acceptance tests §13);
+`docs/WIRING.md` and `img/wiring.svg`; `docs/FIRMWARE.md` and `firmware/fluidnc/config.yaml`;
+`docs/OPERATING.md` (every stop message §8.1); `docs/BOM.md`, `SHOPPING_LIST.md`;
+`docs/RESEARCH.md` (label formats); `software/`; `cad/README.md` and `cad/layout.py` (the master
+dimensions).
 
 ### 10.2 Drawing set
 
@@ -286,34 +282,30 @@ The CAD zip holds the 64 files in `package/cad_manifest.txt`:
 |---|---|
 | `cad/README.md` | Units, coordinates, poses, part names and kinds, how to open and regenerate, the export check |
 | `cad/out/assembly/slabrail_<pose>.step` (4) | Full assembly: `home` (head over pocket 1 at c = 248, stacks as loaded), `pick_bottom` (cup at c = 6.6 on the last slab of pocket 11), `carry` (held slab at c = 248 between pockets 1 and 0), `station` (held slab at c ≈ 171.6). Measure on these. |
-| `cad/out/assembly/slabrail_home.glb`, `slabrail_carry.glb` | The same assemblies as meshes for any glTF viewer (metres, Y up, as glTF expects) |
+| `cad/out/assembly/slabrail_home.glb`, `slabrail_carry.glb` | The same assemblies as binary glTF meshes for any glTF viewer (metres, Y up, as glTF expects); for looking, not measuring |
 | `cad/out/printed/`: 25 STEP, 25 STL, `print_list.json` | Printed parts in print orientation, with sizes and print notes. The `station_mount`, `phase0_base` and `phase0_tray` STLs are not clean meshes: check them in the slicer preview (`cad/README.md`). |
 | `cad/out/cut_list.csv`, `probe_flag_blank.dxf`, `.svg` | Extrusions, lead screw, flag blanks, 82 dowels; the probe flag blank at 1:1 (24.4 × 55, 1 mm aluminium) |
 | `cad/out/checks.txt`, `cad/out/drawings/SlabRail_drawings.pdf`, `docs/BOM.csv` | All 177 check results; the drawing set; every bought part with price and link |
 
-In the repo only: the CadQuery source `cad/*.py` (`build.py` exports, `checks.py` re-runs the 177
-checks in 12–15 min) and the drawing previews. Bought parts are envelopes, accurate where they
-meet other parts. Not in the CAD: frame brackets, cables, the vacuum tube, the electronics panel,
-the optional light roof and rear brace.
+In the repo only: the CadQuery source `cad/*.py` and the drawing previews. Bought parts are
+envelopes, accurate where they meet other parts. Not in the CAD: frame brackets, cables, the vacuum
+tube, the electronics panel, the optional light roof and rear brace.
 
 ## 11. Glossary
 
 | Term | Meaning |
 |---|---|
-| **c, c_safe** | Cup-face height above the pad top (the machine's Z), calibrated at the probe trip, so the free cup hangs 2 below it (`CUP_HANG`). Travel height c = 248: rod tops 218 + two 11.5 holders + 5 clearance + the 2 hang. |
+| **c, c_safe** | Cup-face height above the pad top, the machine's Z; the free cup hangs 2 below it (`CUP_HANG`). Travel height c_safe = 248: rod tops 218 + two 11.5 holders + 5 + 2. |
 | **Cell, pocket, station** | 14 positions along the row: cell 7 is the station (upward camera), the rest are pockets 0–12. Stack k moves onto pocket k−1. Pocket 12 is the exception pocket. |
-| **Survey** | Start-of-run probing of every pocket; repeated and compared on resume. |
 | **Contact probe, probe window** | Optical sensor on the head, tripped by a flag on the spring buffer at 2.0 ± 0.5 of travel; fail-safe. A probing move goes at most 12 past the predicted contact. |
 | **Probe hard limit** | FluidNC `probe_hard_limit`: a probe trip during a move that is not a probing move is a critical alarm. |
 | **Carry sensor** | Carry-height sensor on the Z spine, blocked from c = 246.5 up: blocked before every sideways move, clear at every grip. |
 | **Double pick** | Two slabs lifted together, found by a placement step ≥ 11.6. |
 | **Back-label code** | A code printed only on the back label (PSA back QR, graded CGC QR, CGC 2020–23 back barcode). |
-| **Face-down check, learned** | Before the cup touches a slab, a head frame must prove it face-down: a back-label code, or (learned mode, the default) its card window, the 55 × 5.5 mm strip of card back between label and cup, matching references from two different proven slabs. Active after a Phase 0 GO (threshold ≥ 0.55), 5 references and a clear camera-aim check (one frame over an empty pocket) that run. |
+| **Face-down check, learned** | Before the cup touches a slab, a head frame must prove it face-down: a back-label code, or (learned mode) its card window, a 55 × 5.5 mm strip of card back, matching references from two proven slabs. Active after a Phase 0 GO (threshold ≥ 0.55), 5 references and a clear camera-aim check over an empty pocket. |
 | **Statuses** | `ok` (cert and grader confirmed), `needs_review` (a read the rules can't confirm), `conflict` (codes disagree), `no_read`, `other_grader` (a BGS, SGC or TAG cert URL). |
 | **QR, Code128, ITF** | A 2D code and two 1D barcodes; ITF (interleaved 2 of 5) is on PSA labels. OCR reads the printed digits. |
 | **J** | The torsion constant of the beam section, used for the twist estimate. |
 | **Rodent, TMC2160, FluidNC** | BTT controller board; its stepper drivers (spreadCycle chopping, StallGuard stall detection off); the CNC firmware on it, driven by G-code over USB. |
 | **G38.3, `ALARM:4`** | A probing move that stops on contact and does not alarm on a miss; FluidNC's alarm when the probe already reads tripped at the start (a cut fail-safe wire). |
 | **DC-13** | The IEC utilisation category for DC contacts switching electromagnets: the E-stop blocks' only listed DC rating. |
-| **Force-guided safety relay** | A relay whose linked contacts reveal a weld; the alternative WIRING §1.3 names. |
-| **GLB** | Binary glTF: a mesh file for viewers, not for measuring. |
