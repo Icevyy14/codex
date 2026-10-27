@@ -99,21 +99,21 @@ DASH_CTR = (0, (14.0, 3.0, 2.5, 3.0))
 DASH_PHANTOM = (0, (14.0, 3.0, 2.5, 3.0, 2.5, 3.0))
 
 
-MODEL_SOURCES = ["cad/model.py", "cad/layout.py", "cad/dims.py", "cad/build.py"]  # what the geometry is built from
+CAD_SOURCES = ["cad/model.py", "cad/layout.py", "cad/dims.py", "cad/drawings.py"]  # the sheets are drawn from these
 
 
 def git_hash() -> str:
-    """HEAD's short hash, plus '+uncommitted' when the model sources in the working tree differ from HEAD (the sheets then
-    show geometry that is not in that commit)."""
+    """Short hash of the last commit that changed the CAD sources (not HEAD, which is often an unrelated commit), plus
+    '+uncommitted' when any of them differs from HEAD in the working tree."""
     try:
-        h = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=REPO, capture_output=True, text=True, check=True).stdout.strip()
+        h = subprocess.run(["git", "log", "-1", "--format=%h", "--", *CAD_SOURCES], cwd=REPO, capture_output=True, text=True, check=True).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         return "unknown"
     try:
-        dirty = subprocess.run(["git", "status", "--porcelain", "--", *MODEL_SOURCES], cwd=REPO, capture_output=True, text=True, check=True).stdout.strip()
+        dirty = subprocess.run(["git", "status", "--porcelain", "--", *CAD_SOURCES], cwd=REPO, capture_output=True, text=True, check=True).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         dirty = ""
-    return h + ("+uncommitted" if dirty else "")
+    return (h or "unknown") + ("+uncommitted" if dirty else "")
 
 
 # ------------------------------------------------------------------------------------------------------------- scales
@@ -756,7 +756,7 @@ class Sheet:
         self.text(xs + 26.0, cy(2), "3RD ANGLE", size=FS, va="center", occ=False)
         self.third_angle_symbol(xs + 52.0, y0 + rh + 1.5, s=0.95)
         self.text(x0 + 2.5, cy(2), REV, size=FS, va="center", occ=False)
-        self.text(x0 + 2.5, cy(3), f"SOURCE: cad/model.py @ {self.hash}   (drawn by cad/drawings.py)", size=FS, va="center", occ=False)
+        self.text(x0 + 2.5, cy(3), f"SOURCE: cad/model.py @ last CAD change {self.hash}", size=FS, va="center", occ=False)
         self.text(xs + 2.5, cy(3), f"DATE {DATE}", size=FS, va="center", occ=False)
         self.text(x1 - 2.5, cy(3), "DO NOT SCALE", size=FS, va="center", ha="right", weight="bold", occ=False)
 
@@ -1016,9 +1016,12 @@ class View:
                 if any(_seg_cross(la, lb, q0, q1) for pts in dims_ for q0, q1 in zip(pts[:-1], pts[1:])):
                     continue
                 inview = _hit(rr, vb)
-                # each crossing of the part's own outline past the first (the way out of the view) costs as much as 6 mm more leader
+                if inview and any(_poly_hits_rect(p_, rl) for p_ in mine):
+                    continue  # never on the part's own edges
+                # inside the view's box, in clear space (e.g. beside a finger), costs 25 mm of leader; each crossing of the part's
+                # outline past the first (the way out of the view) costs 6 mm
                 ncross = _count_cross(la, lb, own_edges)
-                score = dist + (40.0 if inview and avoid_view else 0.0) + 6.0 * max(0, ncross - (0 if inview else 1))
+                score = dist + (25.0 if inview and avoid_view else 0.0) + 6.0 * max(0, ncross - (0 if inview else 1))
                 if best is None or score < best[0]:
                     best = (score, cx, cy, a)
             if best is not None and best[0] < 30:
@@ -1481,7 +1484,7 @@ PART_USE = {  # (axis in print frame, diameter) -> use, where the generic one is
     "phase0_base": {("z", 1.8): "camera board, M2 self-tapping", ("z", 64.0, 1): "station LED ring seat bore",
                     ("z", 64.0, 0): "hollow under the ring shelf (45° cone roof)", ("z", 44.0): "ring shelf inner edge"},
     "camera_bracket": {("z", 42.8): "head LED ring seat bore (ribbed)", ("z", 33.0): "ring lip (ring back face rests on it)",
-                       ("z", 2.2): "head camera board (ELP, 32 x 32 pattern about the lens axis [Guessing], BUILD_GUIDE 3.3), M2 + nuts"},
+                       ("z", 2.2): "ELP board, M2 + nuts, about the lens axis ([Guessing], 3.3)"},
     "phase0_top": {("z", 42.8): "head LED ring pocket (ribbed)", ("z", 1.8): "M2 standoffs, blind"},
     "z_plate": {("z", 2.5): "carry_flag_arm, M3x10 self-tapping", ("y", 10.5): "T8 nut body clearance"},
     "carry_flag_arm": {("y", 2.5): "carry flag, M3x8 self-tapping"},
@@ -1754,7 +1757,7 @@ def custom_rows(geo: Geo, name: str) -> list[dict]:  # noqa: C901 - one branch p
                "camera_bracket ring-seat rib inner faces: 2 x distance from the seat axis")
         lip = G("camera_bracket: lip (ring back face) below the board shelf", s_sub(s_lpl(n, "z", (20, 20, M.CAM_Z + M.HEAD_LENS_PROJ)), s_lpl(n, "z", (0, M.CAM_DY - 18, M.CAM_Z + M.HEAD_RING_FACE_DZ + M.HEAD_RING[2]))),
                 "camera_bracket shelf top Z - lip underside Z")
-        out.append(_row(f"Ring seat: 3 ribs leave Ø{rb.text} (shave for a larger ring, BUILD_GUIDE 3.3); ring back face (lip) {lip.text} below the board shelf", [rb, lip]))
+        out.append(_row(f"Ring seat: 3 ribs leave Ø{rb.text} (shave for a larger ring, BUILD_GUIDE 3.3); lip {lip.text} below the board shelf", [rb, lip]))
         off = G("camera_bracket: lens axis to drop-arm centre", s_sub(("mid", s_lpl(n, "y", (0, L.ARM_TO_CUP + 10.2, M.CAM_Z + 5)), s_lpl(n, "y", (0, L.ARM_TO_CUP - 10.2, M.CAM_Z + 5))),
                                                                      s_lcyl(n, "z", M.LENS_WINDOW_D, (0, M.CAM_DY, M.CAM_Z + M.HEAD_LENS_PROJ - 2), "y")),
                 "camera_bracket arm bore centre Y - lens window axis Y")
