@@ -1746,7 +1746,8 @@ def custom_rows(geo: Geo, name: str) -> list[dict]:  # noqa: C901 - one branch p
         sw = G("head_foot: arm socket width", s_sub(s_lpl(n, "x", (10.2, 35, 80)), s_lpl(n, "x", (-10.2, 35, 80))), "head_foot arm socket faces X")
         fl = G("head_foot: socket floor above the underside", s_sub(s_lpl(n, "z", (0, 35, 65)), s_lpl(n, "z", (-12, -5, 62))), "head_foot socket floor Z - underside Z")
         xh = G("head_foot: cross hole above the socket floor", s_sub(s_lcyl(n, "x", 5.5, (10, 35, 84), "z"), s_lpl(n, "z", (0, 35, 65))), "head_foot M5 cross hole axis Z - socket floor Z")
-        out.append(_row(f"Drop-arm socket {sw.text} square, floor {fl.text} above the underside; cross hole {xh.text} above the floor (match-drill the arm)", [sw, fl, xh]))
+        out.append(_row(f"Drop-arm socket {sw.text} square, floor {fl.text} above the underside; cross hole {xh.text} above the floor (match-drill the arm)", [sw, fl, xh],
+                        ("z", (0.0, L.ARM_TO_CUP, M.FOOT_Z[1]), 10.2)))  # the socket seen from above
         gw = G("head_foot: flag guide slot width", s_sub(s_lpl(n, "y", (15, M.PROBE_Y + M.GUIDE_GAP / 2, 68)), s_lpl(n, "y", (15, M.PROBE_Y - M.GUIDE_GAP / 2, 68))),
                "head_foot flag slot faces Y")
         uz = G("head_foot: underside above the cup face (model.py frame)", s_lpl(n, "z", (-12, -5, 62)), "head_foot underside Z (model.py frame: Z 0 = cup face c)")
@@ -1913,12 +1914,15 @@ def _auto_at(name: str, recs) -> tuple | None:
     return None
 
 
-def choose_scale(X, Y, Z, w, h, ML=16.0, MR=4.0, MB=15.0, MT=5.0, GAP=13.0):
+def choose_scale(X, Y, Z, w, h, ML=16.0, MR=4.0, MB=15.0, MT=5.0, GAPS=(13.0, 9.0)) -> tuple[Scale, float]:
+    """The largest standard scale whose three views fit (w x h, paper mm), and the gap between the views: 13, or 9 before
+    dropping to the next smaller scale."""
     for sc in STD_SCALES:
         k = sc.k
-        if ML + X / k + GAP + Y / k + MR <= w and MB + Z / k + GAP + Y / k + MT <= h:
-            return sc
-    return STD_SCALES[-1]
+        for gap in GAPS:
+            if ML + X / k + gap + Y / k + MR <= w and MB + Z / k + gap + Y / k + MT <= h:
+                return sc, gap
+    return STD_SCALES[-1], GAPS[0]
 
 
 def printed_cell(sh: Sheet, geo: Geo, name: str, cell, layout="side", table_w=100.0, scale: Scale | None = None, hidden=True, tsize=FS):
@@ -1951,9 +1955,9 @@ def printed_cell(sh: Sheet, geo: Geo, name: str, cell, layout="side", table_w=10
         vx0, vx1, vy0 = x0, tx - 3.0, y0
     else:
         vx0, vx1, vy0 = x0, x1, y0 + t_h + 2.0
-    sc = scale or choose_scale(X, Y, Z, vx1 - vx0, vy1 - vy0)
+    sc, GAP = (scale, 13.0) if scale else choose_scale(X, Y, Z, vx1 - vx0, vy1 - vy0)
     k = sc.k
-    ML, MB, GAP = 16.0, 15.0, 13.0
+    ML, MB = 16.0, 15.0
     tot_w, tot_h = X / k + GAP + Y / k, Z / k + GAP + Y / k
     fx = vx0 + ML + max(0.0, (vx1 - vx0 - ML - 4.0 - tot_w) / 2)
     fy = vy0 + MB + max(0.0, (vy1 - vy0 - MB - 5.0 - tot_h) / 2)
@@ -2806,7 +2810,8 @@ def sheet_index(sh: Sheet, geo: Geo, plan):
          "Cup X = machine X of the suction-cup axis; c = height of the cup face. Datum O (X 0, Y 0): D-03.", []),
         ("4. Every dimension is measured from the CAD by cad/drawings.py or read from a named cad/layout.py constant; "
          "cad/out/drawings/dims.json lists each one with its source, and a self-check re-measures them from fresh geometry (0.05). "
-         "Confidence tags [Certain] / [Likely] / [Guessing] are the docs'.", []),
+         "Confidence tags [Certain] / [Likely] / [Guessing] are the docs'. The title block's SOURCE hash is the last commit that changed "
+         "cad/model.py, layout.py, dims.py or drawings.py ('+uncommitted': the working tree differs from it).", []),
         ("5. Bought parts are envelopes; check them on arrival (BUILD_GUIDE 3.3). Not in the CAD and not drawn: frame joints "
          "(BUILD_GUIDE 4.3), cables and drag chain, vacuum tube, belt slack, supports of the light roof.", []),
         ("6. GENERAL TOLERANCES, unless a sheet states otherwise:", []),
