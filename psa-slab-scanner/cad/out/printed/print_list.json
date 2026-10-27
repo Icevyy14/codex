@@ -62,7 +62,7 @@
       116.4,
       38.0
     ],
-    "volume_cm3": 70.7,
+    "volume_cm3": 70.5,
     "note": "PETG, print flat on its spine face (as exported), 6 walls, 50% infill; the finger off its left edge works the X home switch"
   },
   {
@@ -129,7 +129,7 @@
       26.0
     ],
     "volume_cm3": 17.3,
-    "note": "PETG matte black, shelf face down (as exported); the ring seat bridges ~30 mm between its 4 legs (tree supports there if your printer sags)"
+    "note": "PETG matte black, shelf face down (as exported), 4 walls, 40% infill, brim; the ring seat bridges ~30 mm between its 4 legs (tree supports there if your printer sags)"
   },
   {
     "part": "gate_post_L",
@@ -140,7 +140,7 @@
       229.0
     ],
     "volume_cm3": 38.7,
-    "note": "PETG, upright on its foot (as exported), 10 mm brim, 4 walls; needs 230 mm Z height, else print lying on its side with supports"
+    "note": "PETG, upright on its foot (as exported), 10 mm brim, 4 walls, 30% infill; needs 230 mm Z height, else print lying on its side with supports"
   },
   {
     "part": "gate_post_R",
@@ -151,7 +151,7 @@
       229.0
     ],
     "volume_cm3": 38.8,
-    "note": "PETG, upright on its foot (as exported), 10 mm brim, 4 walls; needs 230 mm Z height, else print lying on its side with supports"
+    "note": "PETG, upright on its foot (as exported), 10 mm brim, 4 walls, 30% infill; needs 230 mm Z height, else print lying on its side with supports"
   },
   {
     "part": "drill_template",
@@ -162,7 +162,7 @@
       12.0
     ],
     "volume_cm3": 64.4,
-    "note": "PLA/PETG, 0.2 mm, 100% infill bosses (build tool)"
+    "note": "PETG (or PLA), plate down (as exported), 0.2 mm, 4 walls, 50% infill, bosses solid (build tool)"
   },
   {
     "part": "phase0_base",
@@ -173,7 +173,7 @@
       26.0
     ],
     "volume_cm3": 128.0,
-    "note": "PLA/PETG black (Phase 0 test jig)"
+    "note": "PLA/PETG black (Phase 0 test jig), plate down (as exported), 3 walls, 25% infill"
   },
   {
     "part": "phase0_tray",
@@ -184,7 +184,7 @@
       20.0
     ],
     "volume_cm3": 51.1,
-    "note": "PLA/PETG (Phase 0 test jig), ledges down"
+    "note": "PLA/PETG (Phase 0 test jig), ledges down (as exported), 3 walls, 25% infill"
   },
   {
     "part": "phase0_top",
@@ -195,7 +195,7 @@
       10.6
     ],
     "volume_cm3": 75.7,
-    "note": "PLA/PETG (Phase 0 test jig), ring up"
+    "note": "PLA/PETG (Phase 0 test jig), ring pocket up (as exported), 3 walls, 25% infill"
   },
   {
     "part": "phase0_occluder_mount",
@@ -261,7 +261,7 @@
       18.0
     ],
     "volume_cm3": 2.4,
-    "note": "PETG (build tool) + M5 heat-set insert + 3 mm steel pin"
+    "note": "PETG, as exported, 100% infill (build tool) + M5 heat-set insert + 3 mm steel pin"
   },
   {
     "part": "fill_gauge",
@@ -272,6 +272,6 @@
       4.0
     ],
     "volume_cm3": 10.5,
-    "note": "PLA, flat (as exported) (loading tool)"
+    "note": "PLA, flat (as exported), 3 walls, 20% infill (loading tool)"
   }
 ]

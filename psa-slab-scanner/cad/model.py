@@ -441,7 +441,7 @@ def x_bracket() -> cq.Workplane:
         for k in range(10):  # GT2 rack, 2 mm pitch, under each belt end
             x = s * (10 + 2 * k)
             tab = tab.union(box(x - 0.5, yb0 - 0.5, zf - 0.01, x + 0.5, yb1 + 0.5, zf + 0.75))
-        tab = holes_z(tab, [(s * CLAMP_X, y) for y in CLAMP_SCREW_Y], M3_CLR)
+        tab = holes_z(tab, [(s * CLAMP_X, y) for y in CLAMP_SCREW_Y], M3_CLR, z0=zf - 20, h=40)  # Z range given: the tab is at machine Z ~440, outside holes_z's default -50..150
         for y in CLAMP_SCREW_Y:  # M3 nut traps on the underside
             tab = tab.cut(hexagon(s * CLAMP_X, y, zf - 8.7 - 1, 5.8, 1 + 2.6))
     return plate.union(tab).union(x_finger())
@@ -909,7 +909,7 @@ def camera_bracket(arm_offset: float, rib_d: float = HEAD_RING[0]) -> cq.Workpla
     zs = z0 + HEAD_LENS_PROJ  # shelf top = board underside
     shelf = box(-24, ly - 24, zs - 4, 24, arm_offset - 10, zs)
     shelf = shelf.cut(cyl((0, ly, zs - 10), LENS_WINDOW_D, 20))  # lens holder window
-    shelf = holes_z(shelf, [(dx, ly + dy) for dx in (-16, 16) for dy in (-16, 16)], 2.2)  # 32 mm board holes, M2 + nuts
+    shelf = holes_z(shelf, [(dx, ly + dy) for dx in (-16, 16) for dy in (-16, 16)], 2.2, z0=zs - 10, h=20)  # 32 mm board holes, M2 + nuts; Z range given: the shelf is above holes_z's default -50..150
     seat = ring_seat(z0 + HEAD_RING_FACE_DZ, zs - 4, rib_d=rib_d).translate((0, ly, 0))
     clamp = box(-12, arm_offset - 12, z0 - 6, 12, arm_offset + 12, zs)
     body = shelf.union(seat).union(clamp)
@@ -1557,18 +1557,18 @@ def printed_catalog() -> list[tuple[str, cq.Workplane, int, str]]:
         ("z_end_cap", z_end_cap(), 1, "PETG, as exported (lips up), 5 walls, 50% infill"),
         ("z_plate", _flip_x(z_plate(), -90), 1, "PETG, carriage face down, nut shelf up, 6 walls, 50% infill; the switch chamfer at the top right starts at the bed (45 deg)"),
         ("head_foot", head_foot(off), 1, "PETG, foot down (as exported), 5 walls, 40% infill; clear the 1.9 mm flag slot and the board slots with a hacksaw blade"),
-        ("camera_bracket", _flip_x(camera_bracket(off), 180), 1, "PETG matte black, shelf face down (as exported); the ring seat bridges ~30 mm between its 4 legs (tree supports there if your printer sags)"),
-        ("gate_post_L", gate_post("L"), 1, "PETG, upright on its foot (as exported), 10 mm brim, 4 walls; needs 230 mm Z height, else print lying on its side with supports"),
-        ("gate_post_R", gate_post("R"), 1, "PETG, upright on its foot (as exported), 10 mm brim, 4 walls; needs 230 mm Z height, else print lying on its side with supports"),
-        ("drill_template", drill_template(), 1, "PLA/PETG, 0.2 mm, 100% infill bosses (build tool)"),
-        ("phase0_base", phase0_base(), 1, "PLA/PETG black (Phase 0 test jig)"),
-        ("phase0_tray", phase0_tray(), 1, "PLA/PETG (Phase 0 test jig), ledges down"),
-        ("phase0_top", _flip_x(phase0_top(), 180), 1, "PLA/PETG (Phase 0 test jig), ring up"),
+        ("camera_bracket", _flip_x(camera_bracket(off), 180), 1, "PETG matte black, shelf face down (as exported), 4 walls, 40% infill, brim; the ring seat bridges ~30 mm between its 4 legs (tree supports there if your printer sags)"),
+        ("gate_post_L", gate_post("L"), 1, "PETG, upright on its foot (as exported), 10 mm brim, 4 walls, 30% infill; needs 230 mm Z height, else print lying on its side with supports"),
+        ("gate_post_R", gate_post("R"), 1, "PETG, upright on its foot (as exported), 10 mm brim, 4 walls, 30% infill; needs 230 mm Z height, else print lying on its side with supports"),
+        ("drill_template", drill_template(), 1, "PETG (or PLA), plate down (as exported), 0.2 mm, 4 walls, 50% infill, bosses solid (build tool)"),
+        ("phase0_base", phase0_base(), 1, "PLA/PETG black (Phase 0 test jig), plate down (as exported), 3 walls, 25% infill"),
+        ("phase0_tray", phase0_tray(), 1, "PLA/PETG (Phase 0 test jig), ledges down (as exported), 3 walls, 25% infill"),
+        ("phase0_top", _flip_x(phase0_top(), 180), 1, "PLA/PETG (Phase 0 test jig), ring pocket up (as exported), 3 walls, 25% infill"),
         ("phase0_occluder_mount", phase0_occluder_mount(), 1, "PLA/PETG (Phase 0 test jig), flat on its beam (as exported), 4 walls, 30% infill"),
         ("carry_sensor_mount", carry_sensor_mount().rotate((0, 0, 0), (0, 1, 0), 90), 1, "PETG, flat on its spine face (as exported), 4 walls, 40% infill"),
         ("carry_flag_arm", carry_flag_arm(), 1, "PETG, standing on its bottom face (as exported), 4 walls, 40% infill"),
         ("x_switch_mount", _flip_x(x_switch_mount(), -90), 1, "PETG, front plate down (as exported), 4 walls, 40% infill; X home switch on 2 x M2x12, 2 x M5x10 button heads"),
         ("z_switch_mount", z_switch_mount().rotate((0, 0, 0), (0, 1, 0), -90), 1, "PETG, spine plate down (as exported), 4 walls, 40% infill; Z top switch on 2 x M2x12, 2 x M5x10 button heads"),
-        ("awl_adapter", awl_adapter(), 1, "PETG (build tool) + M5 heat-set insert + 3 mm steel pin"),
-        ("fill_gauge", _flip_x(fill_gauge(), 90), 2, "PLA, flat (as exported) (loading tool)"),
+        ("awl_adapter", awl_adapter(), 1, "PETG, as exported, 100% infill (build tool) + M5 heat-set insert + 3 mm steel pin"),
+        ("fill_gauge", _flip_x(fill_gauge(), 90), 2, "PLA, flat (as exported), 3 walls, 20% infill (loading tool)"),
     ]

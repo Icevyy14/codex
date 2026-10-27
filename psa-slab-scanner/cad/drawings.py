@@ -480,8 +480,17 @@ def _m_count(geo, src, prefix):
     return float(sum(1 for n in geo.parts(src) if n.startswith(prefix)))
 
 
+def _m_const(geo, v, why=""):
+    """A value quoted from a doc (why names it), combined with geometry in a 'derived' record."""
+    return float(v)
+
+
+def _m_max(geo, a, b):
+    return max(measure(geo, a), measure(geo, b))
+
+
 MEASURES = {"bb": _m_bb, "bbu": _m_bbu, "cyl": _m_cyl, "plane": _m_plane, "pat": _m_pat, "pat2": _m_pat2, "sub": _m_sub, "add": _m_add,
-            "mul": _m_mul, "flag": _m_flag, "layout": _m_layout, "count": _m_count}
+            "mul": _m_mul, "flag": _m_flag, "layout": _m_layout, "count": _m_count, "const": _m_const, "max": _m_max}
 
 # ------------------------------------------------------------------------------------------------ hidden-line removal
 VIEWDIR = {  # name: (direction toward the viewer, page x direction); page y = dir x xdir
@@ -579,9 +588,13 @@ def hlr(shape, view: str, defl: float) -> tuple[list[np.ndarray], list[np.ndarra
 
 
 # -------------------------------------------------------------------------------------------------- dimension records
-def fmt(v: float) -> str:
-    """Shown to 0.1 when the measured value is within 0.012 of it (the model's 0.01 mm overlaps, e.g. 9.99 -> 10), else
-    to 0.01. The self-check still holds every shown value to 0.05 of the geometry."""
+def fmt(v: float, res: float = 0.01) -> str:
+    """res 0.01: shown to 0.1 when the measured value is within 0.012 of it (the model's 0.01 mm overlaps, e.g. 9.99 -> 10),
+    else to 0.01. res 0.1 (printed parts): to the nearest 0.1, a whole number when within 0.05 of one. The self-check still
+    holds every shown value to 0.05 of the geometry."""
+    if res >= 0.1:
+        s = f"{round(v):d}" if abs(v - round(v)) < 0.05 else f"{round(v, 1):.1f}"
+        return "0" if s in ("-0", "-0.0") else s
     if abs(v - round(v)) < 0.012:
         s = f"{round(v):d}"
     elif abs(v - round(v, 1)) < 0.012:
@@ -613,11 +626,12 @@ class Registry:
         self.geo = geo
         self.recs: list[Rec] = []
         self.sheet = ""
+        self.res = 0.01  # display resolution of this sheet's values (0.1 on the printed-part sheets)
 
-    def g(self, label: str, spec, src: str, unit: str = "mm") -> Rec:
-        """A geometry measurement."""
+    def g(self, label: str, spec, src: str, unit: str = "mm", kind: str = "geometry") -> Rec:
+        """A geometry measurement (kind 'derived': geometry or layout combined with a value quoted from a doc, spec 'const')."""
         v = measure(self.geo, spec)
-        r = Rec(self.sheet, label, v, "geometry:" + src, fmt(v), spec, unit)
+        r = Rec(self.sheet, label, v, f"{kind}:" + src, fmt(v, self.res), spec, unit)
         self.recs.append(r)
         return r
 
@@ -625,7 +639,7 @@ class Registry:
         """A layout.py constant (idx: element of a tuple constant)."""
         v = float(getattr(L, name) if idx is None else getattr(L, name)[idx])
         src = f"layout.{name}" if idx is None else f"layout.{name}[{idx}]"
-        r = Rec(self.sheet, label or (name if idx is None else f"{name}[{idx}]"), v, src, fmt(v), ("layout", name, idx), unit)
+        r = Rec(self.sheet, label or (name if idx is None else f"{name}[{idx}]"), v, src, fmt(v, self.res), ("layout", name, idx), unit)
         self.recs.append(r)
         return r
 
@@ -633,8 +647,8 @@ class Registry:
 REG: Registry  # set in main()
 
 
-def G(label, spec, src, unit="mm") -> Rec:
-    return REG.g(label, spec, src, unit)
+def G(label, spec, src, unit="mm", kind="geometry") -> Rec:
+    return REG.g(label, spec, src, unit, kind)
 
 
 def C(name, label=None, unit="mm", idx=None) -> Rec:
@@ -981,6 +995,8 @@ class View:
         # and its leader must not cross a dimension or another leader (owner > 0)
         lines = [pts for o, pts in self.sheet.segs if o != -1]
         dims_ = [pts for o, pts in self.sheet.segs if o > 0]
+        mine = [pts for o, pts in self.sheet.segs if o == -1 and _hit((pts[:, 0].min(), pts[:, 1].min(), pts[:, 0].max(), pts[:, 1].max()), vb)]
+        own_edges = np.vstack([np.hstack([p_[:-1], p_[1:]]) for p_ in mine]) if mine else np.zeros((0, 4))
         for dist in (5.5, 8.0, 11.0, 14.0, 18.0, 23.0, 30.0, 38.0, 48.0):
             for a in angs:
                 cx = x0 + (r_pap + dist) * math.cos(math.radians(a))
@@ -990,7 +1006,8 @@ class View:
                     continue
                 if any(_hit(rr, o) for o in self.sheet.occ if o != vb):
                     continue
-                if any(_poly_hits_rect(pts, rr) for pts in lines):
+                rl = (rr[0] - 0.6, rr[1] - 0.6, rr[2] + 0.6, rr[3] + 0.6)  # a clear 1 mm round the balloon
+                if any(_poly_hits_rect(pts, rl) for pts in lines):
                     continue
                 # nor may its leader cross a dimension's text
                 la, lb = (x0 + r_pap * math.cos(math.radians(a)), y0 + r_pap * math.sin(math.radians(a))), (cx, cy)
@@ -999,7 +1016,9 @@ class View:
                 if any(_seg_cross(la, lb, q0, q1) for pts in dims_ for q0, q1 in zip(pts[:-1], pts[1:])):
                     continue
                 inview = _hit(rr, vb)
-                score = dist + (40.0 if inview and avoid_view else 0.0)
+                # each crossing of the part's own outline past the first (the way out of the view) costs as much as 6 mm more leader
+                ncross = _count_cross(la, lb, own_edges)
+                score = dist + (40.0 if inview and avoid_view else 0.0) + 6.0 * max(0, ncross - (0 if inview else 1))
                 if best is None or score < best[0]:
                     best = (score, cx, cy, a)
             if best is not None and best[0] < 30:
@@ -1014,6 +1033,19 @@ class View:
         t = self.sheet.text(cx, cy - 0.05, tag, ha="center", va="center", weight="bold", owner=own, occ=False, zorder=6)
         self.sheet.occ.append((cx - R, cy - R, cx + R, cy + R))
         return t
+
+
+def _count_cross(a, b, segs: np.ndarray) -> int:
+    """How many of the segments (N x 4: x0 y0 x1 y1) the segment ab properly crosses."""
+    if len(segs) == 0:
+        return 0
+    c, d = segs[:, 0:2], segs[:, 2:4]
+    def orient(p, q, r):
+        return (q[..., 0] - p[..., 0]) * (r[..., 1] - p[..., 1]) - (q[..., 1] - p[..., 1]) * (r[..., 0] - p[..., 0])
+    A, Bv = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+    o1, o2 = orient(A, Bv, c), orient(A, Bv, d)
+    o3, o4 = orient(c, d, A), orient(c, d, Bv)
+    return int(np.count_nonzero((o1 * o2 < 0) & (o3 * o4 < 0)))
 
 
 def _seg_cross(a, b, c, d) -> bool:
@@ -1165,19 +1197,29 @@ def spread(desired: list[float], gap: float, lo: float = -1e9, hi: float = 1e9) 
     return [pos[i] for i in range(len(desired))]
 
 
-def ordinates_v(view: View, items, u_from: float, x_text: float, gap: float = 4.6, side: str = "right", lo=None, hi=None):
-    """Height labels: items = (v_model, text, recs). A tick from the view at (u_from, v) to a jogged leader and the text at
-    x_text (paper), the labels spread at least gap apart."""
+def ordinates_v(view: View, items, u_from: float, x_text: float, gap: float = 4.6, side: str = "right", lo=None, hi=None, style: str = "arrow"):
+    """Height labels: items = (v_model, text, recs), the labels spread at least gap apart at x_text (paper).
+    style 'arrow': an arrow at (u_from, v), for a line that is itself the feature (an edge the view shows running to u_from).
+    style 'scale': a height scale 3 mm outside the view at u_from, ticked at each height (no arrowheads, nothing touching the
+    view's geometry), for heights of features inside an assembly view; each label names its feature."""
     sh = view.sheet
     ys = [view.P(u_from, v)[1] for v, _, _ in items]
     ty = spread(ys, gap, lo if lo is not None else -1e9, hi if hi is not None else 1e9)
     x0 = view.P(u_from, 0)[0]
     sg = 1 if side == "right" else -1
+    if style == "scale":
+        xb = x0 + sg * 3.0
+        sh.line([(xb, min(ys) - 1.5), (xb, max(ys) + 1.5)], lw=0.5, owner=-3)
     for (v, txt, recs), y, yt in zip(items, ys, ty):
         own = sh.owner()
-        xa = x_text - sg * 7.0
-        sh.line([(x0 + sg * 1.0, y), (xa, y), (x_text - sg * 1.5, yt)], lw=LW_THIN, owner=own)
-        sh.pg.add_patch(Polygon([(x0 + sg * 1.0, y), (x0 + sg * 3.2, y + 0.5), (x0 + sg * 3.2, y - 0.5)], closed=True, color=INK, clip_on=False))
+        if style == "scale":
+            xa = x_text - sg * 4.5
+            sh.line([(xb - sg * 1.3, y), (xb + sg * 1.3, y)], lw=0.6, owner=-3)  # the tick
+            sh.line([(xb + sg * 1.3, y), (xa, y), (x_text - sg * 1.0, yt)], lw=LW_THIN, owner=own)
+        else:
+            xa = x_text - sg * 7.0
+            sh.line([(x0 + sg * 1.0, y), (xa, y), (x_text - sg * 1.5, yt)], lw=LW_THIN, owner=own)
+            sh.pg.add_patch(Polygon([(x0 + sg * 1.0, y), (x0 + sg * 3.2, y + 0.5), (x0 + sg * 3.2, y - 0.5)], closed=True, color=INK, clip_on=False))
         t = sh.text(x_text, yt, txt, ha="left" if side == "right" else "right", va="center", owner=own)
         for r in recs:
             r.artist, r.view = t, view
@@ -1439,13 +1481,19 @@ PART_USE = {  # (axis in print frame, diameter) -> use, where the generic one is
     "phase0_base": {("z", 1.8): "camera board, M2 self-tapping", ("z", 64.0, 1): "station LED ring seat bore",
                     ("z", 64.0, 0): "hollow under the ring shelf (45° cone roof)", ("z", 44.0): "ring shelf inner edge"},
     "camera_bracket": {("z", 42.8): "head LED ring seat bore (ribbed)", ("z", 33.0): "ring lip (ring back face rests on it)",
-                       ("z", 2.2): "camera board, M2 + nuts"},
+                       ("z", 2.2): "head camera board (ELP, 32 x 32 pattern about the lens axis [Guessing], BUILD_GUIDE 3.3), M2 + nuts"},
     "phase0_top": {("z", 42.8): "head LED ring pocket (ribbed)", ("z", 1.8): "M2 standoffs, blind"},
     "z_plate": {("z", 2.5): "carry_flag_arm, M3x10 self-tapping", ("y", 10.5): "T8 nut body clearance"},
     "carry_flag_arm": {("y", 2.5): "carry flag, M3x8 self-tapping"},
     "awl_adapter": {("z", 3.1): "3 mm steel pin, pressed in + CA"},
     "x_idler_mount": {("y", 5.3): "M5 idler axle (tension travel)"},
+    "x_motor_mount": {("z", 9.5): "M5 head, sunk: 1x, at the stop-end M5 hole only"},
+    "x_bracket": {("y", 3.4): "belt_clamp caps, 2 x M3x12 + nut per cap (BUILD_GUIDE 6.5)"},
     "head_foot": {("x", 3.4): "endstop board M3 slots (trip adjustment)"},
+}
+PART_HOLE_EXTENT = {  # (print axis, diameter) -> how far the hole runs, where "THRU" would mislead
+    "gate_post_L": {("y", 2.5): "from the +Y face into the barrel bore"},
+    "gate_post_R": {("y", 2.5): "from the +Y face into the barrel bore"},
 }
 BOSS_USE = {5.0: "M2 boss", 14.0: "body", 16.0: "drill-guide boss", 70.0: "ring seat tube", 48.8: "ring seat tube", 49.8: "ring seat tube"}
 
@@ -1528,7 +1576,10 @@ def auto_features(geo: Geo, name: str) -> list[dict]:
         near = _axis_point(rep, (rep["lo"] + rep["hi"]) / 2)
         rd = G(f"{name}: hole d{dd} along {axis}: diameter", ("cylk", key, axis, rep["d"], tuple(near), "d"), f"{name} hole along {axis}: cylinder diameter")
         recs = [rd]
-        if dep is None:
+        ov = next((t for (a_, d_), t in PART_HOLE_EXTENT.get(name, {}).items() if a_ == axis and abs(d_ - dd) < 0.02), None)
+        if ov is not None:
+            dtxt = ov  # open at both ends, but not through the part (e.g. from an outer face into a bore)
+        elif dep is None:
             dtxt = "THRU" + (f" ({runs} walls on one axis)" if runs > 1 else "")
         else:
             r = G(f"{name}: hole d{dd} along {axis}: depth", ("hdepth", key, axis, rep["d"], tuple(near)), f"{name} blind hole along {axis}: cylinder length")
@@ -1665,6 +1716,14 @@ def custom_rows(geo: Geo, name: str) -> list[dict]:  # noqa: C901 - one branch p
         zf = M.CLAMP_FLOOR_Z
         p = G("x_bracket: GT2 rack tooth pitch", s_sub(s_lpl(n, "x", (12.5, 19, zf + 0.4)), s_lpl(n, "x", (10.5, 19, zf + 0.4))), "x_bracket rack tooth faces X")
         out.append(_row(f"GT2 rack on the tab floor, both sides: teeth at {p.text} pitch (belt teeth down, belt_clamp cap on top)", [p]))
+        cx_, cy_, zu = M.CLAMP_X, M.CLAMP_SCREW_Y[0], zf - 8.7  # locators: a clamp screw and the tab underside (model.x_bracket)
+        hx = [h for h in geo.feats("printed/" + n) if h["hole"] and abs(h["d"] - M.M3_CLR) < 0.05 and h["axis"] == print_axis(n, "z")]
+        if hx:  # the tab's nut traps exist only with the clamp holes (model.py fix)
+            af = G("x_bracket: tab nut trap across flats", s_sub(s_lpl(n, "y", (cx_, cy_ + 2.9, zu + 1.3)), s_lpl(n, "y", (cx_, cy_ - 2.9, zu + 1.3))),
+                   "x_bracket nut-trap flats Y")
+            dp = G("x_bracket: tab nut trap depth", s_sub(s_lpl(n, "z", (cx_ + 2.0, cy_, zu + 2.6)), s_lpl(n, "z", (cx_ + 8.0, cy_, zu))),
+                   "x_bracket nut-trap floor Z - tab underside Z")
+            out.append(_row(f"4x M3 nut trap, hex {af.text} across flats x {dp.text} deep, in the tab underside under the belt_clamp holes", [af, dp]))
     elif n == "z_motor_mount":
         r = G("z_motor_mount: tab hole below the spine-top face", s_sub(s_lpl(n, "z", (-25, 80, 0)), s_lcyl(n, "y", 5.5, (-20, 63.5, -15), "z")),
               "z_motor_mount plate underside Z - tab hole axis Z")
@@ -1796,6 +1855,61 @@ def _attach(rows_artists, rows):
                     break
 
 
+def _extra_fill_gauge(sh: Sheet, geo: Geo, n: str, views: dict, b, ry: Rec):
+    """fill_gauge lies flat in its print orientation, so its TOP view shows it full length, foot at the top: name both ends and
+    dimension the MAX line and the first counting notch from the foot (the face that stands on the pad)."""
+    vt = views["top"]
+    tp = lambda x, z: proj("top", geo.to_print(n, (x, 2.0, z)))  # noqa: E731 - a model.py-frame point (Y mid-thickness) in the view
+    foot_l, foot_r = tp(0.0, 0.0), tp(12.0, 0.0)
+    bar_ul, bar_end = tp(30.0, L.MAX_LINE), tp(30.0, L.MAX_LINE + 4.0)
+    notch = tp(0.0, 5 * L.SLAB_T)
+    mx = G("fill_gauge: MAX line (bar underside) above the foot, drawn", s_sub(s_lpl(n, "z", (20, 2, L.MAX_LINE)), s_lpl(n, "z", (8, 2, 0))),
+           "fill_gauge top-bar underside Z - foot Z")
+    pt = G("fill_gauge: first counting notch above the foot, drawn", s_sub(s_lpl(n, "z", (1.5, 2, 5 * L.SLAB_T)), s_lpl(n, "z", (8, 2, 0))),
+           "fill_gauge notch floor Z - foot Z")
+    vt.dim(foot_r, bar_ul, "v", 24.0, mx, post=" MAX line")  # right of the bar end, room for the FOOT note inside it
+    vt.dim(foot_l, (foot_l[0], bar_end[1]), "v", -16.0, ry)  # overall, left, outside the notch dimension
+    vt.dim(foot_l, notch, "v", -5.0, pt)
+    vt.leader((foot_r[0], foot_r[1] - 3.0), 3.0, -6.0, ["FOOT", "(on the pad)"])
+    vt.leader((bar_ul[0] - 8.0, bar_end[1]), 10.0, -6.0, ["TOP BAR (underside = MAX line)"])
+
+
+PART_EXTRA = {"fill_gauge": _extra_fill_gauge}
+
+
+def _auto_at(name: str, recs) -> tuple | None:
+    """Where to balloon a custom row that names no feature: the locator of its first measurement on this part. A cylinder is
+    ballooned end-on (its own axis), a planar face edge-on (a view along Y, or Z for a face normal to Y), a chamfer edge-on,
+    a rib ring at its circle, a cone dimple from above. Returns (axis_local, point_local, radius) or None."""
+    def walk(spec):
+        if not isinstance(spec, tuple) or not spec or not isinstance(spec[0], str):
+            return None
+        k = spec[0]
+        if k == "lcyl" and spec[1] == name:
+            return (spec[2], spec[4], spec[3] / 2)
+        if k == "lplane" and spec[1] == name:
+            return ("y" if spec[2] != "y" else "z", spec[3], 0.0)
+        if k == "chamfer" and spec[1] == name:
+            return ("y" if spec[3] != "y" else "x", spec[2], 0.0)
+        if k == "ribd" and spec[1] == name:
+            c = list(spec[3])
+            c[AX[spec[2]]] = spec[5]
+            return (spec[2], tuple(c), None)
+        if k == "cone" and spec[1] == "printed/" + name:
+            return ("z", spec[2], 3.0)
+        for sub in spec[1:]:
+            w = walk(sub)
+            if w:
+                return w
+        return None
+
+    for r in recs:
+        w = walk(r.spec)
+        if w:
+            return (w[0], w[1], r.value / 2) if w[2] is None else w
+    return None
+
+
 def choose_scale(X, Y, Z, w, h, ML=16.0, MR=4.0, MB=15.0, MT=5.0, GAP=13.0):
     for sc in STD_SCALES:
         k = sc.k
@@ -1851,8 +1965,11 @@ def printed_cell(sh: Sheet, geo: Geo, name: str, cell, layout="side", table_w=10
     rz = G(f"{name}: overall Z", ("bb", key, "zlen"), f"{name} exported shape bounding box Z")
     vf.dim((b[0], b[2]), (b[3], b[2]), "h", -7.0, rx)
     vf.dim((b[0], b[2]), (b[0], b[5]), "v", -7.0, rz)
-    vt.dim((b[0], b[1]), (b[0], b[4]), "v", -7.0, ry)
     views = {"front": vf, "top": vt, "right": vr}
+    if name in PART_EXTRA:
+        PART_EXTRA[name](sh, geo, name, views, b, ry)  # draws the overall Y dimension itself
+    else:
+        vt.dim((b[0], b[1]), (b[0], b[4]), "v", -7.0, ry)
     region = (vx0, vy0, vx1, vy1)
     for tag, r in zip(tags, rows):
         if "feat" in r:
@@ -1860,8 +1977,8 @@ def printed_cell(sh: Sheet, geo: Geo, name: str, cell, layout="side", table_w=10
             v = views[VIEW_OF_AXIS[f["axis"]]]
             u, w = _feat_uv(f)
             v.balloon((u, w), r["r"], tag, region=region)
-        elif r.get("at"):
-            ax_l, p_l, rad = r["at"]
+        elif r.get("at") or _auto_at(name, r["recs"]):
+            ax_l, p_l, rad = r.get("at") or _auto_at(name, r["recs"])
             pa = print_axis(name, ax_l)
             q = geo.to_print(name, p_l)
             v = views[VIEW_OF_AXIS[pa]]
@@ -2545,7 +2662,7 @@ def sheet_flat(sh: Sheet, geo: Geo, plan):
     vb.polys([poly], lw=LW_VIS)
     vb.seg((min(us) - 6.0, 0.0), (pts[i_tab_r][0] + 6.0, 0.0), lw=0.6, ls=DASH_HID, owner=-3)
     vb.text(pts[i_tab_r][0] + 3.5, 0.6, "BEND LINE", ha="left", va="bottom")
-    vb.centerline((0.0, min(vs) - 4.0), (0.0, max(vs) + 4.0))
+    vb.centerline((0.0, min(vs) - 4.0), (0.0, max(vs) + 1.5))  # stops under the tab-width dimension
     sh.text(vb.x - 26.0, vb.y + vb.h + 30.0, "PROBE FLAG BLANK (2:1), flat, before bending", weight="bold")
     sh.text(vb.x - 26.0, vb.y + vb.h + 25.5, "u from the neck centre line (= hole line), v from the bend line")
     r_tot = G("probe flag blank width", s_sub(F(i_bot_out, "u"), F(i_band, "u")), "model.flag_blank(): blade outer edge u - neck edge u")
@@ -2557,7 +2674,7 @@ def sheet_flat(sh: Sheet, geo: Geo, plan):
     r_band = G("probe flag band bottom below the bend line", _neg(F(i_band, "v")), "model.flag_blank(): band bottom v")
     r_tabv = G("probe flag tab length past the bend line (trim)", F(i_tab_r, "v"), "model.flag_blank(): tab end v")
     tl, tr = pts[i_tab_l], pts[i_tab_r]
-    vb.dim(tl, tr, "h", 5.0, r_tab)
+    vb.dim(tl, tr, "h", 5.0, r_tab, text_du=5.0)  # text right of the neck centre line
     vb.dim(tl, pts[i_top_out], "h", 12.0, r_tot, pre="(", post=") blank, reference")  # = tab half width + blade outer edge
     vb.dim((0.0, pts[i_bot_in][1]), pts[i_bot_in], "h", -5.0, r_bi)
     vb.dim((0.0, pts[i_bot_out][1]), pts[i_bot_out], "h", -12.0, r_bo)
@@ -2565,6 +2682,8 @@ def sheet_flat(sh: Sheet, geo: Geo, plan):
     vb.dim((pts[i_bot_out][0], 0.0), pts[i_bot_out], "v", 28.0, r_bot)  # outside the 8.5 dimension's text
     vb.dim((tl[0], 0.0), pts[i_band], "v", -5.0, r_band)
     vb.dim((tl[0], 0.0), tl, "v", -5.0, r_tabv, post=" (trim)")
+    r_len = G("probe flag blank length", s_sub(F(i_tab_r, "v"), F(i_bot_out, "v")), "model.flag_blank(): tab end v - blade bottom v")
+    vb.dim(tr, pts[i_bot_out], "v", 40.0, r_len, pre="(", post=") blank,\nreference")  # = trim length + blade bottom below the bend
     # the bent flag, for reference
     pf = geo.shape("local/probe_flag")
     b = bbox(pf)
@@ -2622,13 +2741,16 @@ def sheet_flat(sh: Sheet, geo: Geo, plan):
     ny = 84.0
     sh.text(16.0, ny, "Probe flag (BUILD_GUIDE 7.6; build.py probe_flag_blank.svg notes)", weight="bold")
     sh.wrap_recs(16.0, ny - 4.0,
-                 f"Aluminium sheet, {r_t.text} thick (cut_list C-07). 1. Cut and file to the outline; the blade's top edge is the trip edge: straight, "
+                 f"Aluminium sheet, {r_t.text} thick, a soft alloy: 1050, 3003 or 5052-H32, not 6061-T6 (a 1 mm inside bend radius can crack it "
+                 f"[Likely], BOM.csv). Blank {r_tot.text} x {r_len.text} (cut_list C-07 and BUILD_GUIDE 4.1 round the length to 55). "
+                 f"1. Cut and file to the outline; the blade's top edge is the trip edge: straight, "
                  f"square. 2. This view shows the face toward the buffer. Neck in the vise, jaws at the BEND line; bend the tab 90° TOWARD YOU. "
                  f"3. THEN drill on the centre line, {r_hp.text} from the plate's inner face. 4. Trim the tab to {r_end.text} past the hole. 5. Deburr: it rides "
                  f"in head_foot's guide slot and the sensor slot. Outline: cad/out/probe_flag_blank.dxf (1:1 print: .svg).", 270.0,
-                 [r_t, r_hp, r_end])
+                 [r_t, r_hp, r_end, r_tot, r_len])
     sh.text(300.0, 100.0, "Carry flag (BUILD_GUIDE 7.4a)", weight="bold")
-    sh.wrap_recs(300.0, 96.0, f"Aluminium sheet, {r_ct.text} thick, flat (cut_list C-10). File the top edge straight. Fix to carry_flag_arm's leg end with "
+    sh.wrap_recs(300.0, 96.0, f"Aluminium sheet, {r_ct.text} thick, flat: 1050, 3003 or 5052-H32 as the probe flag (BOM.csv) (cut_list C-10). "
+                 "File the top edge straight. Fix to carry_flag_arm's leg end with "
                  "2 x M3x8, inner edge toward the spine, top edge flush with the arm's top.", PW - 14.0 - 300.0, [r_ct])
     sh.wrap(NOTE_AREA[0], 44.0, "Tolerance: outlines PROPOSED +/-0.2 (no doc states one); bend 90 +/-0.5° (BUILD_GUIDE 7.6). The trip points are set by "
             "adjustment on assembly (probe 7.6, carry 7.4a), not by these outlines.", NOTE_AREA[2] - NOTE_AREA[0])
@@ -2906,6 +3028,7 @@ def main() -> int:
         REG.sheet = num
         sh = Sheet(num, title, total, hsh)
         sh.frame()
+        REG.res = 0.1 if isinstance(fn, tuple) else 0.01  # printed parts to 0.1 mm
         if isinstance(fn, tuple):
             sheet_printed(sh, geo, fn[1])
         else:

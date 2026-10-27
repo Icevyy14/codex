@@ -167,17 +167,33 @@ deflection, the side load the strikers put on the switch levers, and the corner 
 
 ## Export check (27 Oct 2026)
 
-All exports were re-made on 27 Oct 2026 after the mesh fix below, then checked against the current model:
+All exports were re-made on 27 Oct 2026 after the two fixes below (clean meshes, then missing holes), then checked
+against the current model:
 
 - **Assembly STEP files are current.** For each pose, the STEP re-imported with CadQuery has the same number of solids
   as `build.assembly(pose)` (home 241, pick_bottom 241, carry 245, station 243). The bounding box and volume of every
-  solid also match. Compared with the previous export, the only changed solid is `station` (`station_mount`): +14.3 mm³.
-- **GLB files**: 177 meshes (home) and 181 (carry), 55,814 and 55,862 triangles. Each is one mesh per non-fastener part
+  solid also match. Compared with the export before the hole fix, the only changed solids are `x_bracket` (−221.5 mm³,
+  its four clamp-screw holes) and `camera_bracket` (−60.8 mm³, its four board holes).
+- **GLB files**: 177 meshes (home) and 181 (carry), 57,190 and 57,238 triangles. Each is one mesh per non-fastener part
   plus the merged `fasteners` mesh. Bounds reloaded with trimesh equal the STEP bounding box (0.0 mm difference).
 - **Printed parts**: all 25 STLs are closed (watertight), one body each, with no non-manifold edges. Each STL's bounding
   box equals `print_list.json` `size_mm` within 0.05 mm (`size_mm` is rounded to 0.1 mm; the largest difference, 0.05 mm,
   is on `x_bracket` and `z_motor_mount`), and each STL's volume rounds to the listed `volume_cm3`. All 25 STEPs are one
-  valid solid. `print_list.json` did not change.
+  valid solid. In `print_list.json` only `x_bracket`'s volume changed (70.7 to 70.5 cm³; 800.7 cm³ in all 27 prints),
+  and the print notes now give walls and infill for every part, as in `docs/BUILD_GUIDE.md` §3.2.
+
+**Hole fix.** Two printed parts had holes that were never cut. `holes_z()` cuts from Z −50 to 150 unless it is given a
+range, and these two parts are built at machine height, above that:
+
+- `x_bracket`: the 4 M3 clearance holes for the belt clamps (the tab is at Z 437–446; only the nut traps were cut).
+- `camera_bracket`: the 4 Ø2.2 mm board holes, 32 mm square round the lens (the shelf is at Z 156–160).
+
+Both calls now give the Z range. A script checked every `holes_z`, `holes_y`, `holes_x` and `slot_y` call (41 call
+sites, every part they build at every pose) and every other `.cut()` in `model.py` (66 lines, all reached by the
+exports). Every hole now removes material, and the only other cuts that remove nothing are harmless (the shelf-hole cut in
+`station_ring_seat()`, already cleared by its cone, and one of the two screw-head reliefs in `x_switch_mount()`). None of the printed-part holes is filled again by a later union except the camera-mast M2 holes: the base
+plate closes their bottoms, which leaves blind holes 11.5 mm deep (`station_mount`) and 7.5 mm deep (`phase0_base`) for
+M2×6 screws. `checks.py` does not check that holes exist.
 
 **Mesh fix.** The earlier `station_mount`, `phase0_base` and `phase0_tray` STLs were not clean meshes. The STEPs were
 valid; the cause was in the model, and `model.py` now avoids it without moving any functional feature:
@@ -190,5 +206,4 @@ valid; the cause was in the model, and `model.py` now avoids it without moving a
   corners (the STL split into 5 bodies). The taper now starts 0.5 mm lower and 0.5 mm inset, inside the recess, so the
   same 45° faces run from Z 3 to the top. The lead-in's rounded corners are 0.5 mm larger in radius (+0.6 mm³ in all).
 
-The camera, hole positions, mast outline, recess size and depth, the lead-in angle and every size and volume in
-`print_list.json` are unchanged.
+The camera, hole positions, mast outline, recess size and depth and the lead-in angle are unchanged.
