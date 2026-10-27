@@ -503,11 +503,11 @@ CSS = r"""
 @page { size: Letter; margin: %(top)s %(right)s %(bottom)s %(left)s; }
 @page cover { margin: 1.8cm; }
 html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-body { font-family: "Inter", "DejaVu Sans", "Liberation Sans", "FreeSans", "FreeSerif", sans-serif;
+body { font-family: "Liberation Sans", "Arimo", "Arial", "DejaVu Sans", "FreeSans", "FreeSerif", sans-serif;
        font-size: 10pt; line-height: 1.38; color: #1a1a1a; margin: 0; }
 p { margin: 0 0 0.55em 0; orphans: 2; widows: 2; }
 a { color: #1f4e9c; text-decoration: none; overflow-wrap: anywhere; }
-h1, h2, h3, h4, h5, h6 { font-weight: 650; line-height: 1.2; break-after: avoid; page-break-after: avoid;
+h1, h2, h3, h4, h5, h6 { font-weight: 700; line-height: 1.2; break-after: avoid; page-break-after: avoid;
        break-inside: avoid; color: #111; }
 h1 { font-size: 18pt; margin: 0 0 0.6em 0; padding-bottom: 0.2em; border-bottom: 1.5px solid #333; }
 h2 { font-size: 13.5pt; margin: 1.2em 0 0.45em 0; padding-bottom: 0.1em; border-bottom: 0.5px solid #bbb; }
@@ -537,7 +537,7 @@ th, td { border: 0.5px solid #b8b8b8; padding: 2.5px 4px; vertical-align: top; t
          overflow-wrap: break-word; word-break: normal; hyphens: manual; }
 td a, th a, td code, th code { overflow-wrap: break-word; }
 .brk, td a.brk, th a.brk, td code.brk, th code.brk { overflow-wrap: anywhere; word-break: break-all; }
-th { background: #e9edf3; font-weight: 650; }
+th { background: #e9edf3; font-weight: 700; }
 tbody tr:nth-child(even) td { background: #fafafa; }
 td code, th code { font-size: 0.92em; }
 img { max-width: 100%%; max-height: 7.6in; height: auto; display: block; margin: 0.3em auto 0.6em auto;
@@ -558,14 +558,14 @@ section.doc:first-of-type { break-before: auto; }
 .cover img { width: auto; height: auto; max-width: 100%%; max-height: 4.0in; margin: 0.15in auto 0.2in auto;
               border: 0.5px solid #ccc; }
 .cover .status { display: inline-block; margin: 0.1in auto 0.2in auto; padding: 0.45em 1.1em;
-                 border: 1.2px solid #8a1c1c; color: #8a1c1c; font-weight: 650; font-size: 11.5pt; }
+                 border: 1.2px solid #8a1c1c; color: #8a1c1c; font-weight: 700; font-size: 11.5pt; }
 .cover .volume { font-size: 11pt; color: #222; margin: 0.1in 0.6in 0.15in 0.6in; }
 .cover .meta { font-size: 9.5pt; color: #333; margin-top: auto; line-height: 1.6; }
 .cover .meta a { overflow-wrap: anywhere; }
 
 /* contents */
 .toc { break-after: page; page-break-after: always; }
-.toc .toc-title { font-size: 18pt; font-weight: 650; margin: 0 0 0.7em 0; padding-bottom: 0.2em;
+.toc .toc-title { font-size: 18pt; font-weight: 700; margin: 0 0 0.7em 0; padding-bottom: 0.2em;
                   border-bottom: 1.5px solid #333; }
 .toc a.row { display: flex; align-items: baseline; color: #1a1a1a; text-decoration: none; margin: 0; }
 .toc a.row .t { flex: 0 1 auto; }
@@ -573,7 +573,7 @@ section.doc:first-of-type { break-before: auto; }
 .toc a.row .dots { flex: 1 1 auto; border-bottom: 1px dotted #999; margin: 0 0.4em; min-width: 1.5em;
                    transform: translateY(-0.25em); }
 .toc a.row .pn { flex: 0 0 auto; min-width: 2em; text-align: right; font-variant-numeric: tabular-nums; }
-.toc a.l1 { font-weight: 650; font-size: 10.5pt; margin-top: 0.55em; }
+.toc a.l1 { font-weight: 700; font-size: 10.5pt; margin-top: 0.55em; }
 .toc a.l2 { font-size: 9pt; padding-left: 1.4em; margin-top: 0.08em; color: #333; }
 .toc .note { font-size: 8.5pt; color: #555; margin-top: 1.2em; }
 """ % PAGE_MARGIN
@@ -643,7 +643,7 @@ def volume_html(vol: dict, docs: dict[str, Doc], frags: dict[str, str], sheets, 
 FOOTER_CSS = """
 @page { size: Letter; margin: 0; }
 html, body { margin: 0; padding: 0; }
-body { font-family: "Inter", "DejaVu Sans", "Liberation Sans", sans-serif; font-size: 7.6pt; color: #555; }
+body { font-family: "Liberation Sans", "Arimo", "Arial", "DejaVu Sans", sans-serif; font-size: 7.6pt; color: #555; }
 .pg { position: relative; width: 8.5in; height: 10.98in; overflow: hidden; break-after: page; page-break-after: always; }
 .pg:last-child { break-after: auto; page-break-after: auto; }
 .ft { position: absolute; left: 1.8cm; right: 1.8cm; bottom: 0.95cm; display: flex; border-top: 0.5px solid #aaa;
@@ -950,7 +950,7 @@ def check_pdf(path: Path) -> dict:
     size_mb = path.stat().st_size / 1e6
     if size_mb > MAX_PDF_MB:
         raise BuildError(f"{path.name} is {size_mb:.1f} MB, over the {MAX_PDF_MB:.0f} MB limit")
-    not_embedded, seen = set(), set()
+    not_embedded, seen, type3 = set(), set(), set()
 
     def fonts_in(res):
         if res is None:
@@ -965,6 +965,7 @@ def check_pdf(path: Path) -> dict:
                 seen.add(id(f))
                 sub = f.get("/Subtype")
                 if sub == "/Type3":
+                    type3.add(str(f.get("/Name") or f.get("/BaseFont") or "?"))
                     continue
                 desc = f.get("/FontDescriptor")
                 if sub == "/Type0":
@@ -983,6 +984,9 @@ def check_pdf(path: Path) -> dict:
         fonts_in(p.get("/Resources"))
     if not_embedded:
         raise BuildError(f"{path.name}: fonts not embedded: {sorted(not_embedded)}")
+    if type3:
+        warn(f"{path.name}: {len(type3)} Type 3 font(s) (embedded, but drawn as glyph procedures; usually a CFF "
+             f"or colour font that Chromium could not embed as TrueType)")
     return {"pages": len(r.pages), "mb": size_mb}
 
 

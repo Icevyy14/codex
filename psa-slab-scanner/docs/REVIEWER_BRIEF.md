@@ -281,7 +281,7 @@ The CAD zip holds the 64 files in `package/cad_manifest.txt`:
 | `cad/README.md` | Units, coordinates, poses, part names, how to open and regenerate the files |
 | `cad/out/assembly/slabrail_<pose>.step` (4) | Full assembly: `home` (head over pocket 1 at c = 248, stacks as loaded), `pick_bottom` (cup at c = 6.6 on the last slab of pocket 11), `carry` (held slab at c = 248 between pockets 1 and 0), `station` (held slab at c ≈ 171.6). Measure on these. |
 | `cad/out/assembly/slabrail_home.glb`, `slabrail_carry.glb` | The same assemblies as binary glTF meshes for any glTF viewer (metres, Y up, as glTF expects); for looking, not measuring |
-| `cad/out/printed/`: 25 STEP, 25 STL, `print_list.json` | Printed parts in print orientation, with sizes and print notes. The `station_mount`, `phase0_base` and `phase0_tray` STLs are not clean meshes: check them in the slicer preview (`cad/README.md`). |
+| `cad/out/printed/`: 25 STEP, 25 STL, `print_list.json` | Printed parts in print orientation, with sizes and print notes. All 25 STLs are closed, one-body meshes that match `print_list.json` (`cad/README.md`, export check). |
 | `cad/out/cut_list.csv`, `probe_flag_blank.dxf`, `.svg` | Stock cut lengths (extrusions, lead screw, flags, 82 dowels); the probe flag blank at 1:1 |
 | `cad/out/checks.txt`, `cad/out/drawings/SlabRail_drawings.pdf`, `docs/BOM.csv` | All 177 check results; the drawing set; every bought part with price and link |
 
