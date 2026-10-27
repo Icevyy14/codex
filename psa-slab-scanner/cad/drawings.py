@@ -2080,9 +2080,9 @@ def sheet_ga(sh: Sheet, geo: Geo, plan):
         (G("Z motor top Z", ("bb", akey("z_motor"), "zmax"), "z_motor bounding box Z max"), "Z motor top"),
     ]
     items = [(r.value, f"Z {r.text}  {t}", [r]) for r, t in lv]
-    ordinates_v(vr, items, b[4], vr.x + vr.w + 14.0, gap=4.6, lo=58.0, hi=152.0)
+    ordinates_v(vr, items, b[4], vr.x + vr.w + 14.0, gap=4.6, lo=58.0, hi=152.0, style="scale")
     sh.text(vr.x + vr.w + 14.0, 156.0, "Heights, machine Z (cup face where noted)", weight="bold")
-    tx, ty = 318.0, 150.0
+    tx, ty = 314.0, 150.0
     rows = [["Main data", "Value", "From"]]
     r1, r2 = C("N_POCKETS", unit="count"), C("STATION_CELL", unit="count")
     rows.append(["Pockets, one row", f"{r1.text} + station (cell {r2.text})", "layout"])
@@ -2101,7 +2101,7 @@ def sheet_ga(sh: Sheet, geo: Geo, plan):
     rows.append(["Z used (cup face c)", f"{r14.text} to {r15.text}", "layout"])
     r16, r17 = C("C_HARD_BOTTOM"), C("C_HARD_TOP")
     rows.append(["Z hard stops (c)", f"{r16.text} / {r17.text}", "layout"])
-    yb, cells = sh.table(tx, ty, rows, [38.0, 44.0, 18.0])
+    yb, cells = sh.table(tx, ty, rows, [47.0, 38.0, 18.0])
     allr = [[], [r1, r2], [r3, r4], [r5, r6], [r7, r8], [r9, r10], [r11, r12, r13], [r14, r15], [r16, r17]]
     _attach({ri: [a for rr, cc, a in cells if rr == ri] for ri in range(1, len(rows))}, [{"recs": x} for x in allr])
     h = sh.image(REPO / "docs" / "img" / "machine_iso.png", 250.0, 160.0, 168.0)
@@ -2204,12 +2204,23 @@ def sheet_frame(sh: Sheet, geo: Geo, plan):
     ec = holes_of(geo, akey("z_end_cap"), "z", M.M5_CLR)
     sp = G("Z spine tapped end bores apart", ("pat2", akey("z_end_cap"), "z", M.M5_CLR, "x", tuple((f["c"][0], f["c"][1]) for f in ec)), "z_end_cap M5 holes (on the spine end bores): centre span X")
     dome = C("ROD_DOME_R")
+    # Z spine tapped ends: thread engaged = screw length (BUILD_GUIDE) - the clearance hole it passes through (CAD)
+    eb = M.SPINE_END_BORES[0]
+    eng_t = G("Z spine top end: M5x16 thread engaged", s_sub(("const", 16.0, "BUILD_GUIDE 7.3: 2 x M5x16 through z_motor_mount"),
+                                                             s_lcyl("z_motor_mount", "z", M.M5_CLR, (eb[0], eb[1], 4.0), "len")),
+              "M5x16 (BUILD_GUIDE 7.3) - z_motor_mount M5 hole length", kind="derived")
+    eng_b = G("Z spine bottom end: M5x12 thread engaged", s_sub(("const", 12.0, "BUILD_GUIDE 7.1: 2 x M5x12 button heads through z_end_cap"),
+                                                                s_lcyl("z_end_cap", "z", M.M5_CLR, (eb[0], eb[1], -2.0), "len")),
+              "M5x12 (BUILD_GUIDE 7.1) - z_end_cap M5 hole length under the head recess", kind="derived")
+    tap = G("Z spine: M5 full-thread depth, both ends, minimum", ("max", eng_t.spec, eng_b.spec), "the larger of the two engagements", kind="derived")
     spec = [  # length spec, profile depth, scale, bar options, use text, recs in the text, tolerance
         (("bb", akey("base_rail_0"), "xlen"), "base_rail_0 X", 20, S110, {}, "base rail, lying flat under the bed; square ends", [], "+/-0.5"),
         (("bb", akey("upright_L"), "zlen"), "upright_L Z", 40, S110, {}, "upright; square ends", [], "+/-0.5"),
         (("bb", akey("x_beam"), "xlen"), "x_beam X", 40, S110, {}, "X beam, on top of the uprights; square ends", [], "+/-0.5"),
         (("bb", akey("z_spine"), "zlen"), "z_spine Z", 20, S15, {"tapped": True},
-         f"Z spine; BOTH ends: 2x M5 tapped, the two centre bores ({sp.text} apart), for 2x M5x12 button heads (bottom) and 2x M5x16 (top), BUILD_GUIDE 7.1, 7.3", [sp], "+/-0.5"),
+         f"Z spine; BOTH ends: 2x M5 tapped in the two centre bores ({sp.text} apart), full thread ≥ {tap.text} deep. Top end: 2x M5x16 "
+         f"through z_motor_mount, {eng_t.text} engaged. Bottom end: 2x M5x12 button heads through z_end_cap, {eng_b.text} engaged "
+         f"(BUILD_GUIDE 7.1, 7.3)", [sp, tap, eng_t, eng_b], "+/-0.5"),
         (("bb", akey("drop_arm"), "zlen"), "drop_arm Z", 20, S15, {"holes": [(h19.value, hd.value), (h84.value, hd.value)]},
          f"head drop arm; 2x Ø{hd.text} THRU across the arm (machine X), {h19.text} and {h84.text} from the end in head_foot's socket: match-drill (BUILD_GUIDE 7.5)", [hd, h19, h84], "+/-0.5"),
         (("bb", akey("z_leadscrew"), "zlen"), "z_leadscrew Z", 8, S15, {"rod": True}, "T8x8 Z screw, length below the motor face: cut the motor's 400 mm screw; 311-356 works (cut_list.csv)", [], "311-356"),
@@ -2233,7 +2244,9 @@ def sheet_frame(sh: Sheet, geo: Geo, plan):
     sh.line([(x0, y), (xs[-1], y)], lw=0.5, track=False)
     for i, (row, (lspec, lsrc, depth, sc, opts, use, recs, tol)) in enumerate(zip(rows, spec)):
         prof, _, lcsv, qty = row
-        rh = 12.2 if lspec is not None else 8.0
+        lines = textwrap.wrap(use, int((widths[3] - 2.4) / (0.53 * FS * PT)))
+        assert len(lines) <= 3, f"cut list row C-{i + 1:02d}: use text longer than three lines"
+        rh = max(12.2 if lspec is not None else 8.0, len(lines) * 4.6 + 2.2)
         yc = y - rh / 2
         sh.text(xs[0] + 1.2, yc, f"C-{i + 1:02d}", va="center")
         if lspec is not None:
@@ -2242,11 +2255,9 @@ def sheet_frame(sh: Sheet, geo: Geo, plan):
                 raise SystemExit(f"cut_list.csv row {i + 1} ({lcsv}) disagrees with the CAD ({r.value})")
             v = _bar(sh, xs[1] + 3.0, yc - 1.8, r, depth, sc, **opts)
             sh.text(xs[1] + 3.0 + v.w + 4.0, yc - 1.8, str(sc), va="center", color=GREY)
-        lines = textwrap.wrap(use, int((widths[3] - 2.4) / (0.53 * FS * PT)))
-        assert len(lines) <= 2, f"cut list row C-{i + 1:02d}: use text longer than two lines"
         arts = []
-        for j, ln in enumerate(lines[:2]):
-            arts.append(sh.text(xs[3] + 1.2, yc + (len(lines[:2]) - 1) * 2.3 - j * 4.6, ln, va="center"))
+        for j, ln in enumerate(lines):
+            arts.append(sh.text(xs[3] + 1.2, yc + (len(lines) - 1) * 2.3 - j * 4.6, ln, va="center"))
         _attach({0: arts}, [{"recs": recs}])
         sh.text(xs[2] + 1.2, yc, prof if len(prof) < 14 else prof.replace(" lead screw", "").replace(" aluminium sheet", " Al sheet").replace(" (7.94 mm) hardwood dowel", " dowel"), va="center")
         sh.text(xs[4] + 1.2, yc, qty, va="center")
@@ -2256,6 +2267,8 @@ def sheet_frame(sh: Sheet, geo: Geo, plan):
     sh.rect(x0, y, xs[-1], ytop, lw=0.6)
     for xx in xs[1:-1]:
         sh.line([(xx, y), (xx, ytop)], lw=0.35, track=False)
+    sh.wrap(x0, y - 2.5, "Not in cut_list.csv: the optional rear diagonal brace, 2020 x 600 (BOM.csv HFS5-2020-600), cut only if the beam-twist "
+            "check fails (BUILD_GUIDE 6.7).", TB_X0 - 4.0 - x0)
     sh.occ.append((x0, y, xs[-1], ytop + 6))
 
 
@@ -2265,12 +2278,12 @@ SHEET_FUNCS["frame"] = sheet_frame
 # ---------------------------------------------------------------------------------------------------------- D-03 bed
 def sheet_bed(sh: Sheet, geo: Geo, plan):
     parts = geo.parts("asm:home")
-    names = [n for n in parts if n == "bed_plywood" or n.startswith(("pad_", "rod_", "base_rail", "foot_")) or n in ("station", "gate_post_L", "gate_post_R")]
+    names = [n for n in parts if n == "bed_plywood" or n.startswith(("pad_", "rod_", "base_rail")) or n in ("station", "gate_post_L", "gate_post_R")]
     shape = compound([parts[n].shape for n in names])
     b = bbox(shape)
     vp = make_view(sh, shape, "top", S15, 84.0, 178.0, hidden=True, lw=LW_ASM)
     sh.text(16.0, TOP - 5.0, "PLAN (1:5): bed, pads, rods, station mount,", weight="bold", va="top")
-    sh.text(16.0, TOP - 10.0, "gate posts; base rails and feet hidden", weight="bold", va="top")
+    sh.text(16.0, TOP - 10.0, "gate posts; base rails hidden (feet: D-01)", weight="bold", va="top")
     g = lambda n, w: bb_value(geo.shape(akey(n)), w)  # noqa: E731
     # datum O
     from matplotlib.patches import Wedge
@@ -2280,7 +2293,6 @@ def sheet_bed(sh: Sheet, geo: Geo, plan):
     vp.ax.add_patch(Circle((0.0, 0.0), 9.0, fill=False, lw=0.6, clip_on=False))  # origin symbol: two quadrants filled
     for a0 in (0.0, 180.0):
         vp.ax.add_patch(Wedge((0.0, 0.0), 9.0, a0, a0 + 90.0, facecolor=INK, edgecolor=INK, lw=0.3, clip_on=False))
-    vp.text(2.0, -16.0, "DATUM O", weight="bold", va="top", ha="left")  # inside pad 0's outline, clear of its lines
     vp.centerline((b[0] - 20, 0.0), (b[3] + 20, 0.0), lw=0.35)
     # pocket centres along the top
     items = []
@@ -2309,6 +2321,8 @@ def sheet_bed(sh: Sheet, geo: Geo, plan):
         (G("left notch inner face X", ("plane", akey("bed_plywood"), "x", (M.XL + 20.5, M.BEAM_Y0 + 20, -10.0)), "bed_plywood left notch inner face X"), "notch"),
         (G("left gate post centre X", ("bb", akey("gate_post_L"), "xmid"), "gate_post_L bounding box centre X"), "gate L"),
         (rod_c("first rod line X", xs_l[0], ys_l[1], "x"), "rods"),
+        (G("datum O X: cell 0's interior left edge", s_sub(("bb", akey("pad_0"), "xmid"), ("mul", ("layout", "POCKET_W", None), 0.5)),
+           "pad_0 centre X - POCKET_W / 2 (layout.cell_x: X 0 = cell 0's interior left edge)"), "DATUM O"),
         (rod_c("last rod line X", xs_l[-1], ys_l[1], "x"), "rods"),
         (G("right gate post centre X", ("bb", akey("gate_post_R"), "xmid"), "gate_post_R bounding box centre X"), "gate R"),
         (G("right notch inner face X", ("plane", akey("bed_plywood"), "x", (M.XR - 20.5, M.BEAM_Y0 + 20, -10.0)), "bed_plywood right notch inner face X"), "notch"),
@@ -2411,9 +2425,9 @@ def sheet_bed(sh: Sheet, geo: Geo, plan):
     t = sh.wrap(tx, yb - 3.0,
                 f"Datum O = machine origin (X 0; Y 0 = the pocket-row centre line), as the software uses it; X ordinates from O. The machine "
                 f"drills the rod holes through drill_template, so they are not laid out from the bed edges (BUILD_GUIDE 5.6). Station mount: "
-                f"cell\u00a0{stc.text}, four #8 wood screws, no pad. Gate posts: bare plywood, no shim (5.9).", PW - 14.0 - tx)
+                f"cell\u00a0{stc.text}\u00a0(X\u00a0{rs.text}), four #8 wood screws, no pad. Gate posts: bare plywood, no shim (5.9).", PW - 14.0 - tx)
     for a in sh.pg.texts[-8:]:
-        if f"cell\u00a0{stc.text}," in a.get_text():
+        if f"cell\u00a0{stc.text}\u00a0(X\u00a0{rs.text})," in a.get_text():
             stc.artist = a
     # rod holes: callout on the plan + the pattern in words (the bed itself has no holes in the CAD: the rods pass into it)
     rdc = C("ROD_D")
@@ -2453,7 +2467,7 @@ X_PARTS = ("x_beam", "x_rail", "x_carriage", "x_bracket", "belt_clamp_L", "belt_
 def sheet_xaxis(sh: Sheet, geo: Geo, plan):
     parts = geo.parts("asm:home")
     shape = compound([parts[n].shape for n in X_PARTS])
-    vf = make_view(sh, shape, "front", S15, 70.0, 190.0, hidden=False, lw=LW_ASM, window=(-72.0, 325.0, 1352.0, 470.0), clip=True)
+    vf = make_view(sh, shape, "front", S15, 70.0, 196.0, hidden=False, lw=LW_ASM, window=(-72.0, 325.0, 1352.0, 470.0), clip=True)
     sh.text(16.0, vf.y + vf.h - 4.0, "FRONT (1:5)", weight="bold")
     g = lambda n, w, src="asm:home": bb_value(_wrapped(geo.parts(src)[n].shape), w)  # noqa: E731
     rr = G("X rail length", ("bb", akey("x_rail"), "xlen"), "x_rail X")
@@ -2461,14 +2475,15 @@ def sheet_xaxis(sh: Sheet, geo: Geo, plan):
     below = [
         (G("beam left end X", ("bb", akey("x_beam"), "xmin"), "x_beam X min"), "beam"),
         (G("idler axle X", ("cyl", akey("x_idler"), "y", 18.0, (M.X_IDLER_X, M.BEAM_Y0 + 6, M.X_PULLEY_Z), "x", False), "x_idler axis X"), "idler"),
-        (G("left bumper face X", ("bb", akey("x_bumper_L"), "xmax"), "x_bumper_L X max (stop face)"), "stop"),
+        (G("left bumper face X", ("bb", akey("x_bumper_L"), "xmax"), "x_bumper_L X max (stop face)"), "bumper\nface"),
         (G("rail left end X", ("bb", akey("x_rail"), "xmin"), "x_rail X min"), "rail"),
         (G("rail right end X", ("bb", akey("x_rail"), "xmax"), "x_rail X max"), "rail"),
-        (G("right bumper face X", ("bb", akey("x_motor_mount"), "xmin"), "x_motor_mount X min (its left end is the stop face)"), "stop"),
+        (G("right bumper face X", ("bb", akey("x_motor_mount"), "xmin"), "x_motor_mount X min (its left end is the stop face)"), "motor-mount\nstop face"),
         (G("motor axis X", ("cyl", akey("x_pulley"), "y", 16.0, (M.X_MOTOR_X, M.BEAM_Y0 + 9, M.X_PULLEY_Z), "x", False), "x_pulley axis X"), "motor"),
         (G("beam right end X", ("bb", akey("x_beam"), "xmax"), "x_beam X max"), "beam"),
     ]
-    ordinates_h(vf, [(r.value, f"{r.text} {t}", [r]) for r, t in below], 325.0, vf.y - 15.0, gap=4.6, side="below")
+    ordinates_h(vf, [(r.value, f"{r.text} {t}", [r]) for r, t in below], 325.0, vf.y - 15.0, gap=6.5, side="below")
+    sh.text(vf.P(below[0][0].value, 0)[0] - 9.0, vf.y - 15.0, "hardware,\nmachine X", ha="right", va="top", weight="bold")
     above = [
         (C("X_HARD_STOP", idx=0), "left stop"), (C("X_HOME_SWITCH"), "home trip"),
         (G("cup X pocket 0", ("bb", akey("pad_0"), "xmid"), "pad_0 centre X"), "pocket 0"),
@@ -2490,8 +2505,8 @@ def sheet_xaxis(sh: Sheet, geo: Geo, plan):
     pa = geo.parts(sa)
     da = compound([pa[n].shape for n in X_PARTS if n in pa and n not in ("x_motor", "x_motor_mount", "x_pulley", "upright_R")])
     va = make_view(sh, da, "front", S12, 40.0, 64.0, hidden=False, window=(-72.0, 322.0, 46.0, 470.0), clip=True)
-    sh.text(16.0, va.y + va.h + 16.0, "DETAIL A (1:2): left end, carriage at the home-switch trip", weight="bold")
-    sh.text(16.0, va.y + va.h + 11.5, f"(cup X = X_HOME_SWITCH; front view)")
+    sh.text(16.0, va.y + va.h + 12.0, "DETAIL A (1:2): left end, carriage at the home-switch trip", weight="bold")
+    sh.text(16.0, va.y + va.h + 7.5, "(cup X = X_HOME_SWITCH; front view)")
     ka = lambda n: f"xdet/19/{n}"  # noqa: E731
     gap = G("x_bracket to left bumper at the switch trip", s_sub(("plane", ka("x_bracket"), "x", (L.X_HOME_SWITCH - M.XB_HALF, 90.0, 400.0)), ("plane", ka("x_bumper_L"), "x", (L.X_HARD_STOP[0] - M.XB_HALF, 98.0, 388.0))),
             "x_bracket plate left face X - x_bumper_L stop face X, cup X = X_HOME_SWITCH")
@@ -2508,7 +2523,7 @@ def sheet_xaxis(sh: Sheet, geo: Geo, plan):
         (G("beam bottom Z (detail)", ("bb", ka("x_beam"), "zmin"), "x_beam Z min"), "beam bottom"),
         (G("switch finger flat Z", ("plane", ka("x_bracket"), "z", (L.X_HOME_SWITCH - M.XB_HALF - 8.0, 90.0, M.XF_Z[0])), "x_bracket finger underside Z"), "finger flat"),
     ]
-    ordinates_v(va, [(r.value, f"Z {r.text}  {t}", [r]) for r, t in zs], 46.0, va.x + va.w + 12.0, gap=4.6, lo=58.0, hi=150.0)
+    ordinates_v(va, [(r.value, f"Z {r.text}  {t}", [r]) for r, t in zs], 46.0, va.x + va.w + 12.0, gap=4.6, lo=58.0, hi=150.0, style="scale")
     sh.note(va.x, va.y - 9.0, f"Click at cup X {hs.text} (+/-2, BUILD_GUIDE 6.8)", [hs], va="top")
     # detail B: right end at the right hard stop
     sb_ = "xdet:1262"
@@ -2592,6 +2607,8 @@ def sheet_zaxis(sh: Sheet, geo: Geo, plan):
     xr_ = vr.x + vr.w + 12.0  # the right-hand label column
     sh.text(xr_, TOP - 4.0, "RIGHT SIDE (1:2): Z axis and head, home pose", weight="bold", va="top")
     sh.text(xr_, TOP - 9.0, "(c = C_SAFE_LOADED); fasteners not shown", va="top")
+    ch_ = C("CUP_HANG")
+    sh.wrap_recs(xr_, TOP - 13.0, f"Buffer drawn at the probe trip: compressed CUP_HANG = {ch_.text}, the cup face at c.", 270.0 - 4.0 - xr_, [ch_])
     vr.centerline((0.0, 220.0), (0.0, 674.0))
     g = lambda n, w: bb_value(geo.shape(akey(n)), w)  # noqa: E731
     head = [
@@ -2606,8 +2623,8 @@ def sheet_zaxis(sh: Sheet, geo: Geo, plan):
     ]
     cz = head[0][0].value
     hv = [cz] + [cz + r.value for r, _ in head[1:]]
-    ordinates_v(vr, [(v, t.format(r.text), [r]) for v, (r, t) in zip(hv, head)], 150.0, xr_, gap=4.6, lo=TB_Y0 + TB_H + 4.0, hi=TOP - 22.0)
-    sh.text(xr_, TOP - 16.0, "Moves with Z (c = cup face):", weight="bold", va="top")
+    ordinates_v(vr, [(v, t.format(r.text), [r]) for v, (r, t) in zip(hv, head)], 150.0, xr_, gap=4.6, lo=TB_Y0 + TB_H + 4.0, hi=TOP - 31.0, style="scale")
+    sh.text(xr_, TOP - 25.0, "Moves with Z (c = cup face):", weight="bold", va="top")
     fixed = [
         (G("z_end_cap underside Z", ("bb", akey("z_end_cap"), "zmin"), "z_end_cap Z min"), "end cap underside"),
         (G("Z spine bottom Z", ("bb", akey("z_spine"), "zmin"), "z_spine Z min"), "spine bottom"),
@@ -2619,14 +2636,14 @@ def sheet_zaxis(sh: Sheet, geo: Geo, plan):
         (G("Z motor face Z", ("bb", akey("z_motor_mount"), "zmax"), "z_motor_mount Z max (motor face)"), "motor face"),
         (G("Z motor top Z (D-05)", ("bb", akey("z_motor"), "zmax"), "z_motor Z max"), "Z motor top"),
     ]
-    ordinates_v(vr, [(r.value, f"Z {r.text}  {t}", [r]) for r, t in fixed], -34.0, vr.x - 10.0, gap=4.6, side="left", lo=50.0, hi=TOP - 10.0)
+    ordinates_v(vr, [(r.value, f"Z {r.text}  {t}", [r]) for r, t in fixed], -34.0, vr.x - 10.0, gap=4.6, side="left", lo=50.0, hi=TOP - 10.0, style="scale")
     sh.text(16.0, TOP - 4.0, "Fixed to the X carriage, Z:", weight="bold", va="top")
     # Y offsets
     arm = G("drop arm centre Y from the cup axis", s_sub(("bb", akey("drop_arm"), "ymid"), ("bb", akey("cup"), "ymid")), "drop_arm centre Y - cup centre Y")
     vr.dim((0.0, cz), (arm.value, g("drop_arm", "zmin")), "h", -5.0, arm, post=" drop arm", text_at="left")
-    cam = G("head lens axis offset from the cup axis, toward -Y (the label end)", _neg(s_sub(("bb", akey("head_camera"), "ymid"), ("bb", akey("cup"), "ymid"))),
-            "cup centre Y - head_camera centre Y")
-    vr.dim((-cam.value, g("head_camera", "zmax")), (0.0, g("head_camera", "zmax")), "h", 4.0, cam, pre="lens axis ", post=" toward -Y", text_at="left")
+    # head lens axis: a centre line only (its offset is HEAD_CAM_DY in the table; a dimension here has no clear place for its text)
+    yc_ = g("head_camera", "ymid")
+    vr.centerline((yc_, g("head_camera", "zmin") - 12.0), (yc_, g("head_camera", "zmax") + 6.0))
     beam = G("beam front face Y from the cup axis", s_sub(("bb", akey("x_beam"), "ymin"), ("bb", akey("cup"), "ymid")), "x_beam Y min - cup centre Y")
     # under the view, below the cup: a line from the cup axis to the beam face at any height in the view would cross the arm, rail and spine
     vr.dim((0.0, cz), (beam.value, g("x_beam", "zmin")), "h", -13.0, beam, post=" to the X beam face")
@@ -2817,10 +2834,10 @@ def sheet_jig(sh: Sheet, geo: Geo, plan):
     parts = geo.parts("p0")
     shape = compound([p.shape for n, p in parts.items() if p.kind != "fastener"])
     b = bbox(shape)
-    vf = make_view(sh, shape, "front", S12, 34.0, 70.0, hidden=False, lw=0.7)
+    vf = make_view(sh, shape, "front", S12, 50.0, 70.0, hidden=False, lw=0.7)
     # SECTION A-A on X = 0 (both lens axes), seen from +X: the half at X <= 0, cut faces hatched
     halves = [(h_, p.kind) for p in parts.values() if p.kind != "fastener" for h_ in [section_half(p.shape, 0.0)] if h_ is not None]
-    vr = make_view(sh, compound([h_ for h_, _ in halves]), "right", S12, 34.0 + vf.w + 20.0, 70.0, hidden=False, lw=0.7,
+    vr = make_view(sh, compound([h_ for h_, _ in halves]), "right", S12, vf.x + vf.w + 10.0, 70.0, hidden=False, lw=0.7,
                    window=proj_box("right", b))
     hatch_section(vr, halves, 0.0)
     cutting_plane(vf, 0.0, "A")
@@ -2832,7 +2849,7 @@ def sheet_jig(sh: Sheet, geo: Geo, plan):
     g = lambda n, w: bb_value(geo.shape(f"p0/{n}"), w)  # noqa: E731
     post = G("jig post length", ("bb", "p0/p0_post_1", "zlen"), "p0_post_1 Z")
     vf.dim((g("p0_post_-1", "xmin"), g("p0_post_-1", "zmin")), (g("p0_post_-1", "xmin"), g("p0_post_-1", "zmax")), "v",
-           -(g("p0_post_-1", "xmin") - b[0]) / 2 - 6.0, post)
+           -(g("p0_post_-1", "xmin") - b[0]) / 2 - 6.0, post, post=" post\n(C-08), ends\nhidden in\nthe sockets")
     pc = G("jig post centres", s_sub(("bb", "p0/p0_post_1", "xmid"), ("bb", "p0/p0_post_-1", "xmid")), "p0_post_1 centre X - p0_post_-1 centre X")
     vf.dim((g("p0_post_-1", "xmid"), b[2]), (g("p0_post_1", "xmid"), b[2]), "h", -14.0, pc, post=" post centres")  # below the A-A arrow
     for n in ("p0_post_-1", "p0_post_1"):
@@ -2846,7 +2863,7 @@ def sheet_jig(sh: Sheet, geo: Geo, plan):
         (G("jig head lens front Z", ("bb", "p0/p0_head_camera", "zmin"), "p0_head_camera Z min (lens front)"), "head lens front"),
         (G("jig post tops Z", ("bb", "p0/p0_post_1", "zmax"), "p0_post_1 Z max"), "post tops"),
     ]
-    ordinates_v(vr, [(r.value, f"Z {r.text}  {t}", [r]) for r, t in lv], vr.u1, vr.x + vr.w + 12.0, gap=4.6, lo=58.0, hi=TOP - 12.0)
+    ordinates_v(vr, [(r.value, f"Z {r.text}  {t}", [r]) for r, t in lv], vr.u1, vr.x + vr.w + 12.0, gap=4.6, lo=58.0, hi=TOP - 12.0, style="scale")
     sh.text(vr.x + vr.w + 12.0, TOP - 9.0, "Heights above the base underside", weight="bold", va="top")
     d1 = G("jig station lens to slab front", s_sub(("bb", "p0/p0_slab", "zmin"), ("bb", "p0/p0_station_camera", "zmax")), "p0_slab Z min - p0_station_camera Z max")
     d2 = G("jig slab back to head lens", s_sub(("bb", "p0/p0_head_camera", "zmin"), ("bb", "p0/p0_slab", "zmax")), "p0_head_camera Z min - p0_slab Z max")

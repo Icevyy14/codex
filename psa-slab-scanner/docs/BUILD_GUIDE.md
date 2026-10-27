@@ -590,7 +590,7 @@ part's volume. Fast printers (Bambu, MK4) take roughly half. [Guessing]
 | `x_bumper_L` | 1 | PETG | as exported: beam face down | 4 / 40 % | none | 0.2 h |
 | `x_idler_mount` | 1 | PETG | as exported (foot down) | 5 / 40 % | none | 1 h |
 | `x_idler_slider` | 1 | PETG | as exported | 5 / 50 % | none | 0.3 h |
-| `x_bracket` (70.7 cm³; reprint an older one: the finger off its left edge works the X home switch) | 1 | PETG | as exported: flat on its spine face | 6 / 50 % | none | 3.9 h |
+| `x_bracket` (70.5 cm³; reprint an older one: the finger off its left edge works the X home switch) | 1 | PETG | as exported: flat on its spine face | 6 / 50 % | none | 3.9 h |
 | `belt_clamp` | 2 | PETG | flat | 100 % | none | 0.1 h each |
 | `z_motor_mount` | 1 | PETG | as exported: motor face down, tab up | 5 / 40 % | none | 2.5 h |
 | `z_end_cap` | 1 | PETG | as exported (lips up) | 5 / 50 % | none | 0.5 h |
