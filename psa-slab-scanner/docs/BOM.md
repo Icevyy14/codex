@@ -11,15 +11,13 @@ Confidence tags: **[Certain]** = primary source (for a price: the product page i
 
 - **The full list costs about $2,182 with a 15% allowance.** [Likely ±10%] You have said
   $2,500–3,000 is fine if the machine works properly, so there is about $300–800 of headroom.
-- **The total did not change this round.** The two homing switches now have printed mounts. They
-  need 4 more M5×10 button heads, 4 more M5 T-nuts and 4 × M2×12 with nuts, all from packs
-  already in the list, and about 33 cm³ more filament. The switch line now says to buy the short
-  hinge lever. In round 4 two lines moved between orders and the confidence tags were aligned;
-  in round 3 the list went up $209 ($182 of parts plus the allowance), almost all of it real
-  product-page prices replacing estimates (below).
+- **The two homing-switch mounts** take 4 M5×10 button heads, 4 M5 T-nuts and 4 × M2×12 with nuts,
+  all from packs already in the list, and about 33 cm³ of filament. The switch line says to buy the
+  short hinge lever. How the list changed during design is in
+  [history/bom_changes.md](history/bom_changes.md).
 - **$1,383 of the $1,897 subtotal is a price seen on the product page** [Certain, 22 Oct 2026],
-  $175 is [Likely] and $339 is [Guessing] (mostly the Misumi extrusions, which block scripts: get
-  that quote first, and Amazon lines whose price was not visible). The allowance covers shipping
+  $175 is [Likely] and $339 is [Guessing] (mostly the Misumi extrusions, whose prices are not
+  confirmed online: get that quote first, and Amazon lines whose price was not shown). The allowance covers shipping
   already seen but not in the line prices (LiMo DDP $39, Digi-Key Marketplace $28, MakerStock
   $13.49, the endstop boards $5.70) and the ones not shown (ELP express and duty, Proax shipping
   and brokerage, AFT's small-order fee, Misumi).
@@ -52,7 +50,7 @@ Confidence tags: **[Certain]** = primary source (for a price: the product page i
   ring (a 12-SMD ring that fits the seat is the fallback), the branch fuse holders, the drag chain,
   the M5×10 button heads and the two shielded moving cables (the igus cable in their notes is
   unshielded, 4-core and sold by the foot). Their estimates stay in the total, and a few
-  linked prices were not visible (Amazon blocks scripts): SHOPPING_LIST.md marks each one. Look
+  linked prices were not confirmed online: SHOPPING_LIST.md marks each one. Look
   them up before the order they belong to.
 
 ## Order plan
@@ -93,75 +91,8 @@ Nothing from order 2 has been bought at that point. [Certain, by construction of
 | Minus school stock (+ its 15%) | −$319.56 | | **≈ $1,862** |
 | Lean swap (generic valves), with school stock | | | **≈ $1,787** |
 
-**What changed in this round ($0.00):**
-- **Homing switches:** the CAD now has printed mounts (`x_switch_mount`, `z_switch_mount`), so the
-  2020 corner brackets no longer carry the switches. The line now asks for the short hinge lever
-  (Omron SS-5GL size, a lever ending at the body's end): the mounts take a lever up to 23 mm from
-  the hinge end, and a longer one is cut back to 20 mm (BUILD_GUIDE §6.8).
-- **M5×10 button heads:** 6 needed, not 2 (2 per switch mount). Same pack, same price
-  [Guessing, a small pack of 10 or more].
-- **M5 T-nuts:** about 130 needed, not 126 (2 per switch mount). The 150-pack still covers them
-  and the 6 for the Phase 0 jig.
-- **M2 kit:** 4 × M2×12 and 4 nuts more, for the switches. No price change.
-- **M2 standoffs:** the jig's bridge is now 10.6 mm thick, so a standoff is the board-to-lens
-  length minus 10.0 mm, with 2.0 mm of plastic around each hole.
-- **Head LED ring:** the seat is now a 42.8 mm bore with three centring ribs: it takes a ring of
-  39.5–42.5 mm OD.
-- **Filament:** 801 cm³ in 27 prints (was 768 in 25). The 2 kg still cover it.
-
-**What changed in round 4 ($0.00):**
-- **Push fittings kit** ($11.99) from order 1b to order 2: its 1/8 NPT fittings go only into the
-  reservoir cap. Phase 0B uses the tube and the barb elbow.
-- **PTFE tape** ($2.36) split out of the reservoir set ($19.93 → $17.57) into its own order-1b
-  line: Phase 0B seals the elbow's M5 thread with it.
-- **Confidence tags** now follow each line's price evidence, in the CSV and the shopping list
-  alike. In the CSV, six lines whose price was never seen went from [Likely] to [Guessing] (the two
-  M2 kits, the M5×12 button heads, the M2.5/M3 standoff kit, the resistor kit, the awl pin) and
-  three whose price was seen went to [Certain] (the M-5ALU-4 elbows, the vacuum sensors, the MOSFET
-  modules). In the shopping list, the mains inlet and the mains wire went from [Likely] to
-  [Guessing], as in the CSV.
-- **Specs and notes:** the awl pin is one spec now (steel or stainless, hardened not needed); the
-  station ring seat takes a 60 or a 63 mm ring; the head ring line has a fallback; the moving
-  cables link to a search, not to the per-foot igus page; "measure before printing" names the
-  Phase 0 part, which is printed first.
-
-**What changed in round 3 (+$182.08, +$209.39 with the allowance):**
-- **Links and prices from a sourcing run** (22 Oct 2026), spot-checked line by line. Every line
-  in the total now carries a product link except the six above. Where the link is [Likely] or
-  [Guessing], the old search hint stays after it. Price changes of $10 or more: up, the Z motor
-  +$69.99, vacuum sensors +$20.00, E-stop +$19.75, mains and earth wire +$15.00 (still an
-  estimate), microSD +$13.95, pad cloth +$13.48, pad foam +$10.99, heat-set inserts +$10.99, check
-  valves +$10.60; down, the LiMo rails and block −$23.90, the hand pump −$14.01, the two SMC cups
-  −$13.76 (Proax), the head camera −$11.00 (the ELP store), the dowels −$10.00. Every other line
-  moved by less than $10.
-- **Spec corrections from the sourcing run, applied because they are plainly right:**
-  - **Bed:** the Woodcraft 12 × 60 in Baltic birch blank is no longer listed; the line is now a
-    Home Depot 3/4 in PureBond birch 2 × 8 ft panel (17.9 mm), one rip and one crosscut.
-  - **Dowels:** 5/16 in (7.94 mm) × 12 in, so the brad-point bit and collar are 5/16 in.
-  - **Class 2 laser:** the only module found (Quarton VLM-650-03) has a 7 mm body. The left gate
-    post now prints with a 7.2 mm barrel hole for it (BUILD_GUIDE §5.9).
-  - **Pump "upgrade":** the VXB 10 L/min pump is probably the main pump itself (VXB's SKU is the
-    Amazon ASIN) [Likely]. The upgrade line is now an unsourced branded pump, about $200
-    [Guessing].
-  - **Optical endstop boards:** the 3-pack is out of stock; two 2-packs give 4 boards (probe,
-    carry-height sensor, 2 spares). The listing does not name the TCST2103: measure it.
-  - **Flag sheet:** at least 50 × 60 mm, for the probe flag and the new carry flag.
-- **Not applied:** the sourcing run's igus chainflex cable for both moving cables. It is
-  unshielded and 4-core, so the head cable would become two runs with renumbered cores. The
-  shielded 8-core line stays [Guessing, price not seen]; the igus cable is listed as a verified
-  alternative in the CSV.
-- **New lines for the carry-height sensor** (BUILD_GUIDE §7.4a, WIRING.md §6a): the board (the
-  second one in the endstop packs, $0), the carry flag (cut from the flag sheet, $0), 2 × M5×10
-  button heads ($6, new), the M3 screws, washers, nuts and T-nuts (from the existing packs, $0),
-  its 0.2 m lead (the board's own 3-pin cable, $0) and the two printed parts ($0). A 10 kΩ + 20 kΩ
-  divider for GPIO 6 comes from the resistor kit.
-- **Phase 0 jig:** six M5 washers, not twelve (one under each M5×10: the jig walls are now 4 mm).
-
-**What changed in the earlier rounds (+$266 in all):** the second SMC cup and buffer, the M5 barb
-elbows, a spare rail block and the jig's arm stub (+$60), and +$112 of parts the first review found
-the design needs (a closed mains box, a Class 2 laser, a second E-stop contact block, a hand vacuum
-pump, a 12 V adapter, separate head and station LED rings, more screw sizes, M2 standoffs, set
-screws), plus the allowance going from 10% to 15% (+$94).
+How the list changed during design (lines added, moved and re-priced) is in
+[history/bom_changes.md](history/bom_changes.md).
 
 **Conditional lines are in the CSV with qty 0 and are not in the total.** Buy them only if a test
 fails:
@@ -352,7 +283,7 @@ total would be about $2,640** ($2,182 + about $460), so use the school's where y
   about 720 g at the listed walls and infill. Add a Pi case, electronics trays, cable clips and reprints, and it comes to about
   1.0–1.3 kg, so the list has 2 kg. [Likely]
 
-## Design gaps found while pricing (for the CAD and wiring owners)
+## Design gaps found while pricing (open items)
 
 These are not BOM problems, but they decide what gets bought.
 
@@ -407,7 +338,7 @@ These are not BOM problems, but they decide what gets bought.
      carry-height sensor.
    - Measure these parts before printing `camera_bracket`, `phase0_top`, `head_foot` and
      `carry_sensor_mount`.
-5. **[Certain, sourcing; resolved in CAD] The only Class 2 laser found is 7 mm**, so the left gate post's
+5. **[Certain, from the listings; resolved in CAD] The only Class 2 laser found is 7 mm**, so the left gate post's
    barrel hole is now 7.2 mm (the right post keeps 6.2 mm for the receiver).
 6. **[Certain, forum report] BTT has shipped Rodents with an old FluidNC build.** Reflash the
    current FluidNC release before loading `firmware/fluidnc/config.yaml`. Also check the Rodent's
@@ -415,11 +346,11 @@ These are not BOM problems, but they decide what gets bought.
 7. **[Guessing] Which lever the homing switch 10-pack has.** The switch mounts are now in the
    CAD (resolved above), drawn for the Omron SS-5GL size with a short hinge lever. A lever that
    ends more than 23 mm from the hinge end must be cut back to 20 mm (BUILD_GUIDE §6.8); a roller
-   lever does not fit. The listing was not opened: check the photos, or measure on arrival.
+   lever does not fit. The listing's lever length was not confirmed: check the photos, or measure on arrival.
 
 ## Main sources
 
-- **Sourcing run, 22 Oct 2026:** every product link in BOM.csv; the per-line notes say which pages
+- **Link and price check, 22 Oct 2026** (raw data in [history/sourcing/links.json](history/sourcing/links.json)): every product link in BOM.csv; the per-line notes say which pages
   were opened ([Certain]) and which prices come from search text ([Likely]) or the old estimate.
 - **Raspberry Pi 2026 prices:** [Liliputing/Heise/TechSpot reports](https://www.techspot.com/news/111165-raspberry-pi-prices-soar-amid-ai-memory-shortage.html),
   [The Register (Feb 2026)](https://www.theregister.com/2026/02/02/raspberry_pi_ram_shortage_price_hike/)

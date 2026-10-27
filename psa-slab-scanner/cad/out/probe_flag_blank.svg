@@ -34,7 +34,7 @@
 <line x1="16.00" y1="33.00" x2="18.00" y2="33.00" stroke="black" stroke-width="0.15"/>
 <line x1="16.00" y1="20.00" x2="18.00" y2="20.00" stroke="black" stroke-width="0.15"/>
 <text x="5.90" y="27.20" font-family="sans-serif" font-size="2.0">13 (trim)</text>
-<text x="62.40" y="22.00" font-family="sans-serif" font-size="2.0">SlabRail probe flag, 1:1 (check the 10 mm bar)</text>
+<text x="62.40" y="22.00" font-family="sans-serif" font-size="2.0">SlabRail probe flag: 1:1 only when the .svg is printed at 100 % (check the 10 mm bar)</text>
 <text x="62.40" y="25.40" font-family="sans-serif" font-size="2.0">1.0 mm aluminium sheet. Blank 24.4 x 55.25 mm.</text>
 <text x="62.40" y="28.80" font-family="sans-serif" font-size="2.0">Dimensions from the BEND line and the dashed</text>
 <text x="62.40" y="32.20" font-family="sans-serif" font-size="2.0">neck centre line (= hole centre line).</text>

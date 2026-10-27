@@ -7,7 +7,8 @@ change the Python, then regenerate. Do not edit the exports by hand.
 Nothing has been built yet. The model is checked against itself (177 geometry checks, below), not against real parts.
 
 Paths below are relative to this `cad/` folder. In `SlabRail_CAD.zip` that folder is `SlabRail_CAD/cad/`, and this file is
-also copied to the top of the zip.
+also copied to the top of the zip. The zip holds only the exports listed in `package/cad_manifest.txt`: the Python
+sources (`cad/*.py`) and the regeneration commands below need the repo's [cad/ folder](https://github.com/Icevyy14/codex/tree/claude/psa-slab-batch-scanner-w2e2m9/psa-slab-scanner/cad).
 
 ## Units
 

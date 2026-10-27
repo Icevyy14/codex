@@ -5,9 +5,9 @@ diagram is [img/wiring.svg](img/wiring.svg). Firmware set-up is in [FIRMWARE.md]
 and pin numbers come from [CONTRACT.md](CONTRACT.md).
 
 Confidence tags: **[Certain]** = primary source (datasheet, schematic, FluidNC source),
-**[Likely]** = strong inference or several secondary sources, **[Guessing]** = a gap I filled.
-Vendor product pages could not be opened from this session. The module facts come from
-search-engine extracts of the listings, and every "measure" step below exists because of that.
+**[Likely]** = strong inference or several secondary sources, **[Guessing]** = a gap filled with an estimate.
+Vendor product pages were not read directly: the module facts come from search-result summaries
+of the listings, and every "measure" step below exists because of that.
 
 **Safety rules.**
 - Have a mechatronics instructor check the mains side (§1.1) before the first power-up.
@@ -323,7 +323,7 @@ Don't use IRF520 modules: they aren't logic-level.
 - **Module V+ must be the load's supply:** 24 V for Q1–Q3, 12 V for Q4–Q5. The diode returns the
   coil current to V+.
 - **Add a 10 kΩ resistor from SIG to GND on each module** unless you measured one already there.
-  Power off and measure SIG to GND **before the first power-up** (§14 step 13). [Guessing whether
+  Power off and measure SIG to GND **before the first power-up** (§14 step 14). [Guessing whether
   #5648 has one; Adafruit's listing does not mention one] The Pi's GPIOs float while it boots or is
   off, and the pull-down keeps the pump and valves off. Without it, a floating vent gate can open
   the vent and drop a held slab.
@@ -369,8 +369,8 @@ in "33" is the 3.3 V version. Don't buy that one.**
 - **At atmosphere: about 4.5 V at pin 5 and about 3.0 V at A0, so hw.py shows about 0 kPa.**
   - This assumes the standard direction: 0.5 V at −100 kPa, 4.5 V at 0 kPa, as `hw.py` expects.
     [Likely; CFSensor can calibrate either direction]
-  - If you read about 0.5 V at atmosphere, your sensor is reversed. Tell the software owner to flip
-    the formula. Don't rewire.
+  - If you read about 0.5 V at atmosphere, your sensor is reversed: the formula in `hw.py` must be
+    flipped (a software change). Don't rewire.
 - **Optional supply monitor on A1:** the output is ratiometric to the 5 V supply, and the Pi's 5 V
   can sit anywhere from 4.9 to 5.2 V. That error is ±3 kPa, which is fine for the −35 kPa seal
   threshold. Wiring A1 lets the software correct it later. [Likely]
@@ -764,35 +764,35 @@ Do this with everything wired, **mains unplugged**, and the E-stop released.
 3. Inlet L to N, switch on: **not a short (> 10 Ω)**. The supply's input circuit shows some
    reading.
 4. Fuse fitted, T3.15A. **LRS 115/230 switch on your mains voltage.** Terminal cover on.
-4a. **Mains box closed, gland tight, insulated receptacles on every inlet tab: no exposed mains
-    metal anywhere with the cord plugged in** (§1.1). Not on the plywood panel.
+5. **Mains box closed, gland tight, insulated receptacles on every inlet tab: no exposed mains
+   metal anywhere with the cord plugged in** (§1.1). Not on the plywood panel.
 
 **24 V side**
 
-5. 24 V switched bus to 0 V bus: **> 1 kΩ**. It rises as the meter charges the capacitors. Under
+6. 24 V switched bus to 0 V bus: **> 1 kΩ**. It rises as the meter charges the capacitors. Under
    10 Ω is a short: find it.
-6. E-stop pressed: LRS +V to 24 V switched bus **open**. Released: **< 0.5 Ω**. Check both NC
+7. E-stop pressed: LRS +V to 24 V switched bus **open**. Released: **< 0.5 Ω**. Check both NC
    blocks: each one alone must open the circuit when pressed (meter across each block).
-7. F1 = 5 A, F2 = 3 A, F3 = 1 A fitted.
-8. Rodent VIN polarity: red to "VCC", black to "GND". [Certain, terminal labels]
-9. **24 V bus to Pi 5 V pin: open.** **0 V bus to Pi GND: < 1 Ω.**
+8. F1 = 5 A, F2 = 3 A, F3 = 1 A fitted.
+9. Rodent VIN polarity: red to "VCC", black to "GND". [Certain, terminal labels]
+10. **24 V bus to Pi 5 V pin: open.** **0 V bus to Pi GND: < 1 Ω.**
 
 **Motors, switches, probe**
 
-10. Motor coils, at the motor plug:
+11. Motor coils, at the motor plug:
     - each coil pair **1–4 Ω** (the 17HS19-2004S1 is about 1.4 Ω [Likely]);
     - coil to coil **open**.
     - X plugged into socket **X** and Z into **Z**. **Nothing in Y or E.**
-11. Limit switches, at the unplugged board-end housing: signal to GND **≈ 0 Ω at rest, open when
+12. Limit switches, at the unplugged board-end housing: signal to GND **≈ 0 Ω at rest, open when
     pressed**.
 
 **Loads**
 
-12. Each MOSFET output: "+" to "−" with the load connected:
+13. Each MOSFET output: "+" to "−" with the load connected:
     - pump: a few tens of ohms [Guessing];
     - valve coil: hundreds of ohms [Guessing];
     - **never close to 0 Ω**.
-13. Divider resistors: measure each 10 kΩ, 20 kΩ and 2.2 kΩ (10k and 100k are easy to mix up),
+14. Divider resistors: measure each 10 kΩ, 20 kΩ and 2.2 kΩ (10k and 100k are easy to mix up),
     including the carry sensor's pair (§6a): its GPIO 6 node to GND, with the Pi lead and core 8 unplugged,
     about 20 kΩ.
     **MOSFET SIG pull-downs:** SIG to GND on each of Q1–Q5, Pi lead unplugged: **about 10 kΩ**. Open
@@ -800,8 +800,8 @@ Do this with everything wired, **mains unplugged**, and the E-stop released.
 
 **Board set-up**
 
-14. Rodent jumpers as §2. `r_sense_ohms` matches the resistor marking (FIRMWARE.md Step 0).
-15. Sensor: pin 1 not connected; pins 2 and 4 to 5 V; pins 3 and 6 to GND.
+15. Rodent jumpers as §2. `r_sense_ohms` matches the resistor marking (FIRMWARE.md Step 0).
+16. Sensor: pin 1 not connected; pins 2 and 4 to 5 V; pins 3 and 6 to GND.
 
 ## 15. First power-up
 
@@ -819,12 +819,12 @@ Do this with everything wired, **mains unplugged**, and the E-stop released.
 4. **Test each load from the Pi** with Raspberry Pi OS's `pinctrl`: `pinctrl set 17 op dh` turns
    the pump on and `pinctrl set 17 op dl` turns it off. [Likely, Bookworm tool] Do the same for
    27, 22, 23 and 24, one at a time. Each output must drive only its own load.
-4a. **Carry-height sensor** (it is powered from the Rodent, so the E-stop must be released):
+5. **Carry-height sensor** (it is powered from the Rodent, so the E-stop must be released):
    `pinctrl get 6` must read low with the slot clear and high with a card in it, and GPIO 6 must
    measure at least 2.5 V high (§6a). `python -m slabscan selftest` shows the same as its
    `carry sensor` line.
-5. Now follow FIRMWARE.md from Step 1.
-6. **After 10 minutes of motors holding:** the motor bodies may be warm but **below about 50 °C**
+6. Now follow FIRMWARE.md from Step 1.
+7. **After 10 minutes of motors holding:** the motor bodies may be warm but **below about 50 °C**
    (comfortable to hold a finger on). Hotter than that means the sense-resistor setting is wrong:
    power off (FIRMWARE.md step 0).
 
@@ -840,7 +840,7 @@ Do this with everything wired, **mains unplugged**, and the E-stop released.
    fix to decide before unattended use.
 4. **[Guessing] Head USB at about 4 m.** It works on paper. A cheap extension in a moving chain
    is the weakest cable in the machine. Watch for camera dropouts in the soak test.
-5. **[Guessing] Whether Adafruit #5648 has a SIG pull-down.** Measured in §14 step 13 before the
+5. **[Guessing] Whether Adafruit #5648 has a SIG pull-down.** Measured in §14 step 14 before the
    first power-up; add 10 kΩ if it reads open (§4). BUILD_GUIDE §13.4 ("unplug the Pi, the pump
    must stop") checks it again.
 6. **[Guessing] Probe flag chatter** with `probe_hard_limit: true`: see §6 "Hysteresis".

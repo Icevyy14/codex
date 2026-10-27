@@ -302,7 +302,7 @@ showed a code. BGS and SGC are reported to print a barcode or a QR on some holde
 type [Likely, second-hand]. If you deal other graders, put a few of their slabs through Phase 0
 (or photograph them and check the photos with `python -m tools.real_eval`, BUILD_GUIDE §1.7)
 before you trust `ok PSA` on slabs with no QR: an `ok PSA` on a BGS or SGC slab means the rule is
-wrong for them. Tell the software owner.
+wrong for them and needs a change (open item).
 
 ### 5.3 The summary lines
 
@@ -444,7 +444,7 @@ code stops for you ("… the head camera's aim is not checked this run yet …")
 `runner.survey`, `runner._work`; tested in the simulator]
 
 Every slab still appears exactly once. [Certain, in the simulator: `tests/test_resume.py`, 8
-passed when I ran it on 2026-10-22]
+passed when it was run on 2026-10-22]
 
 ### 8.1 The table
 
@@ -537,7 +537,7 @@ or hold the slab and pull the vacuum tube off the cup fitting.
 | Many pre-2016 PSA labels `needs_review`: "one printed barcode only (no QR) - confirm" or "barcode N but OCR read M" | Their front ITF is their only code, and it is `ok` only when OCR of the printed number agrees. OCR read nothing or other digits: the `tesseract` line of `selftest`, `focus station --save`, the station ring. [Certain, `certs.consensus`] |
 | Every pre-2016 PSA label `needs_review` "… grader PSA not confirmed …", or "N-digit PSA cert, but Phase 0 saw only …" | `custom_regex` is set (it turns off the 8-digit ITF rule), or `psa_cert_digits` leaves out 7 (§5.2) |
 | After a resume, every slab without a back-label code stops ("… aim is not checked this run yet …") | No pocket was empty at the resume survey. Empty pocket 12 before resuming (§8). |
-| A BGS, SGC or other non-PSA slab reads `ok PSA` | The 8-digit ITF rule is wrong for that grader (§5.2). Treat its `ok PSA` rows as `needs_review` and tell the software owner. |
+| A BGS, SGC or other non-PSA slab reads `ok PSA` | The 8-digit ITF rule is wrong for that grader (§5.2). Treat its `ok PSA` rows as `needs_review`; the rule needs a change (open item). |
 | `CAMERA AIM:` on every run | The head camera is tilted toward the cup, or a pocket pad has lint or a tag on it: BUILD_GUIDE §7.7, §12.3 |
 | A face-down-check stop at every older PSA label (and CGC Authentic, BGS) | Expected until the learned check is active (the start line says why). Check the stacks yourself and start such batches with `--all-face-down`. |
 | "Z stall suspected" more than once | The Z axis: a bind (lead screw, nut, rail), the motor current, the motor itself (BUILD_GUIDE §7.8 lift test). Not the sensor, if `selftest --motion` passes. |
@@ -644,13 +644,13 @@ window is not used. [Certain, `facedown.CardBackRefs`]
   front, so check that slab. Then delete what it taught: `refs --drop <its cert>` (the cert is in
   its `face_down_reference` line).
 
-**Limits.** [Certain, round-3 window] On studio scans of 63 real slabs, placed where the
+**Limits.** [Certain, with the earlier, larger card window] On studio scans of 63 real slabs, placed where the
 machine's camera would see them, clean frames gave 0 face-up fronts accepted and all 14 no-code
 backs accepted (with one reference); glare raised the scores of some fronts, which is why a match
 now needs two. With two, 223 of 252 face-down frames (glare included) and 0 of 332 face-up frames
 were accepted at 0.55. [Likely, CAD emulation of the same scans] Today's smaller window accepts
 about 101–103 of 126 face-down backs and 0 of 206 face-up slabs (highest face-up 0.49–0.53, under
-the 0.55 floor). The larger round-3 window let 12 of 206 face-up CGC fronts through with every slab
+the 0.55 floor). The earlier, larger window let 12 of 206 face-up CGC fronts through with every slab
 at the cup end of its play: the strip of holder above a CGC card looks the same from both sides.
 [Guessing] The real camera, through slab plastic, under your lights, has not been measured; nor
 have sleeves and stickers, and 15 face-up slabs in Phase 0 say little about the worst face-up slab.

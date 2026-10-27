@@ -156,7 +156,7 @@ def _flag_drawing() -> tuple[list, float, float]:
     dim_v(-tx - 3, 0, band, f"{-band:.1f}", left=True)
     dim_v(-tx - 3, 0, 13, "13 (trim)", left=True)
     notes = [
-        "SlabRail probe flag, 1:1 (check the 10 mm bar)",
+        "SlabRail probe flag: 1:1 only when the .svg is printed at 100 % (check the 10 mm bar)",
         f"1.0 mm aluminium sheet. Blank {x1 + tx:.1f} x {13 - bot:.2f} mm.",
         "Dimensions from the BEND line and the dashed",
         "neck centre line (= hole centre line).",

@@ -75,7 +75,7 @@ All commands are `python -m slabscan <command>`. Add `--sim` to use the simulato
 | `mark [--only 0,12] [--dry-run]` | Drill-template walk (above). `--dry-run` prints the order and positions. |
 | `run [--name NAME] [--front-photo always\|fallback] [--all-face-down] [--yes]` | One batch. It refuses to start before `calibrate z` and `calibrate x` have been run. `--yes` skips the start question. `--all-face-down` turns the face-down check off for this batch (below). |
 | `resume BATCH_DIR [--accept-heights] [--face-down-ok]` | Continues a stopped batch (below). `--face-down-ok`: you checked the slab the face-down check stopped on. It is refused unless the last stop was that face-down stop, and it confirms that one slab only. |
-| `sim [--slabs N] [--mix MIX] [--eras E] [--face-down-check] [--jp-rate R] [--sim-head cad\|cad_r2\|open\|none] [--sim-head-tilt DEG]` | Full simulated batch. Prints the summary and a time estimate. `--mix` sets the label mix per grader and era, e.g. `psa:current=0.6,psa:2017+=0.2,cgc:2023+=0.2` (kinds: `psa:current\|2017+\|2016\|old`, `cgc:2023+\|og\|authentic`, `bgs:`, `sgc:`; default: mostly PSA, some CGC, a few BGS); `--eras` is a PSA-only override. `--face-down-check` keeps the check on and counts the slabs it would stop at (a simulated operator confirms each). `--jp-rate` gives that share of cards the Japanese back. `--sim-head`: `cad` (the default) is today's head (lens 5 mm toward the label, card window clear), `cad_r2` the round-2 head whose foot hides the card window, `open` a hypothetical narrow head. `--sim-head-tilt DEG` tilts the simulated head camera toward the cup (a mis-aimed camera; it works with every command that takes `--sim`). |
+| `sim [--slabs N] [--mix MIX] [--eras E] [--face-down-check] [--jp-rate R] [--sim-head cad\|cad_r2\|open\|none] [--sim-head-tilt DEG]` | Full simulated batch. Prints the summary and a time estimate. `--mix` sets the label mix per grader and era, e.g. `psa:current=0.6,psa:2017+=0.2,cgc:2023+=0.2` (kinds: `psa:current\|2017+\|2016\|old`, `cgc:2023+\|og\|authentic`, `bgs:`, `sgc:`; default: mostly PSA, some CGC, a few BGS); `--eras` is a PSA-only override. `--face-down-check` keeps the check on and counts the slabs it would stop at (a simulated operator confirms each). `--jp-rate` gives that share of cards the Japanese back. `--sim-head`: `cad` (the default) is today's head (lens 5 mm toward the label, card window clear), `cad_r2` an earlier head design whose foot hides the card window, `open` a hypothetical narrow head. `--sim-head-tilt DEG` tilts the simulated head camera toward the cup (a mis-aimed camera; it works with every command that takes `--sim`). |
 | `web [--port 8080]` | Phone page (below). |
 | `phase0 [--sim N] [--out DIR] [--face-up N] [--save] [--force]` | The Phase 0 camera test (same as `python -m tools.phase0`): reads 30-50 of your slabs in the Phase 0 jig before you buy any motion parts. The read-rate report is written as soon as you type `q`. The face-up pass is off unless you ask for it (`--face-up` defaults to 0); a GO for the learned face-down check needs 15 face-up slabs. `--save` writes its threshold on a GO. Each run needs its own `--out` folder: one that already holds a `phase0.csv` is refused, and nothing in it changes (`--force` overwrites it). |
 | `refs [--drop CERT \| --drop-operator]` | Lists the learned face-down check's card-back references, with the batch, position and cert each came from. `--drop CERT` deletes one slab's reference, for example after a wrong confirmation; `--drop-operator` deletes every reference you confirmed and keeps the back-QR ones. |
@@ -115,7 +115,7 @@ confirm it with `resume --face-down-ok`.
     at most 10% of it may look the same on every slab as over an empty pocket.
   - Until then it acts like `"stop"`.
   - Today's CAD head (lens 5 mm toward the label, trimmed foot) leaves the card window clear
-    [Certain, in the CAD and the simulator]. A head that hides the window (the round-2 head) is
+    [Certain, in the CAD and the simulator]. A head that hides the window (an earlier head design) is
     detected and refused, and so is one that hides only part of it [Certain, sim: a foot edge 3 mm or
     more inside it; an edge 1 mm inside is not seen, and it lifts face-up scores from 0.37 to 0.52].
   - A slab is accepted only when **two** references (two different slabs) of one back design match it,
@@ -130,12 +130,12 @@ confirm it with `resume --face-down-ok`.
     A verdict counts only for the run that took it. A resume looks again over an empty pocket at its
     survey. If no pocket is empty, the learned check accepts nothing and learns nothing until the
     run empties its first source pocket and looks over that one. So a camera knocked while the run
-    was stopped is seen. [Certain, sim, round-3 card window: a camera knocked 1° while stopped is
+    was stopped is seen. [Certain, sim, earlier larger card window: a camera knocked 1° while stopped is
     caught, with and without an empty pocket at the resume.]
-    [Certain, sim, round-3 card window: a square camera passes, 0.5° toward the cup is caught; the
+    [Certain, sim, earlier larger card window: a square camera passes, 0.5° toward the cup is caught; the
     camera-locked check alone let 0.6–1.0° through: only 0–2% of the window was camera-locked.
     With today's smaller window a head part enters at about 1.3°, and the check fires from about
-    1.3° (a verifier measured 1.30° and 1.33°).]
+    1.3° (a separate measurement gave 1.30° and 1.33°).]
   - What the aim check does not see [Certain, sim and geometry]:
     - A head part as dark as the pad shows no edge, and the 10% camera-locked rule does not catch it
       either while it covers a strip of the window (a dark foot over 9–26% of the window read

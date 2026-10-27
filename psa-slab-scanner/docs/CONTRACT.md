@@ -47,7 +47,7 @@ Every document and file must agree with this page. If something here is wrong, f
   - Buffer: SMC `ZPT25UUK20-B5-A10`, M10 spring buffer, **non-rotating (K)**, **20 mm stroke**. SMC sells no 25 mm stroke on a 25 mm pad. [Certain, SMC ZP catalog Table 2] The rotating `J20` also works, because `head_foot`'s guide holds the flag.
   - Flag: 1 mm aluminium, in the CAD (`probe_flag`), its tab clamped between the buffer's M5 port hex and an SMC `M-5ALU-4` barb elbow (no washer, thread sealant; tube toward +Y). It trips the beam after 2.0 ± 0.5 mm of buffer travel (`buffer_trip_mm`), set with the board's ± 4 mm slots.
 
-## CAD decisions after the build review (binding)
+## CAD decisions made while checking the build guide (binding)
 - **Checks:** `cad/checks.py` runs 177 checks; all 177 pass (re-run on 23 Oct 2026, about 12–15
   min, numbers in `cad/out/checks.txt`). A CAD change is done only when they all pass again.
 - **Rails on slots:**
@@ -189,7 +189,7 @@ Every document and file must agree with this page. If something here is wrong, f
   - `mark`: drives the awl to every cell for the drill template.
   - `run [--name NAME] [--front-photo always|fallback] [--all-face-down] [--yes]`
   - `resume BATCH_DIR [--face-down-ok] [--accept-heights] [--yes]`
-  - `sim [--slabs N] [--mix MIX] [--eras E] [--face-down-check] [--jp-rate R] [--sim-head cad|cad_r2|open|none] [--sim-head-tilt DEG]`: full simulated batch, no hardware. `--sim-head-tilt` tilts the simulated head camera toward the cup (every command that takes `--sim` accepts it). `--mix` sets the label mix per grader and era (default: mostly PSA, some CGC, a few BGS); `--eras` is a PSA-only override. `--face-down-check` keeps the check on and counts the slabs it would stop at (a simulated operator confirms each). `cad` is today's head, `cad_r2` the round-2 head whose foot hid the card window.
+  - `sim [--slabs N] [--mix MIX] [--eras E] [--face-down-check] [--jp-rate R] [--sim-head cad|cad_r2|open|none] [--sim-head-tilt DEG]`: full simulated batch, no hardware. `--sim-head-tilt` tilts the simulated head camera toward the cup (every command that takes `--sim` accepts it). `--mix` sets the label mix per grader and era (default: mostly PSA, some CGC, a few BGS); `--eras` is a PSA-only override. `--face-down-check` keeps the check on and counts the slabs it would stop at (a simulated operator confirms each). `cad` is today's head, `cad_r2` an earlier head design whose foot hid the card window.
   - Bench tests (not part of the CLI): `python -m tools.bench_tests cycles|rest|lifts|drop|powercut N` (BUILD_GUIDE §7.8, §13).
   - Real-label check (not part of the CLI): `python -m tools.real_eval INDEX.json [--machine] [--glare]` or `--phase0 DIR`: the run's reading order, consensus and face-down rule on photos of real slabs; exit 1 on a wrong cert in an `ok` verdict or a false face-down proof.
   - `web [--port 8080]`: phone-friendly start/stop/progress page and CSV download.

@@ -30,17 +30,19 @@ than PSA/CGC, goes to the **exception pocket** at the right end.
 | Buy something | None exists | [Likely] No product feeds 200–300 graded slabs unattended. Raw-card sorters (Roca, PhyzBatch, SortSwift) exclude slabs. Sheet-fed scanners are rated "Slabs: No". See RESEARCH.md. |
 | Hands-free 2D presentation scanner (~$350–650) | Best no-build option | [Likely] 20–30 slabs/min by hand, ~10 min per 250. The machine saves that time and adds a photo of every slab. |
 | Gravity hopper / friction feeder | Rejected | [Certain, arithmetic] The bottom slab gets dragged out under the whole stack. A 300-slab column is about 2 m tall and 15–18 kg, so that's ~60 N of face-on-face drag across a glossy front. PSA slabs have no stacking ridges. |
-| Slotted racks, lift-and-read in place (concept A) | Rejected | [Certain, panel geometry] A straight lift hits the neighbouring slab. It only works if every slab leans at 10°, which leaves 2.2 mm margins. Loading is one slot at a time. |
+| Slotted racks, lift-and-read in place (concept A) | Rejected | [Certain, slot geometry] A straight lift hits the neighbouring slab. It only works if every slab leans at 10°, which leaves 2.2 mm margins. Loading is one slot at a time. |
 | Desktop robot arm (concept D) | Rejected | [Likely] Reach covers about 80–160 slabs. The arm that reaches 300 costs about twice the budget. |
-| **Short stacks + top pick by vacuum, one-pocket shuffle (concept B)** | **Chosen** | Two research agents and the design panel arrived at it independently. No slab ever slides on another. The cup touches only the back. Loading is fast because you drop in handfuls. |
+| **Short stacks + top pick by vacuum, one-pocket shuffle (concept B)** | **Chosen** | Two separate research passes and the concept comparison (§2a) both arrived at it. No slab ever slides on another. The cup touches only the back. Loading is fast because you drop in handfuls. |
 | B on a 2-D grid (4 motors) vs **one row (2 motors)** | **One row** | You asked for the fewest moving parts. One row removes the whole Y axis: 2 motors, 2 rails and the gantry squaring. Cost: a footprint of about 1.44 m × 0.29 m (CAD, feet included; the bed is 1416 × 289.5 mm). The grid version is in git (`grid-variant-v1`). |
 
-### 2a. What the independent design panel said (and what changed because of it)
+### 2a. Concept comparison (and what changed because of it)
 
-Five agents each designed a different concept in depth. Three judges then scored all five,
-each through one lens: slab safety, reliability/buildability, and practical value.
+During design, five candidate concepts (A–E) were each worked out in depth and then scored 1–10
+against the requirements under three headings: slab safety, reliability/buildability, and practical
+value. This was an internal, structured comparison made while designing, not an outside review: an
+outside review is what this package is for.
 
-**Scores (1–10)**
+**Scores (1–10, from the internal comparison)**
 
 | Concept | Safety | Buildability | Practical |
 |---|---|---|---|
@@ -51,14 +53,14 @@ each through one lens: slab safety, reliability/buildability, and practical valu
 | E, "flip-through lanes" page-turner | 6 | **7** | **6.5** |
 
 **Why this is still B (as SlabRail), not E.**
-- [Likely] E's slab physics is unproven. Its own author says so. It needs 300 hand-loaded slabs
+- [Likely] E's slab physics is unproven. Its own write-up says so. It needs 300 hand-loaded slabs
   in a row to peel, pass a 2.6–4.3° balance point, and settle flush, every time.
 - Pick-and-place of flat, smooth parts from stacks is what every SMT and packaging line does.
   Its failure modes are known, detectable and simulated here.
-- The judges scored the original B, a 4-motor grid. Their main complaints have been fixed in
-  SlabRail:
+- The comparison scored the original B, a 4-motor grid. The objections raised against it in the
+  comparison, and how SlabRail answers them:
 
-| Judge's objection to B | Fix in SlabRail |
+| Objection raised in the comparison | How SlabRail answers it |
 |---|---|
 | Fingers can't reach slabs in tight corrals | Separate dowels, not walls. There is a 52 mm finger gap at the front and back of every pocket for lowering bundles of 5–10 when loading, and for taking slabs off the top in bundles of up to 5 when unloading. Never lift or flip a whole stack (OPERATING.md §6). |
 | Printed posts can lean | Dowels sit in drilled holes, 15 mm deep, drilled through a printed vertical guide. |
@@ -247,8 +249,8 @@ screw 0.13, printed parts 0.22 (0.15–0.31 kg for a solid fraction of 0.5–1.0
     316 ITF-rule `ok` frames gave 0 wrong certs] Only a `needs_review` with grader PSA or CGC may
     stay in the output stack; `unknown`, `PSA/CGC` or no grader goes to the exception pocket. A
     grader guessed from the length still counts, so another grader's slab whose barcode has a PSA or
-    CGC format can reach the output stack as `needs_review` [Certain, verifier probe: a 10-digit
-    Code128 is typed CGC], and another grader's 8-digit ITF that OCR confirms would read `ok PSA`
+    CGC format can reach the output stack as `needs_review` [Certain, a direct test of `certs.parse_payload`:
+    a 10-digit Code128 is typed CGC], and another grader's 8-digit ITF that OCR confirms would read `ok PSA`
     [Guessing that one exists]. Two settings switch the ITF rule off in effect: `custom_regex`
     (every ITF is then typed by it) and a `psa_cert_digits` without 7.
   - **OCR finds a digit run, not a grader.** Tokens are 8–10 digits or 140 + 10. An OCR-only number
@@ -321,7 +323,7 @@ the same card back through the plastic, and a face-up slab shows a card front th
   frustum checks]. On the card plane (3.5 mm under the slab back, rounded corners) a PSA slab keeps
   it on the card anywhere in its play; a CGC slab pushed into a pocket corner has 1.52% of it on
   the holder (4.5% if the 3.5 mm were all air), checked against a 2% limit [Likely, `checks.py`].
-  The window shrank from 632.5 mm² because the round-3 one let 12 of 206 face-up CGC fronts through
+  The window shrank from 632.5 mm² because the earlier, larger one let 12 of 206 face-up CGC fronts through
   in an emulation of the real scans with every slab at the cup end of its play [Likely]: the strip
   of holder above a CGC card looks the same from both sides.
 - Each rectangle is cropped with a 4 mm margin and box-resampled to 1 px/mm. That removes noise,
@@ -333,7 +335,7 @@ the same card back through the plastic, and a face-up slab shows a card front th
 - **Score = the lower of the two, and a slab needs two references** (from two different slabs of
   the matched back design) at the threshold, not only the best one. A false accept puts the cup on
   a front; a false reject only stops the run.
-- Cost [Certain, measured on the development container]: about 2 ms to describe a full 3264 × 2448
+- Cost [Certain, measured on the development computer, not a Pi]: about 2 ms to describe a full 3264 × 2448
   frame and about 2 ms to compare it with 48 references. [Guessing] 10–20 ms on a Pi 5. It adds one
   head frame per run (the empty-pocket view), none per slab.
 
@@ -373,7 +375,7 @@ the same card back through the plastic, and a face-up slab shows a card front th
     empty pocket at its survey (as before); if none is empty, it now accepts and learns nothing
     until it has emptied its first source pocket and looked over that, so a camera knocked while
     the run was stopped is seen [Certain, sim: a 1° knock caught with and without an empty pocket;
-    the no-empty-pocket tests fail on the round-4 code]. The cost: with no empty pocket, every slab
+    the no-empty-pocket tests fail on the code before this change]. The cost: with no empty pocket, every slab
     without a back-label code stops until then, so the operator should empty pocket 12 first.
     Its blind spots:
     - a head part as dark as the pad shows no edge, and layer 7 does not catch it either while it
@@ -390,7 +392,7 @@ the same card back through the plastic, and a face-up slab shows a card front th
 
 **Limits.**
 - [Certain, CAD aim check] **Camera aim:** a head-camera tilt of more than 1.34° toward the cup
-  puts the cup pad into the window (1.31° with the software's own 147 mm mapping, by an independent
+  puts the cup pad into the window (1.31° with the software's own 147 mm mapping, by a separate
   ray cast). 1.5° is out of reach: the cup pad sets the limit, and a window that clears it at 1.5°
   leaves under the software's 300 mm². Layer 10 catches a tilt toward the cup from about 1.3°;
   its blind spots are above. A head edge about 1 mm inside the window raised face-up scores in the
@@ -413,10 +415,10 @@ the same card back through the plastic, and a face-up slab shows a card front th
   blue Water-type front reached 0.62 under glare against one odd back; glare raised such scores.
   The real camera through slab plastic, sleeves, stickers and other games are untested.
 - [Certain, sim] The simulator's face-up scores keep rising as the window shrinks: 0.24, then
-  0.43–0.46 with the round-3 window, now 0.57 in the Phase 0 simulation (threshold 0.69, lowest
+  0.43–0.46 with the earlier, larger window, now 0.57 in the Phase 0 simulation (threshold 0.69, lowest
   back 0.81; the simulator now places each card where real holders of its grader put it). The margin is synthetic. [Likely, CAD emulation of the real scans] With today's window
   the highest face-up score is 0.49–0.53 against the 0.55 floor, and about 101–103 of 126 face-down
-  backs are accepted (the round-3 window: 113–116).
+  backs are accepted (the earlier, larger window: 113–116).
 
 ## 6. Verification done here (no real hardware)
 
@@ -427,10 +429,10 @@ the same card back through the plastic, and a face-up slab shows a card front th
 | Carry-height sensor | `checks.py` `check_carry_sensor` | [Certain] trips at c = 246.50; beam clear from −14 to 242, fully blocked from 248 to the 262 top stop; flag 1.05 mm from the sensor, flag arm 4.6 mm from every part fixed to the X carriage, its lead 11.0 mm from anything moving; a head stalled just above where it reads clear (245.5) still carries a double thick pick 2.5 mm over the rods. |
 | Probe flag, guide and sensor over the buffer's 20 mm stroke | `cad/checks.py` `check_probe` | [Certain] trip at 2.00 mm; beam clear for 1.5 mm, fully blocked from 3 to 20 mm; flag 1.05 mm from the sensor and 0.45 mm from its guide; 8 mm guide engagement at full stroke; a rotating (J) buffer stopped at 1.32°, 0.6 mm from the sensor; buffer ± 3 mm on its thread still covered by the ± 4 mm board slots; pad 1.5 mm clear of the buffer body at full stroke; nothing in the label view while reading; a ball-end key reaches the front board screw (1.63 mm clear). |
 | Phase 0 jig vs machine | `cad/checks.py` `check_phase0` | [Certain] the occluder (foot, buffer, flag, elbow, board) sits 0.0 mm from the machine's relative to the lens and blocks the same share of the slab view; the face-up pass (mount 3 mm up) leaves the free cup 1.0 mm above the slab's front; every jig wall an M5×10 passes through is 4.0 mm. |
-| Unit tests: cert parsing on the real payload strings, grader and side rules (including the 8-digit ITF rule, tried over every combination of reads), phantoms, decode at the design point, OCR fallback, the learned face-down descriptor and the camera-aim check (including a resume with and without an empty pocket), the carry-height sensor, config checks | `software/tests` | **`300 passed, 1 skipped in 1410.97s (0:23:30)`** (full suite on the final code, 27 Oct 2026, after the config-default fix and the new test that keeps every config default equal to the CAD; slower than usual because the CAD checks ran at the same time) and the real-image test on its own: **`1 passed, 61 deselected in 137.29s (0:02:17)`** [Certain, the software fixer's runs]. On the code just before the last fix, the full suite with the real-image test gave `300 passed in 1202.90s (0:20:02)`. The skipped test runs `tools/real_eval.py` on the real image set when `SLABRAIL_REAL_IMAGES` points to it. |
-| End-to-end batches in a simulator that **raises Crash on any unsafe move** | `software/tests/test_runner_sim.py`, `test_safety_fixes.py`, `test_bench_tests.py`, `test_face_down_learned.py`, `test_carry_sensor.py` | pass [Certain]. Scenarios: every slab moved and read; pre-2016 labels via the station; double pick detected; seal failure stops; overfill refused; CGC read, BGS to the exception pocket; face-down check, including FACE-UP and neighbour stops; an unexpected error with a slab in the cup; failed vent; vacuum sensor fault; Ctrl-C hard stop; a Z stall (40 mm and 10 mm losses) caught before the sideways move, a stuck or cut carry sensor, its selftest. Learned check: an old label passes once references exist; a face-up slab still stops; a plain face-up front with glare is refused; the round-2 head and a partly hidden window are refused; one wrong confirmation, or a neighbour's back QR in the frame, does not teach a front; a back code seen from below vetoes a reference; a Japanese back needs 3 confirmations; `--face-down-ok` is refused after another stop; a lower neighbour's back QR beside the slab is cropped out. |
-| 330-slab simulated batch (seed 7, default label mix, `--face-down-check`) | `sim --slabs 330 --face-down-check` | [Certain, sim, 23 Oct 2026, the round-5 code; the last fix touches only reads the simulator never makes, Likely] `needs_review 6, ok 324`: 5 BGS slabs OCR-only (pocket 12) and 1 pre-2016 PSA slab whose OCR read 9 digits (output stack). The other 20 pre-2016 PSA slabs are `ok` from their front ITF and OCR. No `ok` has a wrong cert or a wrong grader (checked against the simulated slabs). Face-down: 287 by back QR, 41 learned (lowest score 0.76), 2 confirmed (the first slabs, before 5 references existed); with back-label codes only, 43 would have stopped. `camera_aim: ok`. 14.2 s per slab, 79.4 min for the load (homing + survey 75 s), 991 head frames. With the head camera tilted 0.8° (`--sim-head-tilt 0.8`, round-3 window, 110 slabs) the aim check fired and every slab without a back code stopped (15 of 110). The mix (PSA current 170, 2017+ 56, 2016 12, older 21; CGC 2023+ 49, OG 12, Authentic 5; BGS 5) is [Guessing], and every simulated slab is face-down: the learned acceptances say nothing about face-up safety (the unit tests and Phase 0 cover that). Phase 0 on the simulator: GO, lowest back-to-back 0.81, highest face-up 0.57, threshold 0.69 (round-3 window: 0.82, 0.43, 0.62). The simulator places each card where real holders of its grader put it (`sim.HOLDERS`, the CAD's `layout.HOLDERS`). |
-| Real labels: the machine's rules on public scans of 64 real slabs | `tools/real_eval.py` | [Certain for these images, 23 Oct 2026] Native (round-5 code): `ok` 60, `needs_review` 2 (pre-2016 PSA: OCR read other digits on `19802594`, nothing on `20908923`), `no_read` 2 (BGS, SGC: no code), **0 wrong certs in `ok`, 0 false face-down proofs**. Machine-equivalent (rescaled to the cameras, degraded, cropped as the runner does; 61 slabs; final code): 60 `ok`, 0 `needs_review`, 1 `no_read` (BGS), 0 wrong, 0 false; all 7 pre-2016 PSA slabs `ok` with "grader PSA from its 8-digit ITF". Before the ITF rule the 7 pre-2016 slabs were `needs_review` on both. With glare on the label (a run before the last fixes): 58 `ok`, 3 `needs_review`, 0 wrong. Before these rules the same images gave 1 silent wrong cert (the 13-digit CGC). **The rules were written from these 64 slabs**, and flat studio scans have no slab-plastic reflections: this shows the rules fit them, not that the machine will read yours. |
+| Unit tests: cert parsing on the real payload strings, grader and side rules (including the 8-digit ITF rule, tried over every combination of reads), phantoms, decode at the design point, OCR fallback, the learned face-down descriptor and the camera-aim check (including a resume with and without an empty pocket), the carry-height sensor, config checks | `software/tests` | **`300 passed, 1 skipped in 1410.97s (0:23:30)`** (full suite on the final code, 27 Oct 2026, after the config-default fix and the new test that keeps every config default equal to the CAD; slower than usual because the CAD checks ran at the same time) and the real-image test on its own: **`1 passed, 61 deselected in 137.29s (0:02:17)`** [Certain, pytest output]. On the code just before the last fix, the full suite with the real-image test gave `300 passed in 1202.90s (0:20:02)`. The skipped test runs `tools/real_eval.py` on the real image set when `SLABRAIL_REAL_IMAGES` points to it. |
+| End-to-end batches in a simulator that **raises Crash on any unsafe move** | `software/tests/test_runner_sim.py`, `test_safety_fixes.py`, `test_bench_tests.py`, `test_face_down_learned.py`, `test_carry_sensor.py` | pass [Certain]. Scenarios: every slab moved and read; pre-2016 labels via the station; double pick detected; seal failure stops; overfill refused; CGC read, BGS to the exception pocket; face-down check, including FACE-UP and neighbour stops; an unexpected error with a slab in the cup; failed vent; vacuum sensor fault; Ctrl-C hard stop; a Z stall (40 mm and 10 mm losses) caught before the sideways move, a stuck or cut carry sensor, its selftest. Learned check: an old label passes once references exist; a face-up slab still stops; a plain face-up front with glare is refused; an earlier head design that hid the window and a partly hidden window are refused; one wrong confirmation, or a neighbour's back QR in the frame, does not teach a front; a back code seen from below vetoes a reference; a Japanese back needs 3 confirmations; `--face-down-ok` is refused after another stop; a lower neighbour's back QR beside the slab is cropped out. |
+| 330-slab simulated batch (seed 7, default label mix, `--face-down-check`) | `sim --slabs 330 --face-down-check` | [Certain, sim, 23 Oct 2026, on the code of that date; the last fix touches only reads the simulator never makes, Likely] `needs_review 6, ok 324`: 5 BGS slabs OCR-only (pocket 12) and 1 pre-2016 PSA slab whose OCR read 9 digits (output stack). The other 20 pre-2016 PSA slabs are `ok` from their front ITF and OCR. No `ok` has a wrong cert or a wrong grader (checked against the simulated slabs). Face-down: 287 by back QR, 41 learned (lowest score 0.76), 2 confirmed (the first slabs, before 5 references existed); with back-label codes only, 43 would have stopped. `camera_aim: ok`. 14.2 s per slab, 79.4 min for the load (homing + survey 75 s), 991 head frames. With the head camera tilted 0.8° (`--sim-head-tilt 0.8`, the earlier, larger window, 110 slabs) the aim check fired and every slab without a back code stopped (15 of 110). The mix (PSA current 170, 2017+ 56, 2016 12, older 21; CGC 2023+ 49, OG 12, Authentic 5; BGS 5) is [Guessing], and every simulated slab is face-down: the learned acceptances say nothing about face-up safety (the unit tests and Phase 0 cover that). Phase 0 on the simulator: GO, lowest back-to-back 0.81, highest face-up 0.57, threshold 0.69 (the earlier, larger window: 0.82, 0.43, 0.62). The simulator places each card where real holders of its grader put it (`sim.HOLDERS`, the CAD's `layout.HOLDERS`). |
+| Real labels: the machine's rules on public scans of 64 real slabs | `tools/real_eval.py` | [Certain for these images, 23 Oct 2026] Native (23 Oct 2026 code): `ok` 60, `needs_review` 2 (pre-2016 PSA: OCR read other digits on `19802594`, nothing on `20908923`), `no_read` 2 (BGS, SGC: no code), **0 wrong certs in `ok`, 0 false face-down proofs**. Machine-equivalent (rescaled to the cameras, degraded, cropped as the runner does; 61 slabs; final code): 60 `ok`, 0 `needs_review`, 1 `no_read` (BGS), 0 wrong, 0 false; all 7 pre-2016 PSA slabs `ok` with "grader PSA from its 8-digit ITF". Before the ITF rule the 7 pre-2016 slabs were `needs_review` on both. With glare on the label (a run before the last fixes): 58 `ok`, 3 `needs_review`, 0 wrong. Before these rules the same images gave 1 silent wrong cert (the 13-digit CGC). **The rules were written from these 64 slabs**, and flat studio scans have no slab-plastic reflections: this shows the rules fit them, not that the machine will read yours. |
 | Real slabs, real cameras, real cup | — | **Not done.** Phase 0 + acceptance tests in BUILD_GUIDE are mandatory before trusting it with your inventory. |
 
 ## 7. Known risks and what retires them
@@ -441,20 +443,20 @@ the same card back through the plastic, and a face-up slab shows a card front th
 | Cup leaves visible marks | Phase 0B 24 h marking test with a hand pump, then the 300-cycle + 24 h test on the machine with the vacuum re-held all the time (BUILD_GUIDE §13.2). Swap cup material if needed (BOM lists two). |
 | Slabs without a back-label code stop the run | The learned check, once Phase 0 says GO and 5 references exist: 2 stops in 330 in the simulator [Certain, sim; Guessing for real backs through plastic]. Until then use `run --all-face-down` only for stacks you checked yourself. |
 | A real face-up front looks like a card back (blue Water-type fronts came closest) | Two references per match; a blue Water-type card in Phase 0's face-up pass; the back photo of every learned row audited in the first batches. |
-| The head camera is aimed off, so a head part or the holder sits in the card window | The camera-aim check (layer 10) refuses a tilt toward the cup from about 1.3°. Not covered: a pad-dark head part, a tilt away from the cup, a roll (a CGC corner slab has about 0.01° toward the label): BUILD_GUIDE §12.3 look at `face_down_window.jpg`, a shim under the board. Software owner: measure aim in both axes from positive evidence (the back-QR box position, the card-top edge). |
-| The camera-aim check fires on a square camera (lint, dust, glue, a shadow on the pad) | Safe: the learned check stays off and slabs without a back code stop. Its thresholds need a real empty-pocket frame (Phase 0, `focus head`'s `focus_head_empty.jpg`). Software owner. |
+| The head camera is aimed off, so a head part or the holder sits in the card window | The camera-aim check (layer 10) refuses a tilt toward the cup from about 1.3°. Not covered: a pad-dark head part, a tilt away from the cup, a roll (a CGC corner slab has about 0.01° toward the label): BUILD_GUIDE §12.3 look at `face_down_window.jpg`, a shim under the board. Open item (software): measure aim in both axes from positive evidence (the back-QR box position, the card-top edge). |
+| The camera-aim check fires on a square camera (lint, dust, glue, a shadow on the pad) | Safe: the learned check stays off and slabs without a back code stop. Its thresholds need a real empty-pocket frame (Phase 0, `focus head`'s `focus_head_empty.jpg`). Open item (software). |
 | A CGC slab pushed into a pocket corner has up to about 1.5–4.5% of the window on the holder | [Likely] The 2% limit is a judgment, not a margin. Audit learned CGC rows. A +0.5 mm edge margin was tried and is out of reach: one rectangle with that margin leaves 266 mm² (the software needs 300), and the best 3-rectangle window (+0.53 mm at 300 mm²) moves y1 to −17.05, which cuts the aim margin to 0.97° against the 1.25° floor. The window stays as it is [Certain, CAD trade-off search; Likely that no shape does better: the search was a grid]. |
 | A neighbour's label in the head camera's crop | The crop to the slab's footprint; the two-cert rule; measuring `cam_head.hfov_deg`; a lens of F2.8 or faster (BOM). |
 | A Z stall drags a slab sideways below the rod tops | The carry-height sensor: a loss over about 2.5 mm is caught before any sideways move (CAD and simulator). The §7.8 100-lift test still has to pass; jog, calibrate and mark do not read the sensor. |
 | A phantom barcode confirms itself or drops the real read | [Certain, tested] Frames of one symbol count once, only the thin read inside the other read's box can be dropped, and a confirmed thin read makes a `conflict`. Two barcodes with the same misread are checked by OCR; if OCR reads nothing the slab stays `ok`. |
 | Another grader's bare barcode is typed by its length (10 digits = CGC) | [Guessing that such labels exist] It is never `ok` (grader not confirmed), but as `needs_review` with a guessed PSA or CGC grader it stays in the output stack. The narrower length rules are applied now: a PSA Code128 is 8–9 digits and a 10-digit CGC one never starts with 0, so a 7-digit Code128 or a BGS-style `0019865140` is not typed at all (exception pocket) [Certain, `certs.py`; tested]. |
 | Another grader prints an 8-digit ITF, and OCR reads its printed number | [Guessing that one exists] The ITF rule would give `ok PSA`: the right digits, the wrong grader, in the output stack. In the real set ITF is only on PSA labels, but that set has 1 BGS and 1 SGC slab; BGS and SGC are reported to print a barcode or QR on some holders, type unknown [Likely, second-hand]. A sweep of 216 BGS, SGC and CGC frames found no ITF of any length [Certain, that set]. Put any non-PSA slabs you own through Phase 0 or `tools.real_eval` (OPERATING.md §5.2). |
-| OCR confirms an ITF from a longer zero-padded number | [Guessing that it happens] The ITF rule compares certs with their leading zeros stripped, so OCR reading `0019865140` (a BGS-style number) would confirm an ITF `19865140` and give `ok PSA`. On every real ITF-rule `ok` frame the OCR digits equalled the ITF's exactly (316 of 316) [Certain, stress run]. Software owner: require the raw digits to match. |
-| OCR picks one of two equally long digit runs at random | [Certain, verifier probe] `decode.ocr_digits` keeps the first longest token, and the order of a tie depends on the process's hash seed. Since OCR now decides `ok` versus `needs_review` for pre-2016 PSA slabs, the same slab can come out either way in two runs. Safe both ways (a non-matching token gives `needs_review`). Software owner: break ties by value, or return no read on a tie. |
+| OCR confirms an ITF from a longer zero-padded number | [Guessing that it happens] The ITF rule compares certs with their leading zeros stripped, so OCR reading `0019865140` (a BGS-style number) would confirm an ITF `19865140` and give `ok PSA`. On every real ITF-rule `ok` frame the OCR digits equalled the ITF's exactly (316 of 316) [Certain, stress run]. Open item (software): require the raw digits to match. |
+| OCR picks one of two equally long digit runs at random | [Certain, tested directly] `decode.ocr_digits` keeps the first longest token, and the order of a tie depends on the process's hash seed. Since OCR now decides `ok` versus `needs_review` for pre-2016 PSA slabs, the same slab can come out either way in two runs. Safe both ways (a non-matching token gives `needs_review`). Open item (software): break ties by value, or return no read on a tie. |
 | A homing switch lever is longer than the strikers allow, or wears under the sideways push | Measure each lever and cut it back past 23 mm (BUILD_GUIDE §6.8) [Certain, CAD: X takes 27.24 mm, Z 24.19 mm]. The 45° lead-in pushes the lever sideways as hard as down; the datasheet rates only a straight push [Guessing that it holds]: a 100-pass bench test before the build, and FIRMWARE.md step 6's homing repeat test after. |
 | The 42.8 mm head ring bore prints small | [Likely] A 42.5 mm ring has 0.15 mm of radial clearance in the CAD, and printed holes come out 0.1–0.3 mm small: sand the bore for a ring over about 42.2 mm (BUILD_GUIDE §3.3). |
 | The buffer and elbow differ from their catalog dimensions | Measure them on arrival (BUILD_GUIDE §3.3) before cutting the flag; the board slots give ± 4 mm of trip adjustment. |
 | Beam twist larger than estimated | Dial-indicator check during the build. A rear diagonal brace is in the guide. |
 | Double picks (slabs clinging) | Peel dwell. Detected at placement (step ≥ 11.6 mm) and flagged with the exact position. |
 | Mixed weird holders (SGC 86 mm wide doesn't fit; BGS/TAG widths unmeasured; sleeves) | Loading rules in OPERATING.md. SGC is too wide for the pockets. Measure one BGS, TAG and CGC holder before loading them: anything wider than 82.6 mm is "do not load". |
-| The runner crops held-slab head frames as if the label were 140 mm from the lens; the CAD puts a held slab at 142 mm (the free cup's 2 mm hang) | [Certain, code vs CAD] A 1.4% scale error: the ±38.3 mm crop covers about ±38.85 mm, inside the 36–46 mm range the config allows. Software owner: use the held distance for held frames. |
+| The runner crops held-slab head frames as if the label were 140 mm from the lens; the CAD puts a held slab at 142 mm (the free cup's 2 mm hang) | [Certain, code vs CAD] A 1.4% scale error: the ±38.3 mm crop covers about ±38.85 mm, inside the 36–46 mm range the config allows. Open item (software): use the held distance for held frames. |

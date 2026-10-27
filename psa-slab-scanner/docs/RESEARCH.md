@@ -1,8 +1,8 @@
 # Research summary
 
 Confidence tags: **[Certain]** = primary source, **[Likely]** = strong inference or several
-secondary sources, **[Guessing]** = filling a gap. Research date: October 2026. Many sites
-blocked direct page fetches, so most facts come from search-engine extracts of the cited pages.
+secondary sources, **[Guessing]** = filling a gap. Research date: October 2026. Most facts
+come from search-result summaries of the cited pages, not from reading each page in full.
 
 ## 1. Does this machine already exist?
 

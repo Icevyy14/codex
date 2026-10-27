@@ -6,7 +6,7 @@ testing every motor, switch and the contact probe before the Pi software takes o
 
 Confidence tags: **[Certain]** = read in a primary source (BTT's files, the FluidNC v4.1.1
 source code), **[Likely]** = strong inference or several secondary sources, **[Guessing]** = a
-gap I filled.
+gap filled with an estimate.
 
 ## Read this first
 
@@ -44,7 +44,7 @@ The Rodent fits the job: [Certain, BTT manual and schematic]
 - a USB-C port with a CH340K USB-serial chip;
 - an official FluidNC config from BTT.
 
-Two axes only need two drivers, so the extra drivers become plug-in spares (see below). I found no
+Two axes only need two drivers, so the extra drivers become plug-in spares (see below). No
 reason to switch boards.
 
 The cheaper MKS DLC32 would also run FluidNC, but its plug-in stepstick drivers and 3.3 V GPIO

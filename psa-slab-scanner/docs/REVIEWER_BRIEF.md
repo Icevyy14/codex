@@ -11,8 +11,10 @@ Confidence tags are copied from the doc each number comes from: **[Certain]** = 
 or checked in the CAD or simulator; **[Likely]** = strong inference; **[Guessing]** = needs a real
 test. **[Certain] on a calculation or a CAD check means the arithmetic or the geometry is exact for
 the model and its inputs; it is not a test of the real part**, and many inputs are catalog values
-or estimates (§8). Units are mm unless stated. "DESIGN §4" is section 4 of `docs/DESIGN.md`;
-"D-05" is a drawing sheet (§10.2).
+or estimates (§8). Units are mm unless stated. **c** is the machine's Z: the cup-face height above
+the top of the pocket floor pads, which are Z = 0 (travel height c = 248). SF is a safety factor,
+capacity over load. "DESIGN §4" is section 4 of `docs/DESIGN.md`; "D-05" is a drawing sheet
+(§10.2).
 
 ## 1. What it is
 
@@ -232,16 +234,17 @@ A short answer with the question number is enough. Label and face-down risks are
 
 | Where | What it is |
 |---|---|
-| `package/SlabRail_Design_Review.pdf` | The review PDF. Start here. |
-| `package/SlabRail_Complete_Documentation.pdf` | All the docs in one PDF. |
-| `package/SlabRail_CAD.zip` | The CAD files in §10.4: exactly the list in `package/cad_manifest.txt`. |
-| `web/slabrail.html` | One-page overview, as of 23 Oct 2026; where it disagrees with the docs, the docs win. |
-| `web/slabrail_3d.html` | Interactive 3D model generated from the CAD: rotate, click a part to see what it is, hide groups. |
-| `web/slabrail_replay.html` | Animated replay of a simulated 330-slab batch, run by the real machine software, with synthetic labels. |
-| `docs/history/` | Design-round reports (rounds 2–5), the real-label evaluation and its independent check, sourcing data. **Historical: their numbers may be out of date.** |
+| [`package/SlabRail_Design_Review.pdf`](https://github.com/Icevyy14/codex/tree/claude/psa-slab-batch-scanner-w2e2m9/psa-slab-scanner/package/SlabRail_Design_Review.pdf) | The review PDF. Start here. |
+| [`package/SlabRail_Complete_Documentation.pdf`](https://github.com/Icevyy14/codex/tree/claude/psa-slab-batch-scanner-w2e2m9/psa-slab-scanner/package/SlabRail_Complete_Documentation.pdf) | All the docs in one PDF. |
+| [`package/SlabRail_CAD.zip`](https://github.com/Icevyy14/codex/tree/claude/psa-slab-batch-scanner-w2e2m9/psa-slab-scanner/package/SlabRail_CAD.zip) | The CAD files in §10.4: exactly the list in [`package/cad_manifest.txt`](https://github.com/Icevyy14/codex/tree/claude/psa-slab-batch-scanner-w2e2m9/psa-slab-scanner/package/cad_manifest.txt). |
+| [`web/slabrail.html`](https://github.com/Icevyy14/codex/tree/claude/psa-slab-batch-scanner-w2e2m9/psa-slab-scanner/web/slabrail.html) | One-page overview, as of 23 Oct 2026; where it disagrees with the docs, the docs win. |
+| [`web/slabrail_3d.html`](https://github.com/Icevyy14/codex/tree/claude/psa-slab-batch-scanner-w2e2m9/psa-slab-scanner/web/slabrail_3d.html) | Interactive 3D model generated from the CAD: rotate, click a part to see what it is, hide groups. |
+| [`web/slabrail_replay.html`](https://github.com/Icevyy14/codex/tree/claude/psa-slab-batch-scanner-w2e2m9/psa-slab-scanner/web/slabrail_replay.html) | Animated replay of a simulated 330-slab batch, run by the real machine software, with synthetic labels. |
+| [`docs/history/`](https://github.com/Icevyy14/codex/tree/claude/psa-slab-batch-scanner-w2e2m9/psa-slab-scanner/docs/history/) | Reports from each design iteration, the real-label evaluation and a separate check of its claims, the link and price data behind the shopping list, and the BOM's change log. **Historical: their numbers may be out of date.** |
 
 GitHub shows HTML as source: download a `web/` file and open it in a browser (online, for the
-fonts and the 3D library).
+fonts and the 3D library). BUILD_GUIDE, CONTRACT, FIRMWARE and OPERATING, cited in the review
+questions, are in `SlabRail_Complete_Documentation.pdf` and in the repo's [docs/](https://github.com/Icevyy14/codex/tree/claude/psa-slab-batch-scanner-w2e2m9/psa-slab-scanner/docs) folder.
 
 **Documents.** The README's "What's in this folder" table lists every doc. For review: DESIGN
 (architecture §2, crash layers §3, calculations §4, verification §6, risks §7), CONTRACT (the

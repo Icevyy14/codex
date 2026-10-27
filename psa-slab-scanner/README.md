@@ -13,7 +13,7 @@ other moves it up and down.
   drawing set).
 - [`web/`](web/): an overview page, an interactive 3D model and a replay of a simulated run. GitHub
   shows them as source: download a file and open it in a browser.
-- [`docs/history/`](docs/history/): the design-round reports and the real-label evaluation. They are
+- [`docs/history/`](docs/history/): the reports from each design iteration and the real-label evaluation. They are
   historical, so their numbers may be out of date.
 
 ![How a run works](docs/img/storyboard.png)
@@ -120,7 +120,7 @@ The full explanation, with the numbers, is in [docs/DESIGN.md](docs/DESIGN.md).
 | `cad/out/drawings/` | The dimensioned drawing set (18 sheets, draft for design review) |
 | `cad/out/cut_list.csv`, `cad/out/probe_flag_blank.svg` | Extrusion, dowel and flag-blank cut lengths; the 1:1 drawing of the probe flag |
 | `software/` | Raspberry Pi software: run loop, decoding, simulator, CLI, web page, and `tools/real_eval.py` (the real-label check) |
-| `package/`, `web/`, `docs/history/` | The engineering package; the overview, 3D and replay pages; the design-round history |
+| `package/`, `web/`, `docs/history/` | The engineering package; the overview, 3D and replay pages; the design history |
 
 ## Verification done so far (no hardware)
 

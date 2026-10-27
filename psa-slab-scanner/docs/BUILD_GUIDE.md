@@ -365,10 +365,10 @@ each other, and how well face-up slabs match the backs.
 - **With today's head the card window is clear** [Certain, CAD frustum check], so this pass decides
   whether you can use the learned check. In the simulator it says GO (lowest back-to-back 0.81,
   highest face-up 0.57 with a reflection copy, threshold 0.69 [Certain, sim, 23 Oct 2026, today's
-  smaller window and the card placed per grader; with the larger round-3 window it was 0.82, 0.43
+  smaller window and the card placed per grader; with the earlier, larger window it was 0.82, 0.43
   and 0.62]). On studio scans of
   the 64 real slabs the same rule gave backs at 0.68 or more against face-up fronts at 0.45 or less,
-  a GO at a threshold of about 0.56 [Certain for those images and the round-3 window; Likely
+  a GO at a threshold of about 0.56 [Certain for those images and the earlier, larger window; Likely
   optimistic, because they are flat scans, not the jig's camera]. With today's window the CAD's
   machine-scale emulation of the same scans put the highest face-up score at 0.49–0.53 [Likely].
 - **Every similarity is the 2nd-best match:** the machine accepts a slab only when two card backs
@@ -422,7 +422,7 @@ machine: it settles the open questions in RESEARCH.md.
 | Back QR payload format (`http://psacard.com/cert/<n>` or `https://www.psacard.com/cert/<n>/` expected) | `back_reads` column, `QRCode:` entries | |
 | Front barcode symbology (ITF on lighthouse, 2016 and older labels; Code128 on current labels) | `front_reads`, the part before `:` | |
 | Payload formats the rules recognised | report line `payload formats:` | |
-| ITF payload lengths | report line `ITF payload lengths:` (all 8 expected: the cert zero-padded) | any other length: tell the software owner |
+| ITF payload lengths | report line `ITF payload lengths:` (all 8 expected: the cert zero-padded) | any other length: the parsing rules need a change (open item) |
 | Payloads no rule reads | report line `payloads no rule reads` (none expected) | if any: the label format differs from the real ones seen so far |
 | Slabs whose back QR the head camera read | report line `slabs whose back QR the head camera read:` | low on 2017+ labels: focus, glare |
 | CGC QR payload (`cgccards.com/certlookup/<n>/<grade>/`; `cgccomics.com` on OG labels) | `back_reads` for CGC slabs | |
@@ -731,7 +731,7 @@ Machine coordinates in mm, from `cad/model.py` [Certain]:
 The uprights stand **on** the back base rail and pass through 41 × 41 mm notches in the bed. The
 beam sits **on top of** the uprights, flush with their outer faces.
 
-### 4.3 Joints (the CAD has none; this is my recommendation)
+### 4.3 Joints (the CAD has none; this is a recommendation)
 
 [Guessing on the exact layout; Certain that the CAD and BOM leave it open]
 
@@ -1020,7 +1020,7 @@ glue's full strength, or ream the hole and re-glue.
 4. Check pulley and idler alignment: the belt runs centred on both flanges, and the lower strand
    sits at the same height above the beam at both ends.
 
-**6.6 Belt tension.** I found no maker's figure for 6 mm GT2. [Certain that the searches came up
+**6.6 Belt tension.** No maker's figure for 6 mm GT2 was found. [Certain that the searches came up
 empty] Use this as a starting point and check it works:
 - **Target 15–25 N.** [Guessing; one third-party calculator suggests 10–15 N, but this span is
   long]
@@ -1302,7 +1302,10 @@ flag is a bent 1 mm aluminium plate clamped under the vacuum elbow on top of the
 cup is pushed up, its blade rises through the slot and blocks the beam. [Certain, CAD
 `probe_flag`]
 
-![Probe flag drawing](img/probe_flag.png)
+![Probe flag drawing (not to scale here)](img/probe_flag.png)
+
+*This image is not to scale. To cut the flag, print `cad/out/probe_flag_blank.svg` at 100 % and
+check its 10 mm bar with calipers (step 2 below); the "1:1" in the image refers to that SVG.*
 
 ![Probe close-up: cup free, and pushed up](img/probe_closeup.png)
 
@@ -1480,7 +1483,7 @@ new here.)
      - vacuum valve: inlet on the **cup side**;
      - vent valve: inlet **open to the room**.
    - [Likely: the inlet pressure normally helps a direct-acting poppet seal. Check the inlet/outlet
-     marks on Clippard's drawing; I could not open it from here. The leak test decides.]
+     marks on Clippard's drawing, which was not checked for this guide. The leak test decides.]
 4. **Sensor tee** on the cup side of the vacuum valve, so the Pi reads the cup line, not the
    reservoir. Keep the silicone tube short. (WIRING.md §5)
 5. **Pump:**
@@ -1500,7 +1503,7 @@ and every seal has to empty or fill the reservoir. Then raise `vent_s`, `vent_ti
 `vac_seal_timeout_s` (to about 2–3 s [Guessing]) in `calibration.toml`, re-run `selftest -i`, and
 re-time the cycle.
 
-**8.3 Leak test** [Certain for the selftest thresholds, Guessing for my tighter targets]
+**8.3 Leak test** [Certain for the selftest thresholds, Guessing for the tighter targets here]
 
 Run it once §9 has wired the pump, the valves and the sensor. Until the gate posts are on (§5.9),
 put `overfill_gate = false` in `config/calibration.toml`, or selftest's `overfill beam` line
@@ -1617,7 +1620,7 @@ Then do the Z hold test (§7.8) and the beam twist check (§6.7).
 - Pick **Raspberry Pi OS (other) → Raspberry Pi OS (Legacy, 64-bit)**, which is Bookworm with
   Python 3.11. [Certain, same source]
 - In Imager's settings: hostname `slabrail`, your user, Wi-Fi, and **SSH on**.
-- The software's tests also pass on Python 3.13 [Likely: the software agent's report], but
+- The software's tests also pass on Python 3.13 [Likely: the full suite was run on Python 3.13 on the development computer, not on a Pi], but
   `setup_pi.sh` has only been written for Bookworm's apt packages. [Certain]
 
 **11.2 Copy the project folder** to the Pi so that it is `~/psa-slab-scanner`: every command in
@@ -2209,7 +2212,7 @@ clear on 5 proven slabs: the start line reads `face-down check: learned (thresho
 | Station camera not found | Ribbon backwards or not latched; wrong port | Power off, re-seat per the Raspberry Pi camera guide, CAM/DISP 0 |
 | Labels read on the bench but fail on the machine | Focus moved; ring not on; glare from room lights | `focus head` / `focus station --save`; fit the light roof |
 | Many pre-2016 PSA labels `needs_review` "one printed barcode only (no QR) - confirm" or "barcode N but OCR read M" | Their front ITF is their only code, and it is `ok` only when OCR of the printed number agrees. OCR read nothing, or other digits | Check each one by hand. Then the `tesseract` line of `selftest`, `focus station --save`, the station ring. If you set `custom_regex` or `psa_cert_digits` (without 7), see §11.5. OPERATING.md §8.3. |
-| A BGS, SGC or other non-PSA slab comes out `ok PSA` | The 8-digit ITF rule assumes only PSA prints an 8-digit ITF. BGS and SGC are reported to print some barcode or QR of unknown type [Likely]; none in the real set did [Certain, for that set] | Put your non-PSA slabs through Phase 0 (or `python -m tools.real_eval --phase0`) before trusting `ok PSA` on slabs with no QR. An `ok PSA` on a BGS or SGC slab means the rule is wrong for them: tell the software owner. OPERATING.md §5.2. |
+| A BGS, SGC or other non-PSA slab comes out `ok PSA` | The 8-digit ITF rule assumes only PSA prints an 8-digit ITF. BGS and SGC are reported to print some barcode or QR of unknown type [Likely]; none in the real set did [Certain, for that set] | Put your non-PSA slabs through Phase 0 (or `python -m tools.real_eval --phase0`) before trusting `ok PSA` on slabs with no QR. An `ok PSA` on a BGS or SGC slab means the rule is wrong for them and needs a change (open item). OPERATING.md §5.2. |
 | Overfill beam reads blocked with nothing there | Misaligned laser, receiver trimmer, a receiver wire cut (reads blocked by design) | §12.5; WIRING.md §8 |
 | Overfill beam reads clear when blocked | Room light swamps the receiver, or its GND wire is cut | Trimmer under room light; check the GND wire; light roof |
 | Controller lost (E-stop) and resume says "still not answering" | The CH340 is slow to come back | Wait 10 s and press resume again; check the USB cable and the 24 V supply |
@@ -2259,5 +2262,5 @@ clear on 5 proven slabs: the start line reads `face-down check: learned (thresho
   [raspberrytips: Trixie released](https://raspberrytips.com/raspberry-pi-os-trixie-released/),
   [raspberrytips: which version](https://raspberrytips.com/raspberry-pi-os-versions/)
 - **Clippard EV-2 (10-32 in-line, 28 inHg vacuum in the 2005 catalogue):**
-  [EV-2-24 datasheet](https://www.clippard.com/part/datasheet/EV-2-24.pdf); I could not open it
-  from here.
+  [EV-2-24 datasheet](https://www.clippard.com/part/datasheet/EV-2-24.pdf); it was not checked for
+  this guide.

@@ -11,4 +11,5 @@ Each round followed the same pattern: build, verify independently, fix what the 
 | `round4/` | CAD and software builds, verification, fixes, and a full walkthrough of the build guide as a first-time builder would read it |
 | `round5/` | Final CAD, software and docs rounds: home switches, LED ring seats, the 8-digit ITF rule, and the fixes they needed |
 | `real_eval/` | The decoding rules run on public scans of 64 real PSA, CGC, BGS and SGC slabs (`EVAL_REPORT.md`), an independent check of that report's claims (`CHECK_VERDICT.md`), and the per-image tables. The scans themselves are not included: they are copyrighted images from the graders' sites. |
+| `bom_changes.md` | How the bill of materials changed from round to round, moved out of [BOM.md](../BOM.md) |
 | `sourcing/links.json` | The raw sourcing data behind [SHOPPING_LIST.md](../SHOPPING_LIST.md): every link, price, pack size and how each was checked |
